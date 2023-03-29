@@ -19,12 +19,13 @@ import threading
 import time
 st = time.time()
 
-filein=gp.read_file('C:/Users/ArdoJ/Documents/NRC LUM/data/lris-lcdb-v50-land-cover-database-version-50-mainland-new-zealand-FGDB (1)/lcdb-v50-land-cover-database-version-50-mainland-new-zealand.gdb')
-cut=True                
+filein=gp.read_file('C:/Users/ArdoJ/Documents/NRC LUM/data/lris-lcdb-v50-land-cover-database-version-50-mainland-new-zealand-FGDB (1)/lcdb-v50-land-cover-database-version-50-mainland-new-zealand.gdb')   
 out='lcdb_h3_11'
-H3res= 11                #INPUT DESIRED H3 INDEX
-cookiecutH3res=5
+H3res= 11                
 npartitions=150
+cut=True     
+cookiecutH3res=5
+corecount=15
 
 #######################################################################################################################################################
 
@@ -33,9 +34,6 @@ parentres= max(1, parentres)
 
 h3_r=str(H3res).zfill(2)
 parent_r=str(parentres).zfill(2)
-
-allcores= mp.cpu_count()
-num_workers=mp.cpu_count()-1
 
 
 df=filein.explode(index_parts=False)
@@ -83,7 +81,7 @@ file_list = files
   
 #Multithreaded cookie cutting
 if cut:
-    with Pool(processes=16) as pool:
+    with Pool(processes=corecount) as pool:
             # have your pool map the file names to dataframes
             df_list=pool.map(cookiecutter, file_list) 
             df = pd.concat(df_list)
@@ -110,14 +108,14 @@ def polyfill(filename):
     h3geo= pd.DataFrame(h3geo).drop(columns=['hilbert_distance','geometry'])
     h3geo.to_parquet(Out+str(filename), compression='ZSTD') 
 
-def main():
+def poly_stage():
     
-    with Pool(processes=16) as pool:
+    with Pool(processes=corecount) as pool:
             # have your pool map the file names to dataframes
             pool.map(polyfill, file_list) 
     
 if __name__ == '__main__':
-    main()
+    poly_stage()
 
 et = time.time()
 elapsed_time = et - st
