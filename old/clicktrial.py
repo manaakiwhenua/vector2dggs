@@ -33,8 +33,6 @@ import time
 import dask.dataframe as dd
 st = time.time()
 
-import warnings
-warnings.filterwarnings("ignore") #This is to filter out the polyfill warnings when rows failed to get indexed at a resolution
 
 
 #######################################################################################################################################################
@@ -79,7 +77,6 @@ def vector2dggs(input_file: Union[Path, str],
 
     #Currently Cuts the polygons above 5000ha
 
-    #Defines a bounding box to and polyfills for cookiecuts
     xmin,ymin,xmax,ymax =  df.total_bounds
     boundbox=box(*df.total_bounds)
     boundbox = gp.GeoDataFrame(index=[0], crs='epsg:4326', geometry=[boundbox])  
@@ -87,22 +84,15 @@ def vector2dggs(input_file: Union[Path, str],
     cookiecut= cookiecut.to_crs(2193)
     cookiecut=cookiecut.reset_index().drop(columns=['h3_polyfill'])
 
-    #Cookiecut function to cut large polygons
     def cookiecutter(df):
         df=gp.read_parquet(temp_dir+'/'+df)
         df = df.to_crs(2193)
-        df['is_large']=df['geometry'].area/10000>5000 #large polygons defined here
+        df['is_large']=df['geometry'].area/10000>5000
         df.groupby('is_large')
-        
-        #small and large polygons seperated
-        dfsmall = df[df['is_large'] ==False] 
+        dfsmall = df[df['is_large'] ==False]
         dflarge = df[df['is_large'] ==True]
         del df
-        
-        #large polygons are cut here
         dflarge=dflarge.overlay(cookiecut, how='identity', keep_geom_type=False) 
-
-        #large and small polygons merged back together
         df= pd.concat([dflarge, dfsmall])
         df= df.drop(columns=['is_large'])
         df=df.explode(index_parts=False)
@@ -130,12 +120,10 @@ def vector2dggs(input_file: Union[Path, str],
     file_list = files
     print('Polyfilling stage commencing')
     st = time.time()
-    
-    #Output directory created
+    #Polyfills with multithreading
     os.mkdir(out)
     Out= str(out+'/'+out+h3_r)
 
-    #Polyfilling function defined here
     def polyfill(filename):
         'converts a filename to a pandas dataframe'
         df=gp.read_parquet(temp_dir+'/'+filename)
@@ -144,7 +132,6 @@ def vector2dggs(input_file: Union[Path, str],
         h3geo= pd.DataFrame(h3geo).drop(columns=['hilbert_distance','geometry'])
         h3geo.to_parquet(Out+'_'+str(filename), compression='ZSTD') 
 
-    #Multithreaded polyfilling
     def poly_stage():
         with Pool(processes=corecount) as pool:
                 # have your pool map the file names to dataframes
