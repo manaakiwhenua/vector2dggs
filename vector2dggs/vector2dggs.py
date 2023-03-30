@@ -31,6 +31,8 @@ import tempfile
 import threading
 import time
 import dask.dataframe as dd
+from tqdm.dask import TqdmCallback
+
 st = time.time()
 
 import warnings
@@ -47,6 +49,13 @@ def vector2dggs(input_file: Union[Path, str],
            threads: int,
            **kwargs
            )-> Path:
+    
+    LOGGER.info(
+        "Step 1- Partitioning %s with Hilbert curve method with partitions: %d",
+        input_file,
+        partitions,
+    )
+
     tst= time.time()
     st = time.time()
     filein=gp.read_file(input_file)   
@@ -70,8 +79,9 @@ def vector2dggs(input_file: Union[Path, str],
     temp_dir = tempfile.TemporaryDirectory().name
     ddf=dg.from_geopandas(df, npartitions=npartitions)
     ddf = ddf.spatial_shuffle()
-    ddf.to_parquet(temp_dir) 
-
+    with TqdmCallback():
+         ddf.to_parquet(temp_dir)
+     
     et = time.time()
     elapsed_time = et - st
     print('Step 1 (spatial partitioning of vectors) done! Time taken:', elapsed_time/60 ,'min')    
@@ -116,6 +126,10 @@ def vector2dggs(input_file: Union[Path, str],
     
     #Multithreaded cookie cutting
     if cut:
+        LOGGER.info(
+        "Step 2- Cookie cutting large polygons with h3 resolution of %d",
+        parentres,
+        )
         with Pool(processes=corecount) as pool:
                 # have your pool map the file names to dataframes
                 df_list=pool.map(cookiecutter, file_list) 
@@ -123,12 +137,12 @@ def vector2dggs(input_file: Union[Path, str],
                 temp_dir = tempfile.TemporaryDirectory().name
                 ddf=dg.from_geopandas(df, npartitions=npartitions)
                 ddf = ddf.spatial_shuffle()
-                ddf.to_parquet(temp_dir) 
+                with TqdmCallback():
+                     ddf.to_parquet(temp_dir) 
                 print('Step 2 (Cookiecutting) done! Time taken:', elapsed_time/60 ,'min') 
 
     files = os.listdir(temp_dir+'/')
     file_list = files
-    print('Polyfilling stage commencing')
     st = time.time()
     
     #Output directory created
@@ -146,6 +160,11 @@ def vector2dggs(input_file: Union[Path, str],
 
     #Multithreaded polyfilling
     def poly_stage():
+        LOGGER.info(
+        "Final stage- H3 Indexing by polyfill with H3 resoltion: %d",
+        resolution,
+        )
+        #TO DO INSERT TQDM PROGRESS BAR HERE
         with Pool(processes=corecount) as pool:
                 # have your pool map the file names to dataframes
                 pool.map(polyfill, file_list) 
