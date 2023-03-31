@@ -4,6 +4,8 @@ Vector equivalent of raster2dggs, also only supports H3 DGGS.
 ## Usage
 
 ```
+Usage: vector2dggs.py [OPTIONS] INPUT_FILE OUTPUT_FILE
+
 Options:
   -v, --verbosity LVL             Either CRITICAL, ERROR, WARNING, INFO or
                                   DEBUG  [default: INFO]
@@ -11,11 +13,8 @@ Options:
                                   H3 resolution to index  [required]
   -p, --partitions TEXT           Geo-partitioning, currently only available
                                   in Hilbert method  [default: 50; required]
-  -cc, --cookiecut BOOLEAN        bool, Apply cookie-cutting to the input
-                                  polygons  [default: False]
-  -ccr, --cookiecut_resolution [0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15]
-                                  H3 resolution to use for cookie-cutting
-                                  [default: 3]
+  -c, --cut_threshold INTEGER     Cutting up large polygons into target length 
+                                  [default: 5000; required]
   -t, --threads INTEGER           Amount of threads used for operation
                                   [default: 7]
   --help                          Show this message and exit.
