@@ -100,22 +100,21 @@ def vector2dggs(input_file: Union[Path, str],
     df=df
     df=df.to_crs(2193)
     
-    print('Watch out for ninjas!(Cutting polygons)')
+    print('Watch out for ninjas!')
     with tqdm(total=df.shape[0]) as pbar: 
         for index, row in df.iterrows():
             geometry=katana(row['geometry'],cut)
             gc=GeometryCollection(geometry)
             df.loc[index, 'geometry']=gc
             pbar.update(1)
-    
-    print('Preparing for spatial partitioning... patience please...')
+            
     df=df.explode() #Explode from GeomCollection
     df=df.explode().reset_index() #Explode multipoly to polygons
     df=df[cols]
     temp_dir = tempfile.TemporaryDirectory().name
     df=df.to_crs(4326)
     ddf=dg.from_geopandas(df, npartitions=npartitions)
-    ddf = ddf.spatial_shuffle(by="hilbert", npartitions=npartitions)
+    ddf = ddf.spatial_shuffle()
     
     LOGGER.info(
         "Spatial partitioning %s with Hilbert curve method with partitions: %d",
