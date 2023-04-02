@@ -13,7 +13,7 @@ Options:
                                   H3 resolution to index  [required]
   -p, --partitions TEXT           Geo-partitioning, currently only available
                                   in Hilbert method  [default: 50; required]
-  -c, --cut_threshold INTEGER     Cutting up large polygons into target length 
+  -c, --cut_threshold INTEGER     Cutting up large polygons into target length(meters) 
                                   [default: 5000; required]
   -t, --threads INTEGER           Amount of threads used for operation
                                   [default: 7]
@@ -21,15 +21,5 @@ Options:
 ```
 ## Example commands
 ```bash
-python vector2dggs.py /vector2dggs/nz-lake-polygons-topo-150k.gpkg ./lakes_nrc -r 13 -p 50 -cc True -ccr 3 -t 15
-```
-
-## Outputs
-Currently outputs n(partitions) amount of parquet files that can be opened using dask.
-To visualize output:
-```python
->>> import dask.dataframe as dd
->>> import h3pandas
->>> df = dd.read_parquet('./lakes_nrc').compute()
->>> df.h3.h3_to_geo_boundary().to_file('lakes_nrc.gpkg', driver='GPKG')
+python vector2dggs.py /vector2dggs/nz-lake-polygons-topo-150k.gpkg ./lakes_nrc -r 13 -p 150 -c 5000 -t 15
 ```
