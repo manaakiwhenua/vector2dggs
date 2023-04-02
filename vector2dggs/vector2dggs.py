@@ -51,8 +51,7 @@ def vector2dggs(input_file: Union[Path, str],
            )-> Path:
 
     tst= time.time()
-    st = time.time()
-    filein=gp.read_file(input_file)   
+    st = time.time()  
     out=output_file
     H3res=resolution                
     npartitions=partitions
@@ -95,7 +94,27 @@ def vector2dggs(input_file: Union[Path, str],
             final_result.append(g)
         return final_result
     
-    df=filein.explode(index_parts=False)
+    #Output directory created
+    os.mkdir(out) # Will throw an error if directory already exists, as designed.
+    name= os.path.basename(os.path.normpath(out))
+    Out= str(out+'/'+name+'_'+h3_r)
+    Fileout= str(out+'/'+name+'_'+'_fid.gpkg')
+
+    #Generating fid gpkg file and fid GeoDataFrame
+    print('Generating unique fid')
+    st=time.time()
+    gdf=gp.read_file(input_file) 
+    columns= list(gdf)
+    columns.remove('geometry')
+    gdf['fid']=gdf.groupby(columns, dropna=False).ngroup()
+    df=gdf[['fid','geometry']].sort_values(by=['fid'])
+    gdf.set_index('fid').sort_index().to_file(Fileout, driver='GPKG')
+
+    et=time.time()
+    elapsed_time = et - st
+    print('Generating unique fid complete! Time taken:', elapsed_time/60 ,'mins')
+
+    df=df.explode(index_parts=False)
     cols = df.columns
     df=df
     df=df.to_crs(2193)
@@ -119,7 +138,7 @@ def vector2dggs(input_file: Union[Path, str],
     
     LOGGER.info(
         "Spatial partitioning %s with Hilbert curve method with partitions: %d",
-        input_file,
+        name,
         partitions,
     )
     
@@ -132,10 +151,6 @@ def vector2dggs(input_file: Union[Path, str],
     file_list = files
     st = time.time()
     
-    #Output directory created
-    os.mkdir(out)
-    Out= str(out+'/'+out+h3_r)
-
     #Polyfilling function defined here
     def polyfill(filename):
         'converts a filename to a pandas dataframe'
