@@ -105,17 +105,17 @@ def vector2dggs(
     os.mkdir(out)  # Will throw an error if directory already exists, as designed.
     name = os.path.basename(os.path.normpath(out))
     Out = str(out + "/" + name + "_" + h3_r)
-    Fileout = str(out + "/" + name + "_" + "_fid.gpkg")
+    Fileout = str(out + "/" + name + "_" + "_fid.parquet")
 
     # Generating fid gpkg file and fid GeoDataFrame
-    print("Generating unique fid")
+    print("Generating unique fid, creating GeoParquet")
     st = time.time()
     gdf = gp.read_file(input_file)
     columns = list(gdf)
     columns.remove("geometry")
     gdf["fid"] = gdf.groupby(columns, dropna=False).ngroup()
     df = gdf[["fid", "geometry"]].sort_values(by=["fid"])
-    gdf.set_index("fid").sort_index().to_file(Fileout, driver="GPKG")
+    gdf.set_index("fid").sort_index().to_parquet(Fileout, compression="gzip")
 
     et = time.time()
     elapsed_time = et - st
