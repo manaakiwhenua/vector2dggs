@@ -106,8 +106,9 @@ def vector2dggs(
     # Output directory created
     os.mkdir(out)  # Will throw an error if directory already exists, as designed.
     name = os.path.basename(os.path.normpath(out))
-    Out = str(out + "/" + name + "_" + h3_r)
+    Out = str(out + "/" + "PartitionOutput.parquet")
     Fileout = str(out + "/" + name + "_" + "_fid.parquet")
+    FinalOut = str(out + "/" + name + "_" + "final.parquet") 
 
     st = time.time()
     df = gp.read_file(input_file)
@@ -152,6 +153,9 @@ def vector2dggs(
     file_list = files
     st = time.time()
 
+    os.mkdir(Out)
+    par_out=str(Out + "/" + name + "_" + h3_r)
+
     # Polyfilling function defined here
     def polyfill(filename):
         "converts a filename to a pandas dataframe"
@@ -159,12 +163,12 @@ def vector2dggs(
         df = df[df.geometry.type == "Polygon"]
         h3geo = df.h3.polyfill_resample(H3res, return_geometry=False)
         h3geo = pd.DataFrame(h3geo).drop(columns=["hilbert_distance", "geometry"])
-        h3geo.to_parquet(Out + "_" + str(filename), compression="ZSTD")
+        h3geo.to_parquet(par_out + "_" + str(filename), compression="ZSTD")
 
     # Multithreaded polyfilling
     def poly_stage():
         LOGGER.info(
-            "Final stage- H3 Indexing by polyfill with H3 resoltion: %d",
+            "H3 Indexing on spatial partitions by polyfill with H3 resoltion: %d",
             resolution,
         )
         # TO DO INSERT TQDM PROGRESS BAR HERE
