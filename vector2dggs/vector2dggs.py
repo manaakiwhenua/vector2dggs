@@ -49,6 +49,8 @@ def vector2dggs(
     input_file: Union[Path, str],
     output_file: Union[Path, str],
     resolution: int,
+    id_field: str,
+    all_attributes: bool,
     partitions: int,
     cut_threshold: int,
     threads: int,
@@ -64,7 +66,7 @@ def vector2dggs(
 
     h3_r = str(H3res).zfill(2)
 
-    def katana(geometry, threshold, count=0):
+    def katana(geometry, threshold, count=0) -> GeometryCollection:
         """Split a Polygon into two parts across it's shortest dimension,
         code written by Joshua Arnott 2016"""
         bounds = geometry.bounds
@@ -107,39 +109,33 @@ def vector2dggs(
     Out = str(out + "/" + name + "_" + h3_r)
     Fileout = str(out + "/" + name + "_" + "_fid.parquet")
 
-    # Generating fid gpkg file and fid GeoDataFrame
-    print("Generating unique fid, creating GeoParquet")
     st = time.time()
-    gdf = gp.read_file(input_file)
-    columns = list(gdf)
-    columns.remove("geometry")
-    gdf["fid"] = gdf.groupby(columns, dropna=False).ngroup()
-    df = gdf[["fid", "geometry"]].sort_values(by=["fid"])
-    gdf.set_index("fid").sort_index().to_parquet(Fileout, compression="gzip")
+    df = gp.read_file(input_file)
+    if id_field:
+        df = df.set_index(id_field)
 
-    et = time.time()
-    elapsed_time = et - st
-    print("Generating unique fid complete! Time taken:", elapsed_time / 60, "mins")
+    if not all_attributes:
+        # Remove all attributes except the geometry
+        df = df.loc[:, ["geometry"]]
 
     # Preparing dataframe to be sliced
     df = df.explode(index_parts=False)
-    cols = df.columns
     df = df.to_crs(2193)
 
     print("Watch out for ninjas!(Cutting polygons)")
     with tqdm(total=df.shape[0]) as pbar:
         for index, row in df.iterrows():
-            geometry = katana(row["geometry"], cut)
-            gc = GeometryCollection(geometry)
-            df.loc[index, "geometry"] = gc
+            df.loc[index, "geometry"] = GeometryCollection(katana(row.geometry, cut))
             pbar.update(1)
 
     print("Preparing for spatial partitioning... patience please...")
-    df = df.explode()  # Explode from GeomCollection
-    df = df.explode().reset_index()  # Explode multipoly to polygons
-    df = df[cols]
+    df = df.explode(index_parts=False) # Explode from GeometryCollection
+    df = df.explode(
+        index_parts=False
+    ) # Explode multipolygons to polygons
     temp_dir = tempfile.TemporaryDirectory().name
     df = df.to_crs(4326)
+    df = df.reset_index()
     ddf = dg.from_geopandas(df, npartitions=npartitions)
     ddf = ddf.spatial_shuffle(by="hilbert", npartitions=npartitions)
 
@@ -207,6 +203,26 @@ DEFAULT_NAME: str = "value"
     nargs=1,
 )
 @click.option(
+    "-id",
+    "--id_field",
+    required=False,
+    default=None,
+    type=str,
+    help="Field to use as an ID; defaults to a constructed single 0...n index on the original feature order.",
+    nargs=1,
+)
+@click.option(
+    "-a",
+    "--all_attributes",
+    is_flag=True,
+    show_default=True,
+    default=False,
+    help="Retain attributes in output. The default is to create an output that only includes H3 cell ID and the ID(s) given by the -id field (or the default index ID).",
+)
+@click.option(
+    "--gr", is_flag=True, show_default=True, default=False, help="Greet the world."
+)
+@click.option(
     "-p",
     "--partitions",
     required=True,
@@ -234,7 +250,15 @@ DEFAULT_NAME: str = "value"
     nargs=1,
 )
 def h3(
-    input_file, output_file, resolution, partitions, cut_threshold, threads, **kwargs
+    input_file,
+    output_file,
+    resolution,
+    id_field,
+    all_attributes,
+    partitions,
+    cut_threshold,
+    threads,
+    **kwargs,
 ):
     if not Path(input_file).exists():
         if not urlparse(input_file).scheme:
@@ -250,6 +274,8 @@ def h3(
         input_file,
         output_file,
         int(resolution),
+        id_field,
+        all_attributes,
         int(partitions),
         cut_threshold,
         threads,
