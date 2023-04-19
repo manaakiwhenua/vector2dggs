@@ -43,11 +43,9 @@ def katana(geometry, threshold, count=0) -> GeometryCollection:
     # convert multipart into singlepart
     final_result = []
     for g in result:
-        if not g.is_valid:
-            print('invalid')
-            print(g)
-        if isinstance(g, MultiPolygon):
-            final_result.extend(g)
-        else:
-            final_result.append(g)
+        # if isinstance(g, MultiPolygon):
+        #     final_result.extend(g)
+        # else:
+            # final_result.append(g)
+        final_result.append(g)
     return final_result
