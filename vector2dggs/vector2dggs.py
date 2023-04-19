@@ -106,9 +106,8 @@ def vector2dggs(
     # Output directory created
     os.mkdir(out)  # Will throw an error if directory already exists, as designed.
     name = os.path.basename(os.path.normpath(out))
-    Out = str(out + "/" + "PartitionOutput.parquet")
-    Fileout = str(out + "/" + name + "_" + "_fid.parquet")
-    FinalOut = str(out + "/" + name + "_" + "final.parquet") 
+    Out = str(out + "/" + name + "_Polyfill"+h3_r+".parquet")
+    Fileout = str(out + "/" + name + "_" + "geo.parquet")
 
     st = time.time()
     df = gp.read_file(input_file)
@@ -120,7 +119,6 @@ def vector2dggs(
         df = df.loc[:, ["geometry"]]
 
     # Preparing dataframe to be sliced
-    df = df.explode(index_parts=False)
     df = df.to_crs(2193)
 
     print("Watch out for ninjas!(Cutting polygons)")
@@ -137,8 +135,10 @@ def vector2dggs(
     temp_dir = tempfile.TemporaryDirectory().name
     df = df.to_crs(4326)
     df = df.reset_index()
+    df.to_parquet(Fileout) #write out geoparquet
+    
     ddf = dg.from_geopandas(df, npartitions=npartitions)
-    ddf = ddf.spatial_shuffle(by="hilbert", npartitions=npartitions)
+    ddf = ddf.spatial_shuffle(by="hilbert")
 
     LOGGER.info(
         "Spatial partitioning %s with Hilbert curve method with partitions: %d",
@@ -148,7 +148,7 @@ def vector2dggs(
 
     with TqdmCallback():
         ddf.to_parquet(temp_dir)  # Writing out spatial partitions to temp dir
-
+        
     files = os.listdir(temp_dir + "/")  # Getting temp dir folder
     file_list = files
     st = time.time()
@@ -159,10 +159,9 @@ def vector2dggs(
     # Polyfilling function defined here
     def polyfill(filename):
         "converts a filename to a pandas dataframe"
-        df = gp.read_parquet(temp_dir + "/" + filename)
-        df = df[df.geometry.type == "Polygon"]
+        df = gp.read_parquet(temp_dir + "/" + filename).reset_index().drop(columns=["hilbert_distance"])
         h3geo = df.h3.polyfill_resample(H3res, return_geometry=False)
-        h3geo = pd.DataFrame(h3geo).drop(columns=["hilbert_distance", "geometry"])
+        h3geo = pd.DataFrame(h3geo).drop(columns=["index", "geometry"])
         h3geo.to_parquet(par_out + "_" + str(filename), compression="ZSTD")
 
     # Multithreaded polyfilling
