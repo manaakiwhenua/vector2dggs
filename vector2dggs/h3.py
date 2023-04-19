@@ -11,6 +11,8 @@ from typing import Union
 from urllib.parse import urlparse
 import warnings
 
+os.environ['USE_PYGEOS'] = '0'
+
 import dask.dataframe as dd
 import dask_geopandas as dgpd
 import geopandas as gpd
@@ -26,7 +28,10 @@ LOGGER = logging.getLogger(__name__)
 click_log.basic_config(LOGGER)
 MIN_H3, MAX_H3 = 0, 15
 
-LOGGER.info('hello')
+warnings.filterwarnings(
+    "ignore"
+)  # This is to filter out the polyfill warnings when rows failed to get indexed at a resolution, can be commented out to find missing rows
+
 
 def _index(
     input_file: Union[Path, str],
@@ -52,7 +57,7 @@ def _index(
         df = df.loc[:, ["geometry"]]
 
     # Preparing dataframe to be sliced
-    df = df.explode(index_parts=False)
+    # df = df.explode(index_parts=False)
     df = df.to_crs(2193)
 
     LOGGER.info("Watch out for ninjas! (Cutting polygons)")
@@ -70,7 +75,7 @@ def _index(
     ddf = dgpd.from_geopandas(df, npartitions=npartitions)
 
     LOGGER.info("Spatial partitioning (Hilbert curve) with %d partitions", npartitions)
-    ddf = ddf.spatial_shuffle(by="hilbert", npartitions=npartitions)
+    ddf = ddf.spatial_shuffle(by="hilbert")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         with TqdmCallback():
@@ -87,13 +92,13 @@ def _index(
             Reads a geoparquet, performs H3 polyfilling,
             and writes out to parquet.
             """
-            df = gpd.read_parquet(pq_in)
+            df = gpd.read_parquet(pq_in).reset_index().drop(columns=["hilbert_distance"])
             # df = df[df.geometry.type == "Polygon"]
             with warnings.catch_warnings():
                 # TODO does not seem to work
                 warnings.filterwarnings("ignore")
                 h3geo = df.h3.polyfill_resample(resolution, return_geometry=False)
-            h3geo = pd.DataFrame(h3geo).drop(columns=["hilbert_distance", "geometry"])
+            h3geo = pd.DataFrame(h3geo).drop(columns=["index", "geometry"])
             h3geo.to_parquet(
                 output_directory,
                 engine='auto',
