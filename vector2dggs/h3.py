@@ -57,8 +57,7 @@ def _index(
         df = df.loc[:, ["geometry"]]
 
     # Preparing dataframe to be sliced
-    # df = df.explode(index_parts=False)
-    df = df.to_crs(2193)
+    df = df.to_crs(2193) # Reproj to equal area projection
 
     LOGGER.info("Watch out for ninjas! (Cutting polygons)")
     with tqdm(total=df.shape[0]) as pbar:
@@ -67,10 +66,13 @@ def _index(
             pbar.update(1)
 
     LOGGER.info("Preparing for spatial partitioning")
-    df = df.to_crs(4326)
-    df = df.explode(index_parts=False) # Explode from GeometryCollection
-    df = df.explode(index_parts=False) # Explode multipolygons to polygons
-    df = df.reset_index()
+    df = df.to_crs(
+        4326
+    ).explode( # Explode from GeometryCollection
+        index_parts=False
+    ).explode( # Explode multipolygons to polygons
+        index_parts=False
+    ).reset_index()
 
     ddf = dgpd.from_geopandas(df, npartitions=npartitions)
 
@@ -99,8 +101,10 @@ def _index(
                 warnings.filterwarnings("ignore")
                 h3geo = df.h3.polyfill_resample(resolution, return_geometry=False)
             h3geo = pd.DataFrame(h3geo).drop(columns=["index", "geometry"])
+            # TODO use path idioms
+            out = f'{output_directory}/{str(pq_in).split("/")[-1]}'
             h3geo.to_parquet(
-                output_directory,
+                out,
                 engine='auto',
                 compression='ZSTD'
             )
@@ -199,6 +203,9 @@ def h3(
         vector_input = str(vector_input)
     else:
         vector_input = Path(vector_input)
+
+    # TODO overwrite
+    os.mkdir(output_directory)
 
     _index(
         vector_input,
