@@ -6,10 +6,11 @@ This is the vector equivalent of [raster2dggs](https://github.com/manaakiwhenua/
 
 Currently only supports H3 DGGS, and probably has other limitations since it has been developed for a specific internal use case, though it is intended as a general-purpose abstraction. Contributions, suggestions, bug reports and strongly worded letters are all welcome.
 
-![Example use case for vector2dggs, showing parcels indexed to a high H3 resolution](docs/imgs/raster2dggs-example.png "Example use case for vector2dggs, showing parcels indexed to a high H3 resolution")
+![Example use case for vector2dggs, showing parcels indexed to a high H3 resolution](./docs/imgs/vector2dggs-example.png "Example use case for vector2dggs, showing parcels indexed to a high H3 resolution")
 
 ## Usage
 
+```bash
 vector2dggs h3 --help
 Usage: vector2dggs h3 [OPTIONS] VECTOR_INPUT OUTPUT_DIRECTORY
 
