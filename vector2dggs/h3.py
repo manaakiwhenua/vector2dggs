@@ -5,7 +5,8 @@ import logging
 import os
 import multiprocessing
 from multiprocessing.dummy import Pool
-from pathlib import Path
+from pathlib import Path, PurePath
+import shutil
 import tempfile
 from typing import Union
 from urllib.parse import urlparse
@@ -41,23 +42,19 @@ def _index(
     all_attributes: bool,
     npartitions: int,
     cut_threshold: int,
-    processes: int,
-    overwrite: bool
+    processes: int
 ) -> Path:
     '''
     TODO write a docstring
     '''
 
-    df = gpd.read_file(input_file)
+    df = gpd.read_file(input_file).to_crs(2193) # Reproj to equal area projection
     if id_field:
         df = df.set_index(id_field)
 
     if not all_attributes:
         # Remove all attributes except the geometry
         df = df.loc[:, ["geometry"]]
-
-    # Preparing dataframe to be sliced
-    df = df.to_crs(2193) # Reproj to equal area projection
 
     LOGGER.info("Watch out for ninjas! (Cutting polygons)")
     with tqdm(total=df.shape[0]) as pbar:
@@ -76,38 +73,35 @@ def _index(
 
     ddf = dgpd.from_geopandas(df, npartitions=npartitions)
 
-    LOGGER.info("Spatial partitioning (Hilbert curve) with %d partitions", npartitions)
-    ddf = ddf.spatial_shuffle(by="hilbert")
+    spatial_partioning_method = 'hilbert' # TODO paramerterise enum of spatial partitioning methods
+    LOGGER.info("Spatial partitioning (%s) with %d partitions", spatial_partioning_method, npartitions)
+    ddf = ddf.spatial_shuffle(by=spatial_partioning_method)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         with TqdmCallback():
-            ddf.to_parquet(tmpdir)
+            ddf.to_parquet(tmpdir, overwrite=True)
 
         filepaths = map(lambda f: f.absolute(), Path(tmpdir).glob('*'))
 
-        # TODO
-        # if overwrite:
-
         # Polyfilling function defined here
-        def polyfill(pq_in):
+        def polyfill(pq_in: Path) -> None:
             """
             Reads a geoparquet, performs H3 polyfilling,
             and writes out to parquet.
             """
-            df = gpd.read_parquet(pq_in).reset_index().drop(columns=["hilbert_distance"])
-            # df = df[df.geometry.type == "Polygon"]
-            with warnings.catch_warnings():
-                # TODO does not seem to work
-                warnings.filterwarnings("ignore")
-                h3geo = df.h3.polyfill_resample(resolution, return_geometry=False)
-            h3geo = pd.DataFrame(h3geo).drop(columns=["index", "geometry"])
-            # TODO use path idioms
-            out = f'{output_directory}/{str(pq_in).split("/")[-1]}'
-            h3geo.to_parquet(
-                out,
-                engine='auto',
-                compression='ZSTD'
+            df = gpd.read_parquet(pq_in).reset_index().drop(
+                columns=["hilbert_distance"]
+            ).h3.polyfill_resample(
+                resolution, return_geometry=False
             )
+            pd.DataFrame(df).drop(
+                columns=["index", "geometry"]
+            ).to_parquet(
+                PurePath(output_directory, pq_in.name),
+                engine='auto',
+                compression='ZSTD' #  TODO parameterise
+            )
+            return None
 
         # Multithreaded polyfilling
         LOGGER.info(
@@ -203,9 +197,15 @@ def h3(
         vector_input = str(vector_input)
     else:
         vector_input = Path(vector_input)
-
-    # TODO overwrite
-    os.mkdir(output_directory)
+    
+    output_directory = Path(output_directory)
+    outputexists = os.path.exists(output_directory)
+    if outputexists and not overwrite:
+        raise FileExistsError(f'{output_directory} already exists; if you want to overwrite this, use the -o/--overwrite flag')
+    elif outputexists and overwrite:
+        LOGGER.info(f'Overwriting the contents of {output_directory}')
+        shutil.rmtree(output_directory)
+    output_directory.mkdir(parents=True, exist_ok=True)
 
     _index(
         vector_input,
@@ -215,6 +215,5 @@ def h3(
         all_attributes,
         partitions,
         cut_threshold,
-        threads,
-        overwrite
+        threads
     )
