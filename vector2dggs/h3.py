@@ -31,8 +31,7 @@ MIN_H3, MAX_H3 = 0, 15
 
 warnings.filterwarnings(
     "ignore"
-)  # This is to filter out the polyfill warnings when rows failed to get indexed at a resolution, can be commented out to find missing rows
-
+) # This is to filter out the polyfill warnings when rows failed to get indexed at a resolution, can be commented out to find missing rows
 
 def _index(
     input_file: Union[Path, str],
@@ -41,11 +40,12 @@ def _index(
     id_field: str,
     all_attributes: bool,
     npartitions: int,
+    spatial_sorting: str,
     cut_threshold: int,
-    processes: int
+    processes: int,
 ) -> Path:
     '''
-    TODO write a docstring
+    Performs multi-threaded H3 polyfilling on (multi)polygons.
     '''
 
     df = gpd.read_file(input_file).to_crs(2193) # Reproj to equal area projection
@@ -73,15 +73,15 @@ def _index(
 
     ddf = dgpd.from_geopandas(df, npartitions=npartitions)
 
-    spatial_partioning_method = 'hilbert' # TODO paramerterise enum of spatial partitioning methods
-    LOGGER.info("Spatial partitioning (%s) with %d partitions", spatial_partioning_method, npartitions)
-    ddf = ddf.spatial_shuffle(by=spatial_partioning_method)
+    LOGGER.info("Spatially sorting and partitioning (%s)", spatial_sorting)
+    ddf = ddf.spatial_shuffle(by=spatial_sorting)
+    spatial_sort_col = spatial_sorting if spatial_sorting == 'geohash' else f'{spatial_sorting}_distance'
 
     with tempfile.TemporaryDirectory() as tmpdir:
         with TqdmCallback():
             ddf.to_parquet(tmpdir, overwrite=True)
 
-        filepaths = map(lambda f: f.absolute(), Path(tmpdir).glob('*'))
+        filepaths = list(map(lambda f: f.absolute(), Path(tmpdir).glob('*')))
 
         # Polyfilling function defined here
         def polyfill(pq_in: Path) -> None:
@@ -90,13 +90,15 @@ def _index(
             and writes out to parquet.
             """
             df = gpd.read_parquet(pq_in).reset_index().drop(
-                columns=["hilbert_distance"]
+                columns=[spatial_sort_col]
             ).h3.polyfill_resample(
                 resolution, return_geometry=False
             )
-            pd.DataFrame(df).drop(
+            df = pd.DataFrame(df).drop(
                 columns=["index", "geometry"]
-            ).to_parquet(
+            )
+            df.index.rename(f'h3_{resolution:02}', inplace=True)
+            df.to_parquet(
                 PurePath(output_directory, pq_in.name),
                 engine='auto',
                 compression='ZSTD' #  TODO parameterise
@@ -108,11 +110,8 @@ def _index(
             "H3 Indexing on spatial partitions by polyfill with H3 resoltion: %d",
             resolution,
         )
-        # TODO progress bar
         with Pool(processes=processes) as pool:
-            # have your pool map the file names to dataframes
-            # pool.map(polyfill, filepaths)
-            list(tqdm(pool.imap(polyfill, filepaths), total=npartitions))
+            list(tqdm(pool.imap(polyfill, filepaths), total=len(filepaths)))
 
 @click.command(context_settings={"show_default": True})
 @click_log.simple_verbosity_option(LOGGER)
@@ -153,6 +152,13 @@ def _index(
     nargs=1,
 )
 @click.option(
+    '-s',
+    '--spatial-sorting',
+    type=click.Choice(['hilbert', 'morton', 'geohash']),
+    default='hilbert',
+    help='Spatial sorting method'
+)
+@click.option(
     "-c",
     "--cut_threshold",
     required=True,
@@ -178,6 +184,7 @@ def h3(
     id_field : str,
     all_attributes: bool,
     partitions: int,
+    spatial_sorting: str,
     cut_threshold: int,
     threads: int,
     overwrite: bool
@@ -214,6 +221,7 @@ def h3(
         id_field,
         all_attributes,
         partitions,
+        spatial_sorting,
         cut_threshold,
         threads
     )
