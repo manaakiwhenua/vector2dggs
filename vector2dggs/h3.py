@@ -12,7 +12,7 @@ from typing import Union
 from urllib.parse import urlparse
 import warnings
 
-os.environ['USE_PYGEOS'] = '0'
+os.environ["USE_PYGEOS"] = "0"
 
 import dask.dataframe as dd
 import dask_geopandas as dgpd
@@ -31,7 +31,8 @@ MIN_H3, MAX_H3 = 0, 15
 
 warnings.filterwarnings(
     "ignore"
-) # This is to filter out the polyfill warnings when rows failed to get indexed at a resolution, can be commented out to find missing rows
+)  # This is to filter out the polyfill warnings when rows failed to get indexed at a resolution, can be commented out to find missing rows
+
 
 def _index(
     input_file: Union[Path, str],
@@ -44,11 +45,11 @@ def _index(
     cut_threshold: int,
     processes: int,
 ) -> Path:
-    '''
+    """
     Performs multi-threaded H3 polyfilling on (multi)polygons.
-    '''
+    """
 
-    df = gpd.read_file(input_file).to_crs(2193) # Reproj to equal area projection
+    df = gpd.read_file(input_file).to_crs(2193)  # Reproj to equal area projection
     if id_field:
         df = df.set_index(id_field)
 
@@ -59,29 +60,34 @@ def _index(
     LOGGER.info("Watch out for ninjas! (Cutting polygons)")
     with tqdm(total=df.shape[0]) as pbar:
         for index, row in df.iterrows():
-            df.loc[index, "geometry"] = GeometryCollection(katana.katana(row.geometry, cut_threshold))
+            df.loc[index, "geometry"] = GeometryCollection(
+                katana.katana(row.geometry, cut_threshold)
+            )
             pbar.update(1)
 
     LOGGER.info("Preparing for spatial partitioning")
-    df = df.to_crs(
-        4326
-    ).explode( # Explode from GeometryCollection
-        index_parts=False
-    ).explode( # Explode multipolygons to polygons
-        index_parts=False
-    ).reset_index()
+    df = (
+        df.to_crs(4326)
+        .explode(index_parts=False)  # Explode from GeometryCollection
+        .explode(index_parts=False)  # Explode multipolygons to polygons
+        .reset_index()
+    )
 
     ddf = dgpd.from_geopandas(df, npartitions=npartitions)
 
     LOGGER.info("Spatially sorting and partitioning (%s)", spatial_sorting)
     ddf = ddf.spatial_shuffle(by=spatial_sorting)
-    spatial_sort_col = spatial_sorting if spatial_sorting == 'geohash' else f'{spatial_sorting}_distance'
+    spatial_sort_col = (
+        spatial_sorting
+        if spatial_sorting == "geohash"
+        else f"{spatial_sorting}_distance"
+    )
 
     with tempfile.TemporaryDirectory() as tmpdir:
         with TqdmCallback():
             ddf.to_parquet(tmpdir, overwrite=True)
 
-        filepaths = list(map(lambda f: f.absolute(), Path(tmpdir).glob('*')))
+        filepaths = list(map(lambda f: f.absolute(), Path(tmpdir).glob("*")))
 
         # Polyfilling function defined here
         def polyfill(pq_in: Path) -> None:
@@ -89,19 +95,18 @@ def _index(
             Reads a geoparquet, performs H3 polyfilling,
             and writes out to parquet.
             """
-            df = gpd.read_parquet(pq_in).reset_index().drop(
-                columns=[spatial_sort_col]
-            ).h3.polyfill_resample(
-                resolution, return_geometry=False
+            df = (
+                gpd.read_parquet(pq_in)
+                .reset_index()
+                .drop(columns=[spatial_sort_col])
+                .h3.polyfill_resample(resolution, return_geometry=False)
             )
-            df = pd.DataFrame(df).drop(
-                columns=["index", "geometry"]
-            )
-            df.index.rename(f'h3_{resolution:02}', inplace=True)
+            df = pd.DataFrame(df).drop(columns=["index", "geometry"])
+            df.index.rename(f"h3_{resolution:02}", inplace=True)
             df.to_parquet(
                 PurePath(output_directory, pq_in.name),
-                engine='auto',
-                compression='ZSTD' #  TODO parameterise
+                engine="auto",
+                compression="ZSTD",  #  TODO parameterise
             )
             return None
 
@@ -112,6 +117,7 @@ def _index(
         )
         with Pool(processes=processes) as pool:
             list(tqdm(pool.imap(polyfill, filepaths), total=len(filepaths)))
+
 
 @click.command(context_settings={"show_default": True})
 @click_log.simple_verbosity_option(LOGGER)
@@ -152,11 +158,11 @@ def _index(
     nargs=1,
 )
 @click.option(
-    '-s',
-    '--spatial-sorting',
-    type=click.Choice(['hilbert', 'morton', 'geohash']),
-    default='hilbert',
-    help='Spatial sorting method'
+    "-s",
+    "--spatial-sorting",
+    type=click.Choice(["hilbert", "morton", "geohash"]),
+    default="hilbert",
+    help="Spatial sorting method",
 )
 @click.option(
     "-c",
@@ -181,13 +187,13 @@ def h3(
     vector_input: Union[str, Path],
     output_directory: Union[str, Path],
     resolution: str,
-    id_field : str,
+    id_field: str,
     all_attributes: bool,
     partitions: int,
     spatial_sorting: str,
     cut_threshold: int,
     threads: int,
-    overwrite: bool
+    overwrite: bool,
 ):
     """
     Ingest a vector dataset and index it to the H3 DGGS.
@@ -204,13 +210,15 @@ def h3(
         vector_input = str(vector_input)
     else:
         vector_input = Path(vector_input)
-    
+
     output_directory = Path(output_directory)
     outputexists = os.path.exists(output_directory)
     if outputexists and not overwrite:
-        raise FileExistsError(f'{output_directory} already exists; if you want to overwrite this, use the -o/--overwrite flag')
+        raise FileExistsError(
+            f"{output_directory} already exists; if you want to overwrite this, use the -o/--overwrite flag"
+        )
     elif outputexists and overwrite:
-        LOGGER.info(f'Overwriting the contents of {output_directory}')
+        LOGGER.info(f"Overwriting the contents of {output_directory}")
         shutil.rmtree(output_directory)
     output_directory.mkdir(parents=True, exist_ok=True)
 
@@ -223,5 +231,5 @@ def h3(
         partitions,
         spatial_sorting,
         cut_threshold,
-        threads
+        threads,
     )
