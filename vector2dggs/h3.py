@@ -42,6 +42,7 @@ def _index(
     all_attributes: bool,
     npartitions: int,
     spatial_sorting: str,
+    cut_crs: int,
     cut_threshold: int,
     processes: int,
 ) -> Path:
@@ -49,7 +50,12 @@ def _index(
     Performs multi-threaded H3 polyfilling on (multi)polygons.
     """
 
-    df = gpd.read_file(input_file).to_crs(2193)  # Reproj to equal area projection
+    df = gpd.read_file(input_file)
+
+    if cut_crs:
+        df=df.to_crs(cut_crs) 
+    LOGGER.info("Cutting with crs:"+ str(df.crs))
+
     if id_field:
         df = df.set_index(id_field)
     else:
@@ -68,7 +74,7 @@ def _index(
             )
             pbar.update(1)
 
-    LOGGER.info("Preparing for spatial partitioning")
+    LOGGER.info("Preparing for spatial partitioning....")
     df = (
         df.to_crs(4326)
         .explode(index_parts=False)  # Explode from GeometryCollection
@@ -168,12 +174,21 @@ def _index(
     help="Spatial sorting method",
 )
 @click.option(
+    "-crs",
+    "--cut_crs",
+    required=False,
+    default=None,
+    type=int,
+    help="Set crs(epsg) to input layer (used for cutting), defaults to input crs",
+    nargs=1,
+)
+@click.option(
     "-c",
     "--cut_threshold",
     required=True,
     default=5000,
     type=int,
-    help="Cutting up large polygons into target length (meters)",
+    help="Cutting up large polygons into target length (in set crs units)",
     nargs=1,
 )
 @click.option(
@@ -194,6 +209,7 @@ def h3(
     all_attributes: bool,
     partitions: int,
     spatial_sorting: str,
+    cut_crs:int,
     cut_threshold: int,
     threads: int,
     overwrite: bool,
@@ -233,6 +249,7 @@ def h3(
         all_attributes,
         partitions,
         spatial_sorting,
+        cut_crs,
         cut_threshold,
         threads,
     )

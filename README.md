@@ -39,6 +39,8 @@ Options:
   -s, --spatial-sorting [hilbert|morton|geohash]
                                   Spatial sorting method  [default:
                                   hilbert]
+  -crs, --cut_crs INTEGER         Set crs(epsg) to input layer (used for
+                                  cutting), defaults to input crs
   -c, --cut_threshold INTEGER     Cutting up large polygons into target
                                   length (meters)  [default: 5000;
                                   required]
