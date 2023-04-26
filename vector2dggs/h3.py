@@ -35,6 +35,33 @@ warnings.filterwarnings(
 )  # This is to filter out the polyfill warnings when rows failed to get indexed at a resolution, can be commented out to find missing rows
 
 
+def polyfill(
+    pq_in: Path, spatial_sort_col: str, resolution: int, output_directory: str
+) -> None:
+    """
+    Reads a geoparquet, performs H3 polyfilling,
+    and writes out to parquet.
+    """
+    df = (
+        gpd.read_parquet(pq_in)
+        .reset_index()
+        .drop(columns=[spatial_sort_col])
+        .h3.polyfill_resample(resolution, return_geometry=False)
+    )
+    df = pd.DataFrame(df).drop(columns=["index", "geometry"])
+    df.index.rename(f"h3_{resolution:02}", inplace=True)
+    df.to_parquet(
+        PurePath(output_directory, pq_in.name),
+        engine="auto",
+        compression="ZSTD",
+    )
+    return None
+
+
+def polyfill_star(args):
+    return polyfill(*args)
+
+
 def _index(
     input_file: Union[Path, str],
     output_directory: Union[Path, str],
@@ -99,34 +126,17 @@ def _index(
 
         filepaths = list(map(lambda f: f.absolute(), Path(tmpdir).glob("*")))
 
-        # Polyfilling function defined here
-        def polyfill(pq_in: Path) -> None:
-            """
-            Reads a geoparquet, performs H3 polyfilling,
-            and writes out to parquet.
-            """
-            df = (
-                gpd.read_parquet(pq_in)
-                .reset_index()
-                .drop(columns=[spatial_sort_col])
-                .h3.polyfill_resample(resolution, return_geometry=False)
-            )
-            df = pd.DataFrame(df).drop(columns=["index", "geometry"])
-            df.index.rename(f"h3_{resolution:02}", inplace=True)
-            df.to_parquet(
-                PurePath(output_directory, pq_in.name),
-                engine="auto",
-                compression="ZSTD",  #  TODO parameterise
-            )
-            return None
-
         # Multithreaded polyfilling
         LOGGER.info(
             "H3 Indexing on spatial partitions by polyfill with H3 resoltion: %d",
             resolution,
         )
         with Pool(processes=processes) as pool:
-            list(tqdm(pool.imap(polyfill, filepaths), total=len(filepaths)))
+            args = [
+                (filepath, spatial_sort_col, resolution, output_directory)
+                for filepath in filepaths
+            ]
+            list(tqdm(pool.imap(polyfill_star, args), total=len(args)))
 
 
 @click.command(context_settings={"show_default": True})
@@ -151,12 +161,12 @@ def _index(
     nargs=1,
 )
 @click.option(
-    "-a",
-    "--all_attributes",
+    "-k",
+    "--keep-attributes",
     is_flag=True,
     show_default=True,
     default=False,
-    help="Retain attributes in output. The default is to create an output that only includes H3 cell ID and the ID(s) given by the -id field (or the default index ID).",
+    help="Retain attributes in output. The default is to create an output that only includes H3 cell ID and the ID given by the -id field (or the default index ID).",
 )
 @click.option(
     "-p",
@@ -226,7 +236,9 @@ def h3(
             LOGGER.warning(
                 f"Input vector {vector_input} does not exist, and is not recognised as a remote URI"
             )
-            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), vector_input)
+            raise FileNotFoundError(
+                errno.ENOENT, os.strerror(errno.ENOENT), vector_input
+            )
         vector_input = str(vector_input)
     else:
         vector_input = Path(vector_input)
@@ -255,5 +267,5 @@ def h3(
         cut_threshold,
         threads,
         cut_crs=cut_crs,
-        id_field=id_field
+        id_field=id_field,
     )
