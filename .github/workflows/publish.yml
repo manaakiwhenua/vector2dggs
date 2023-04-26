@@ -16,5 +16,5 @@ jobs:
           pypi_token: ${{ secrets.PYPI_TOKEN }}
           build_format: "sdist"
           ignore_dev_requirements: "yes"
-          package_directory: ./vector2dggs4
+          package_directory: ./vector2dggs
           repository_url: "https://test.pypi.org/legacy/"
