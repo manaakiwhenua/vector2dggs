@@ -1,5 +1,7 @@
 # vector2dggs
 
+[![pypi](https://img.shields.io/pypi/v/vector2dggs?label=vector2dggs)](https://pypi.org/project/vector2dggs/)
+
 Python-based CLI tool to index raster files to DGGS in parallel, writing out to Parquet.
 
 This is the vector equivalent of [raster2dggs](https://github.com/manaakiwhenua/raster2dggs).
