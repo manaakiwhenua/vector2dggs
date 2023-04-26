@@ -19,6 +19,7 @@ import dask_geopandas as dgpd
 import geopandas as gpd
 import h3pandas
 import pandas as pd
+import pyproj
 from shapely.geometry import GeometryCollection
 from tqdm import tqdm
 from tqdm.dask import TqdmCallback
@@ -38,13 +39,13 @@ def _index(
     input_file: Union[Path, str],
     output_directory: Union[Path, str],
     resolution: int,
-    id_field: str,
     all_attributes: bool,
     npartitions: int,
     spatial_sorting: str,
-    cut_crs: int,
     cut_threshold: int,
     processes: int,
+    id_field: str = None,
+    cut_crs: pyproj.CRS = None,
 ) -> Path:
     """
     Performs multi-threaded H3 polyfilling on (multi)polygons.
@@ -54,7 +55,7 @@ def _index(
 
     if cut_crs:
         df = df.to_crs(cut_crs)
-    LOGGER.info("Cutting with crs:" + str(df.crs))
+    LOGGER.info("Cutting with CRS: %s", df.crs)
 
     if id_field:
         df = df.set_index(id_field)
@@ -163,7 +164,7 @@ def _index(
     required=True,
     type=int,
     default=50,
-    help="Geo-partitioning, currently only available in Hilbert method",
+    help="The number of partitions to create. Recommendation: at least as many partitions as there are available `--threads`. Partitions are processed in parallel once they have been formed.",
     nargs=1,
 )
 @click.option(
@@ -171,7 +172,7 @@ def _index(
     "--spatial-sorting",
     type=click.Choice(["hilbert", "morton", "geohash"]),
     default="hilbert",
-    help="Spatial sorting method",
+    help="Spatial sorting method when perfoming spatial partitioning.",
 )
 @click.option(
     "-crs",
@@ -179,7 +180,7 @@ def _index(
     required=False,
     default=None,
     type=int,
-    help="Set crs(epsg) to input layer (used for cutting), defaults to input crs",
+    help="Set the coordinate reference system (CRS) used for cutting large polygons (see `--cur-threshold`). Defaults to the same CRS as the input. Should be a valid EPSG code.",
     nargs=1,
 )
 @click.option(
@@ -188,7 +189,7 @@ def _index(
     required=True,
     default=5000,
     type=int,
-    help="Cutting up large polygons into target length (in set crs units)",
+    help="Cutting up large polygons into smaller pieces based on a target length. Units are assumed to match the input CRS units unless the `--cut_crs` is also given, in which case units match the units of the supplied CRS.",
     nargs=1,
 )
 @click.option(
@@ -225,7 +226,7 @@ def h3(
             LOGGER.warning(
                 f"Input vector {vector_input} does not exist, and is not recognised as a remote URI"
             )
-            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), input_file)
+            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), vector_input)
         vector_input = str(vector_input)
     else:
         vector_input = Path(vector_input)
@@ -241,15 +242,18 @@ def h3(
         shutil.rmtree(output_directory)
     output_directory.mkdir(parents=True, exist_ok=True)
 
+    if cut_crs is not None:
+        cut_crs = pyproj.CRS.from_user_input(cut_crs)
+
     _index(
         vector_input,
         output_directory,
         int(resolution),
-        id_field,
         all_attributes,
         partitions,
         spatial_sorting,
-        cut_crs,
         cut_threshold,
         threads,
+        cut_crs=cut_crs,
+        id_field=id_field
     )
