@@ -7,12 +7,14 @@ on:
 jobs:
   publish-service-client-package:
     runs-on: ubuntu-latest
+    libd
     steps:
       - uses: actions/checkout@v3
       - name: Build and publish to PyPI
         uses: JRubics/poetry-publish@v1.16
         with:
           python_version: "3.10"
+          extra_build_dependency_packages: "libpq-dev libgdal-dev"
           pypi_token: ${{ secrets.PYPI_TOKEN }}
           build_format: "sdist"
           ignore_dev_requirements: "yes"
