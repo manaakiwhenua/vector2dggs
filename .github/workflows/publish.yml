@@ -7,7 +7,6 @@ on:
 jobs:
   publish-service-client-package:
     runs-on: ubuntu-latest
-    libd
     steps:
       - uses: actions/checkout@v3
       - name: Build and publish to PyPI
