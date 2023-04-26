@@ -6,6 +6,8 @@ This is the vector equivalent of [raster2dggs](https://github.com/manaakiwhenua/
 
 Currently only supports H3 DGGS, and probably has other limitations since it has been developed for a specific internal use case, though it is intended as a general-purpose abstraction. Contributions, suggestions, bug reports and strongly worded letters are all welcome.
 
+Currently only supports polygons.
+
 ![Example use case for vector2dggs, showing parcels indexed to a high H3 resolution](./docs/imgs/vector2dggs-example.png "Example use case for vector2dggs, showing parcels indexed to a high H3 resolution")
 
 ## Usage
@@ -61,6 +63,8 @@ For a quick view of your output, you can read Apache Parquet with pandas, and th
 Geoparquet output (hexagon boundaries):
 
 ```python
+>>> import pandas as pd
+>>> import h3pandas
 >>> g = pd.read_parquet('./output-data/nz-property-titles.12.parquet').h3.h3_to_geo_boundary()
 >>> g
                   title_no                                           geometry
