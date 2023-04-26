@@ -1,0 +1,20 @@
+name: Python package
+
+on:
+  release:
+    types: [ published ]
+
+jobs:
+  publish-service-client-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: action/checkout@v3
+      - name: Build and publish to PyPI
+        uses: JRubics/poetry-publish@v1.16
+        with:
+          python_version: "3.10"
+          pypi_token: ${{ secrets.PYPI_TOKEN }}
+          build_format: "sdist"
+          ignore_dev_requirements: "yes"
+          package_directory: ./vector2dggs4
+          repository_url: "https://test.pypi.org/legacy/"
