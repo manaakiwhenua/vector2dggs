@@ -53,14 +53,14 @@ def _index(
     df = gpd.read_file(input_file)
 
     if cut_crs:
-        df=df.to_crs(cut_crs) 
-    LOGGER.info("Cutting with crs:"+ str(df.crs))
+        df = df.to_crs(cut_crs)
+    LOGGER.info("Cutting with crs:" + str(df.crs))
 
     if id_field:
         df = df.set_index(id_field)
     else:
-        df=df.reset_index()
-        df=df.rename(columns={'index':'fid'}).set_index('fid')
+        df = df.reset_index()
+        df = df.rename(columns={"index": "fid"}).set_index("fid")
 
     if not all_attributes:
         # Remove all attributes except the geometry
@@ -209,7 +209,7 @@ def h3(
     all_attributes: bool,
     partitions: int,
     spatial_sorting: str,
-    cut_crs:int,
+    cut_crs: int,
     cut_threshold: int,
     threads: int,
     overwrite: bool,
