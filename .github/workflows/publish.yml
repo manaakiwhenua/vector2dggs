@@ -8,7 +8,7 @@ jobs:
   publish-service-client-package:
     runs-on: ubuntu-latest
     steps:
-      - uses: action/checkout@v3
+      - uses: actions/checkout@v3
       - name: Build and publish to PyPI
         uses: JRubics/poetry-publish@v1.16
         with:
