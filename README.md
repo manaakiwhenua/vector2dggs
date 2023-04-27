@@ -8,9 +8,15 @@ This is the vector equivalent of [raster2dggs](https://github.com/manaakiwhenua/
 
 Currently only supports H3 DGGS, and probably has other limitations since it has been developed for a specific internal use case, though it is intended as a general-purpose abstraction. Contributions, suggestions, bug reports and strongly worded letters are all welcome.
 
-Currently only supports polygons.
+Currently only supports polygons; but both coverages (strictly non-overlapping polygons), and sets of polygons that do/may overlap, are supported. Overlapping polygons are captured by ensuring that DGGS cell IDs may be non-unique (repeated) in the output.
 
 ![Example use case for vector2dggs, showing parcels indexed to a high H3 resolution](./docs/imgs/vector2dggs-example.png "Example use case for vector2dggs, showing parcels indexed to a high H3 resolution")
+
+## Installation
+
+```bash
+pip install vector2dggs
+```
 
 ## Usage
 
