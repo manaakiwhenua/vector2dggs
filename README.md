@@ -20,39 +20,67 @@ Usage: vector2dggs h3 [OPTIONS] VECTOR_INPUT OUTPUT_DIRECTORY
 
   Ingest a vector dataset and index it to the H3 DGGS.
 
-  VECTOR_INPUT is the path to input vector geospatial data.
-  OUTPUT_DIRECTORY should be a directorty, not a file, as it will be the
-  write location for an Apache Parquet data store.
+  VECTOR_INPUT is the path to input vector geospatial data. OUTPUT_DIRECTORY
+  should be a directory, not a file, as it will be the write location for an
+  Apache Parquet data store.
 
 Options:
-  -v, --verbosity LVL             Either CRITICAL, ERROR, WARNING, INFO
-                                  or DEBUG  [default: INFO]
+  -v, --verbosity LVL             Either CRITICAL, ERROR, WARNING, INFO or
+                                  DEBUG  [default: INFO]
   -r, --resolution [0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15]
                                   H3 resolution to index  [required]
   -id, --id_field TEXT            Field to use as an ID; defaults to a
                                   constructed single 0...n index on the
                                   original feature order.
-  -a, --all_attributes            Retain attributes in output. The
-                                  default is to create an output that
-                                  only includes H3 cell ID and the ID(s)
-                                  given by the -id field (or the default
-                                  index ID).
-  -p, --partitions INTEGER        Geo-partitioning, currently only
-                                  available in Hilbert method  [default:
-                                  50; required]
-  -s, --spatial-sorting [hilbert|morton|geohash]
-                                  Spatial sorting method  [default:
-                                  hilbert]
-  -crs, --cut_crs INTEGER         Set crs(epsg) to input layer (used for
-                                  cutting), defaults to input crs
-  -c, --cut_threshold INTEGER     Cutting up large polygons into target
-                                  length (meters)  [default: 5000;
+  -k, --keep_attributes           Retain attributes in output. The default is
+                                  to create an output that only includes H3
+                                  cell ID and the ID given by the -id field
+                                  (or the default index ID).
+  -p, --partitions INTEGER        The number of partitions to create.
+                                  Recommendation: at least as many partitions
+                                  as there are available `--threads`.
+                                  Partitions are processed in parallel once
+                                  they have been formed.  [default: 50;
                                   required]
+  -s, --spatial_sorting [hilbert|morton|geohash]
+                                  Spatial sorting method when perfoming
+                                  spatial partitioning.  [default: hilbert]
+  -crs, --cut_crs INTEGER         Set the coordinate reference system (CRS)
+                                  used for cutting large polygons (see `--cur-
+                                  threshold`). Defaults to the same CRS as the
+                                  input. Should be a valid EPSG code.
+  -c, --cut_threshold INTEGER     Cutting up large polygons into smaller
+                                  pieces based on a target length. Units are
+                                  assumed to match the input CRS units unless
+                                  the `--cut_crs` is also given, in which case
+                                  units match the units of the supplied CRS.
+                                  [default: 5000; required]
   -t, --threads INTEGER           Amount of threads used for operation
                                   [default: 7]
+  -tbl, --table TEXT              Name of the table to read when using a
+                                  spatial database connection as input
+  -g, --geom_col TEXT             Column name to use when using a spatial
+                                  database connection as input  [default:
+                                  geom]
   -o, --overwrite
   --help                          Show this message and exit.
+
 ```
+
+### Example 
+
+With a local GPKG:
+
+```bash
+vector2dggs h3 -v DEBUG -r 9 -p 5 -t 4 --overwrite ~/Downloads.topo50_lake.gpkg ./topo50_lake.parquet
+```
+
+With a PostgreSQL/PostGIS connection:
+
+```bash
+vector2dggs h3 -v DEBUG -r 9 -p 5 -t 4 --overwrite -tbl topo50_lake postgresql://user:password@host:port/db ./topo50_lake.parquet
+```
+
 
 ## Visualising output
 

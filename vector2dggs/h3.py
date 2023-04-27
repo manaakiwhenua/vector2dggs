@@ -21,6 +21,7 @@ import h3pandas
 import pandas as pd
 import pyproj
 from shapely.geometry import GeometryCollection
+import sqlalchemy
 from tqdm import tqdm
 from tqdm.dask import TqdmCallback
 
@@ -66,19 +67,29 @@ def _index(
     input_file: Union[Path, str],
     output_directory: Union[Path, str],
     resolution: int,
-    all_attributes: bool,
+    keep_attributes: bool,
     npartitions: int,
     spatial_sorting: str,
     cut_threshold: int,
     processes: int,
     id_field: str = None,
     cut_crs: pyproj.CRS = None,
+    con: Union[sqlalchemy.engine.Connection, sqlalchemy.engine.Engine] = None,
+    table: str = None,
+    geom_col: str = "geom",
 ) -> Path:
     """
     Performs multi-threaded H3 polyfilling on (multi)polygons.
     """
 
-    df = gpd.read_file(input_file)
+    if table and con:
+        print(table, con, geom_col)
+        df = gpd.read_postgis(
+            sqlalchemy.text(f"SELECT * FROM {table}"), con.connect(), geom_col=geom_col
+        )
+        df = df.rename_geometry("geometry")
+    else:
+        df = gpd.read_file(input_file)
 
     if cut_crs:
         df = df.to_crs(cut_crs)
@@ -90,7 +101,7 @@ def _index(
         df = df.reset_index()
         df = df.rename(columns={"index": "fid"}).set_index("fid")
 
-    if not all_attributes:
+    if not keep_attributes:
         # Remove all attributes except the geometry
         df = df.loc[:, ["geometry"]]
 
@@ -162,7 +173,7 @@ def _index(
 )
 @click.option(
     "-k",
-    "--keep-attributes",
+    "--keep_attributes",
     is_flag=True,
     show_default=True,
     default=False,
@@ -179,7 +190,7 @@ def _index(
 )
 @click.option(
     "-s",
-    "--spatial-sorting",
+    "--spatial_sorting",
     type=click.Choice(["hilbert", "morton", "geohash"]),
     default="hilbert",
     help="Spatial sorting method when perfoming spatial partitioning.",
@@ -211,28 +222,53 @@ def _index(
     help="Amount of threads used for operation",
     nargs=1,
 )
+@click.option(
+    "-tbl",
+    "--table",
+    required=False,
+    default=None,
+    type=str,
+    help="Name of the table to read when using a spatial database connection as input",
+    nargs=1,
+)
+@click.option(
+    "-g",
+    "--geom_col",
+    required=False,
+    default="geom",
+    type=str,
+    help="Column name to use when using a spatial database connection as input",
+    nargs=1,
+)
 @click.option("-o", "--overwrite", is_flag=True)
 def h3(
     vector_input: Union[str, Path],
     output_directory: Union[str, Path],
     resolution: str,
     id_field: str,
-    all_attributes: bool,
+    keep_attributes: bool,
     partitions: int,
     spatial_sorting: str,
     cut_crs: int,
     cut_threshold: int,
     threads: int,
+    table: str,
+    geom_col: str,
     overwrite: bool,
 ):
     """
     Ingest a vector dataset and index it to the H3 DGGS.
 
     VECTOR_INPUT is the path to input vector geospatial data.
-    OUTPUT_DIRECTORY should be a directorty, not a file, as it will be the write location for an Apache Parquet data store.
+    OUTPUT_DIRECTORY should be a directory, not a file or database table, as it willinstead be the write location for an Apache Parquet data store.
     """
-    if not Path(vector_input).exists():
-        if not urlparse(vector_input).scheme:
+    con: sqlalchemy.engine.Connection = None
+    scheme: str = urlparse(vector_input).scheme
+    if scheme is not None and scheme != "file":
+        # Assume database connection
+        con = sqlalchemy.create_engine(vector_input)
+    elif not Path(vector_input).exists():
+        if not scheme:
             LOGGER.warning(
                 f"Input vector {vector_input} does not exist, and is not recognised as a remote URI"
             )
@@ -261,11 +297,14 @@ def h3(
         vector_input,
         output_directory,
         int(resolution),
-        all_attributes,
+        keep_attributes,
         partitions,
         spatial_sorting,
         cut_threshold,
         threads,
         cut_crs=cut_crs,
         id_field=id_field,
+        con=con,
+        table=table,
+        geom_col=geom_col,
     )
