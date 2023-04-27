@@ -145,7 +145,7 @@ def _index(
 
         # Multithreaded polyfilling
         LOGGER.info(
-            "H3 Indexing on spatial partitions by polyfill with H3 resoltion: %d",
+            "H3 Indexing on spatial partitions by polyfill with H3 resolution: %d",
             resolution,
         )
         with Pool(processes=processes) as pool:
