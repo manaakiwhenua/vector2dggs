@@ -90,9 +90,9 @@ def _index(
             q = sqlalchemy.text(f"SELECT {id_field}, {geom_col} FROM {table}")
         else:
             q = sqlalchemy.text(f"SELECT {geom_col} FROM {table}")
-        df = gpd.read_postgis(
-            q, con.connect(), geom_col=geom_col
-        ).rename_geometry("geometry")
+        df = gpd.read_postgis(q, con.connect(), geom_col=geom_col).rename_geometry(
+            "geometry"
+        )
     else:
         # Read file
         df = gpd.read_file(input_file)
