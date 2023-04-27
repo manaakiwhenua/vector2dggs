@@ -69,17 +69,7 @@ Options:
 
 ### Example 
 
-With a local GPKG:
 
-```bash
-vector2dggs h3 -v DEBUG -r 9 -p 5 -t 4 --overwrite ~/Downloads.topo50_lake.gpkg ./topo50_lake.parquet
-```
-
-With a PostgreSQL/PostGIS connection:
-
-```bash
-vector2dggs h3 -v DEBUG -r 9 -p 5 -t 4 --overwrite -tbl topo50_lake postgresql://user:password@host:port/db ./topo50_lake.parquet
-```
 
 
 ## Visualising output
@@ -135,8 +125,18 @@ If you run `poetry install`, the CLI tool will be aliased so you can simply use 
 Please run `black .` before committing.
 
 ## Example commands
+
+With a local GPKG:
+
 ```bash
-vector2dggs h3 -id title_no -r 12 -o ~/Downloads/nz-property-titles.gpkg ~/Downloads/nz-property-titles.parquet
+vector2dggs h3 -v DEBUG -id title_no -r 12 -o ~/Downloads/nz-property-titles.gpkg ~/Downloads/nz-property-titles.parquet
+
+```
+
+With a PostgreSQL/PostGIS connection:
+
+```bash
+vector2dggs h3 -v DEBUG -id ogc_fid -r 9 -p 5 -t 4 --overwrite -tbl topo50_lake postgresql://user:password@host:port/db ./topo50_lake.parquet
 ```
 
 ## Citation

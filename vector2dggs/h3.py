@@ -83,12 +83,18 @@ def _index(
     """
 
     if table and con:
-        print(table, con, geom_col)
+        # Database connection
+        if keep_attributes:
+            q = sqlalchemy.text(f"SELECT * FROM {table}")
+        elif id_field and not keep_attributes:
+            q = sqlalchemy.text(f"SELECT {id_field}, {geom_col} FROM {table}")
+        else:
+            q = sqlalchemy.text(f"SELECT {geom_col} FROM {table}")
         df = gpd.read_postgis(
-            sqlalchemy.text(f"SELECT * FROM {table}"), con.connect(), geom_col=geom_col
-        )
-        df = df.rename_geometry("geometry")
+            q, con.connect(), geom_col=geom_col
+        ).rename_geometry("geometry")
     else:
+        # Read file
         df = gpd.read_file(input_file)
 
     if cut_crs:
