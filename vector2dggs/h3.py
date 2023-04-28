@@ -26,6 +26,7 @@ from tqdm import tqdm
 from tqdm.dask import TqdmCallback
 
 from . import katana
+from vector2dggs import __version__
 
 LOGGER = logging.getLogger(__name__)
 click_log.basic_config(LOGGER)
@@ -247,6 +248,7 @@ def _index(
     nargs=1,
 )
 @click.option("-o", "--overwrite", is_flag=True)
+@click.version_option(version=__version__)
 def h3(
     vector_input: Union[str, Path],
     output_directory: Union[str, Path],

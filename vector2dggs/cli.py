@@ -1,5 +1,6 @@
 import click
 
+from vector2dggs import __version__
 from vector2dggs.h3 import h3
 
 #   If the program does terminal interaction, make it output a short
@@ -10,8 +11,8 @@ from vector2dggs.h3 import h3
 #     This is free software, and you are welcome to redistribute it
 #     under certain conditions; type `show c' for details.
 
-
 @click.group()
+@click.version_option(version=__version__)
 def cli():
     pass
 
