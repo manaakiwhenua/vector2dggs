@@ -11,6 +11,7 @@ from vector2dggs.h3 import h3
 #     This is free software, and you are welcome to redistribute it
 #     under certain conditions; type `show c' for details.
 
+
 @click.group()
 @click.version_option(version=__version__)
 def cli():

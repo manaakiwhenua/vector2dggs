@@ -12,10 +12,17 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” 
 """
 
 from shapely.geometry import box, Polygon, MultiPolygon, GeometryCollection
+from shapely.validation import explain_validity, make_valid
 
 
 def katana(geometry, threshold, count=0) -> GeometryCollection:
-    """Split a Polygon into two parts across it's shortest dimension"""
+    """
+    Split a polygon into two parts across it's shortest dimension.
+    Invalid input `geometry` will silently be made valid (if possible).
+    """
+    if not geometry.is_valid:
+        # print(explain_validity(geometry))
+        geometry = make_valid(geometry)
     bounds = geometry.bounds
     width = bounds[2] - bounds[0]
     height = bounds[3] - bounds[1]
