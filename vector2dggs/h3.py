@@ -272,7 +272,7 @@ def h3(
     """
     con: sqlalchemy.engine.Connection = None
     scheme: str = urlparse(vector_input).scheme
-    if scheme is not None and scheme != "file":
+    if bool(scheme) and scheme != "file":
         # Assume database connection
         con = sqlalchemy.create_engine(vector_input)
     elif not Path(vector_input).exists():
