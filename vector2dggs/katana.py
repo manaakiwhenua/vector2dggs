@@ -20,6 +20,9 @@ def katana(geometry, threshold, count=0) -> GeometryCollection:
     Split a polygon into two parts across it's shortest dimension.
     Invalid input `geometry` will silently be made valid (if possible).
     """
+    if geometry is None:
+        # Empty geometry collection
+        return GeometryCollection([])
     if not geometry.is_valid:
         # print(explain_validity(geometry))
         geometry = make_valid(geometry)
