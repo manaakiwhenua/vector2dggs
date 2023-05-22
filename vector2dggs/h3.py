@@ -268,7 +268,7 @@ def h3(
     Ingest a vector dataset and index it to the H3 DGGS.
 
     VECTOR_INPUT is the path to input vector geospatial data.
-    OUTPUT_DIRECTORY should be a directory, not a file or database table, as it willinstead be the write location for an Apache Parquet data store.
+    OUTPUT_DIRECTORY should be a directory, not a file or database table, as it will instead be the write location for an Apache Parquet data store.
     """
     con: sqlalchemy.engine.Connection = None
     scheme: str = urlparse(vector_input).scheme

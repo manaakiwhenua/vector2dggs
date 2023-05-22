@@ -27,8 +27,8 @@ Usage: vector2dggs h3 [OPTIONS] VECTOR_INPUT OUTPUT_DIRECTORY
   Ingest a vector dataset and index it to the H3 DGGS.
 
   VECTOR_INPUT is the path to input vector geospatial data. OUTPUT_DIRECTORY
-  should be a directory, not a file, as it will be the write location for an
-  Apache Parquet data store.
+  should be a directory, not a file or database table, as it will instead be
+  the write location for an Apache Parquet data store.
 
 Options:
   -v, --verbosity LVL             Either CRITICAL, ERROR, WARNING, INFO or
@@ -69,8 +69,8 @@ Options:
                                   database connection as input  [default:
                                   geom]
   -o, --overwrite
+  --version                       Show the version and exit.
   --help                          Show this message and exit.
-
 ```
 
 ### Example 
@@ -152,13 +152,13 @@ vector2dggs h3 -v DEBUG -id ogc_fid -r 9 -p 5 -t 4 --overwrite -tbl topo50_lake 
   title={{vector2dggs}},
   author={Ardo, James and Law, Richard},
   url={https://github.com/manaakiwhenua/vector2dggs},
-  version={0.3.1},
+  version={0.3.2},
   date={2023-04-20}
 }
 ```
 
 APA/Harvard
 
-> Ardo, J., & Law, R. (2023). vector2dggs (0.3.1) [Computer software]. https://github.com/manaakiwhenua/vector2dggs
+> Ardo, J., & Law, R. (2023). vector2dggs (0.3.2) [Computer software]. https://github.com/manaakiwhenua/vector2dggs
 
 [![manaakiwhenua-standards](https://github.com/manaakiwhenua/vector2dggs/workflows/manaakiwhenua-standards/badge.svg)](https://github.com/manaakiwhenua/manaakiwhenua-standards)
