@@ -35,6 +35,9 @@ Options:
                                   DEBUG  [default: INFO]
   -r, --resolution [0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15]
                                   H3 resolution to index  [required]
+  -pr, --parent_res [0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15]
+                                  H3 Parent resolution for the output
+                                  partition. Defaults to resolution - 6
   -id, --id_field TEXT            Field to use as an ID; defaults to a
                                   constructed single 0...n index on the
                                   original feature order.
