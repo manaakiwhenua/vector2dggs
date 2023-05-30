@@ -37,8 +37,34 @@ warnings.filterwarnings(
 )  # This is to filter out the polyfill warnings when rows failed to get indexed at a resolution, can be commented out to find missing rows
 
 
+DEFAULT_PARENT_OFFSET = 6
+
+
+class ParentResolutionException(Exception):
+    pass
+
+
+def _get_parent_res(parent_res: Union[None, int], resolution: int):
+    """
+    Uses a parent resolution,
+    OR,
+    Given a target resolution, returns our recommended parent resolution.
+
+    Used for intermediate re-partioning.
+    """
+    return (
+        int(parent_res)
+        if parent_res is not None
+        else max(MIN_H3, (resolution - DEFAULT_PARENT_OFFSET))
+    )
+
+
 def polyfill(
-    pq_in: Path, spatial_sort_col: str, resolution: int, output_directory: str
+    pq_in: Path,
+    spatial_sort_col: str,
+    resolution: int,
+    parent_res: Union[None, int],
+    output_directory: str,
 ) -> None:
     """
     Reads a geoparquet, performs H3 polyfilling,
@@ -52,6 +78,9 @@ def polyfill(
     )
     df = pd.DataFrame(df).drop(columns=["index", "geometry"])
     df.index.rename(f"h3_{resolution:02}", inplace=True)
+    parent_res: int = _get_parent_res(parent_res, resolution)
+    # Secondary (parent) H3 index, used later for partitioning
+    df = df.h3.h3_to_parent(parent_res).reset_index()
     df.to_parquet(
         PurePath(output_directory, pq_in.name),
         engine="auto",
@@ -60,14 +89,59 @@ def polyfill(
     return None
 
 
-def polyfill_star(args):
+def polyfill_star(args) -> None:
     return polyfill(*args)
+
+
+def _parent_partitioning(
+    input_dir: Path,
+    output_dir: Path,
+    resolution,
+    parent_res: Union[None, int],
+    **kwargs,
+) -> Path:
+    parent_res: int = _get_parent_res(parent_res, resolution)
+    with TqdmCallback(desc="Reading spatial partitions"):
+        # Set index as parent cell
+        ddf = dd.read_parquet(input_dir, engine="pyarrow").set_index(
+            f"h3_{parent_res:02}"
+        )
+    with TqdmCallback(desc="Counting parents"):
+        # Count parents, to get target number of partitions
+        uniqueh3 = sorted(list(ddf.index.unique().compute()))
+
+    LOGGER.debug(
+        "Repartitioning into %d partitions, based on parent cells",
+        len(uniqueh3) + 1,
+    )
+
+    with TqdmCallback(desc="Repartitioning"):
+        ddf = (
+            ddf.repartition(  # See "notes" on why divisions expects repetition of the last item https://docs.dask.org/en/stable/generated/dask.dataframe.DataFrame.repartition.html
+                divisions=(uniqueh3 + [uniqueh3[-1]]), force=True
+            )
+            .reset_index()
+            .set_index(f"h3_{resolution:02}")
+            .drop(columns=[f"h3_{parent_res:02}"])
+            .to_parquet(
+                output_dir,
+                overwrite=kwargs.get("overwrite", False),
+                engine=kwargs.get("engine", "pyarrow"),
+                write_index=True,
+                # append=False,
+                name_function=lambda i: f"{uniqueh3[i]}.parquet",
+                compression=kwargs.get("compression", "ZSTD"),
+            )
+        )
+    LOGGER.debug("Parent cell repartitioning complete")
+    return output_dir
 
 
 def _index(
     input_file: Union[Path, str],
     output_directory: Union[Path, str],
     resolution: int,
+    parent_res: Union[None, int],
     keep_attributes: bool,
     npartitions: int,
     spatial_sorting: str,
@@ -78,6 +152,7 @@ def _index(
     con: Union[sqlalchemy.engine.Connection, sqlalchemy.engine.Engine] = None,
     table: str = None,
     geom_col: str = "geom",
+    overwrite: bool = False,
 ) -> Path:
     """
     Performs multi-threaded H3 polyfilling on (multi)polygons.
@@ -138,7 +213,7 @@ def _index(
         else f"{spatial_sorting}_distance"
     )
 
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(suffix=".parquet") as tmpdir:
         with TqdmCallback():
             ddf.to_parquet(tmpdir, overwrite=True)
 
@@ -149,12 +224,19 @@ def _index(
             "H3 Indexing on spatial partitions by polyfill with H3 resolution: %d",
             resolution,
         )
-        with Pool(processes=processes) as pool:
-            args = [
-                (filepath, spatial_sort_col, resolution, output_directory)
-                for filepath in filepaths
-            ]
-            list(tqdm(pool.imap(polyfill_star, args), total=len(args)))
+        with tempfile.TemporaryDirectory(suffix=".parquet") as tmpdir2:
+            with Pool(processes=processes) as pool:
+                args = [
+                    (filepath, spatial_sort_col, resolution, parent_res, tmpdir2)
+                    for filepath in filepaths
+                ]
+                list(tqdm(pool.imap(polyfill_star, args), total=len(args)))
+
+            output_directory = _parent_partitioning(
+                tmpdir2, output_directory, resolution, parent_res, overwrite=overwrite
+            )
+
+    return output_directory
 
 
 @click.command(context_settings={"show_default": True})
@@ -168,6 +250,13 @@ def _index(
     type=click.Choice(list(map(str, range(MIN_H3, MAX_H3 + 1)))),
     help="H3 resolution to index",
     nargs=1,
+)
+@click.option(
+    "-pr",
+    "--parent_res",
+    required=False,
+    type=click.Choice(list(map(str, range(MIN_H3, MAX_H3 + 1)))),
+    help="H3 Parent resolution for the output partition. Defaults to resolution - 6",
 )
 @click.option(
     "-id",
@@ -253,6 +342,7 @@ def h3(
     vector_input: Union[str, Path],
     output_directory: Union[str, Path],
     resolution: str,
+    parent_res: str,
     id_field: str,
     keep_attributes: bool,
     partitions: int,
@@ -270,6 +360,12 @@ def h3(
     VECTOR_INPUT is the path to input vector geospatial data.
     OUTPUT_DIRECTORY should be a directory, not a file or database table, as it will instead be the write location for an Apache Parquet data store.
     """
+    if parent_res is not None and not int(parent_res) < int(resolution):
+        raise ParentResolutionException(
+            "Parent resolution ({pr}) must be less than target resolution ({r})".format(
+                pr=parent_res, r=resolution
+            )
+        )
     con: sqlalchemy.engine.Connection = None
     scheme: str = urlparse(vector_input).scheme
     if bool(scheme) and scheme != "file":
@@ -305,6 +401,7 @@ def h3(
         vector_input,
         output_directory,
         int(resolution),
+        parent_res,
         keep_attributes,
         partitions,
         spatial_sorting,
@@ -315,4 +412,5 @@ def h3(
         con=con,
         table=table,
         geom_col=geom_col,
+        overwrite=overwrite,
     )
