@@ -44,8 +44,6 @@ DEFAULT_PARENT_OFFSET = 6
 class ParentResolutionException(Exception):
     pass
 
-class EmptyDataException(Exception):
-    pass
 
 def _get_parent_res(parent_res: Union[None, int], resolution: int):
     """
