@@ -5,6 +5,7 @@ import multiprocessing
 from multiprocessing.dummy import Pool
 from pathlib import Path, PurePath
 import shutil
+import sys
 import tempfile
 from typing import Union
 from urllib.parse import urlparse
@@ -43,6 +44,8 @@ DEFAULT_PARENT_OFFSET = 6
 class ParentResolutionException(Exception):
     pass
 
+class EmptyDataException(Exception):
+    pass
 
 def _get_parent_res(parent_res: Union[None, int], resolution: int):
     """
@@ -382,20 +385,25 @@ def h3(
     if cut_crs is not None:
         cut_crs = pyproj.CRS.from_user_input(cut_crs)
 
-    _index(
-        vector_input,
-        output_directory,
-        int(resolution),
-        parent_res,
-        keep_attributes,
-        partitions,
-        spatial_sorting,
-        cut_threshold,
-        threads,
-        cut_crs=cut_crs,
-        id_field=id_field,
-        con=con,
-        table=table,
-        geom_col=geom_col,
-        overwrite=overwrite,
-    )
+    try:
+        _index(
+            vector_input,
+            output_directory,
+            int(resolution),
+            parent_res,
+            keep_attributes,
+            partitions,
+            spatial_sorting,
+            cut_threshold,
+            threads,
+            cut_crs=cut_crs,
+            id_field=id_field,
+            con=con,
+            table=table,
+            geom_col=geom_col,
+            overwrite=overwrite,
+        )
+    except:
+        raise
+    else:
+        sys.exit(0)

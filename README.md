@@ -35,6 +35,9 @@ Options:
                                   DEBUG  [default: INFO]
   -r, --resolution [0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15]
                                   H3 resolution to index  [required]
+  -pr, --parent_res [0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15]
+                                  H3 Parent resolution for the output
+                                  partition. Defaults to resolution - 6
   -id, --id_field TEXT            Field to use as an ID; defaults to a
                                   constructed single 0...n index on the
                                   original feature order.
@@ -152,13 +155,13 @@ vector2dggs h3 -v DEBUG -id ogc_fid -r 9 -p 5 -t 4 --overwrite -tbl topo50_lake 
   title={{vector2dggs}},
   author={Ardo, James and Law, Richard},
   url={https://github.com/manaakiwhenua/vector2dggs},
-  version={0.3.3},
+  version={0.3.4},
   date={2023-04-20}
 }
 ```
 
 APA/Harvard
 
-> Ardo, J., & Law, R. (2023). vector2dggs (0.3.3) [Computer software]. https://github.com/manaakiwhenua/vector2dggs
+> Ardo, J., & Law, R. (2023). vector2dggs (0.3.4) [Computer software]. https://github.com/manaakiwhenua/vector2dggs
 
 [![manaakiwhenua-standards](https://github.com/manaakiwhenua/vector2dggs/workflows/manaakiwhenua-standards/badge.svg)](https://github.com/manaakiwhenua/manaakiwhenua-standards)
