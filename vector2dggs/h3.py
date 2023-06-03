@@ -1,5 +1,3 @@
-import click
-import click_log
 import errno
 import logging
 import os
@@ -14,6 +12,8 @@ import warnings
 
 os.environ["USE_PYGEOS"] = "0"
 
+import click
+import click_log
 import dask.dataframe as dd
 import dask_geopandas as dgpd
 import geopandas as gpd
@@ -80,8 +80,7 @@ def polyfill(
     df.index.rename(f"h3_{resolution:02}", inplace=True)
     parent_res: int = _get_parent_res(parent_res, resolution)
     # Secondary (parent) H3 index, used later for partitioning
-    df = df.h3.h3_to_parent(parent_res).reset_index()
-    df.to_parquet(
+    df.h3.h3_to_parent(parent_res).to_parquet(
         PurePath(output_directory, pq_in.name),
         engine="auto",
         compression="ZSTD",
@@ -99,42 +98,28 @@ def _parent_partitioning(
     resolution,
     parent_res: Union[None, int],
     **kwargs,
-) -> Path:
+) -> None:
     parent_res: int = _get_parent_res(parent_res, resolution)
-    with TqdmCallback(desc="Reading spatial partitions"):
-        # Set index as parent cell
-        ddf = dd.read_parquet(input_dir, engine="pyarrow").set_index(
-            f"h3_{parent_res:02}"
-        )
-    with TqdmCallback(desc="Counting parents"):
-        # Count parents, to get target number of partitions
-        uniqueh3 = sorted(list(ddf.index.unique().compute()))
-
-    LOGGER.debug(
-        "Repartitioning into %d partitions, based on parent cells",
-        len(uniqueh3) + 1,
-    )
+    partition_col = f"h3_{parent_res:02}"
 
     with TqdmCallback(desc="Repartitioning"):
-        ddf = (
-            ddf.repartition(  # See "notes" on why divisions expects repetition of the last item https://docs.dask.org/en/stable/generated/dask.dataframe.DataFrame.repartition.html
-                divisions=(uniqueh3 + [uniqueh3[-1]]), force=True
-            )
-            .reset_index()
-            .set_index(f"h3_{resolution:02}")
-            .drop(columns=[f"h3_{parent_res:02}"])
-            .to_parquet(
-                output_dir,
-                overwrite=kwargs.get("overwrite", False),
-                engine=kwargs.get("engine", "pyarrow"),
-                write_index=True,
-                # append=False,
-                name_function=lambda i: f"{uniqueh3[i]}.parquet",
-                compression=kwargs.get("compression", "ZSTD"),
-            )
+        dd.read_parquet(input_dir, engine="pyarrow").to_parquet(
+            output_dir,
+            overwrite=kwargs.get("overwrite", False),
+            engine=kwargs.get("engine", "pyarrow"),
+            partition_on=partition_col,
+            compression=kwargs.get("compression", "ZSTD"),
         )
     LOGGER.debug("Parent cell repartitioning complete")
-    return output_dir
+
+    # Rename output to just be the partition key, suffix .parquet
+    for f in os.listdir(output_dir):
+        os.rename(
+            os.path.join(output_dir, f),
+            os.path.join(output_dir, f.replace(f"{partition_col}=", "") + ".parquet"),
+        )
+
+    return
 
 
 def _index(
@@ -232,7 +217,7 @@ def _index(
                 ]
                 list(tqdm(pool.imap(polyfill_star, args), total=len(args)))
 
-            output_directory = _parent_partitioning(
+            _parent_partitioning(
                 tmpdir2, output_directory, resolution, parent_res, overwrite=overwrite
             )
 
