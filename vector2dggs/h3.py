@@ -322,6 +322,12 @@ def _index(
     help="Column name to use when using a spatial database connection as input",
     nargs=1,
 )
+@click.option(
+    "--tempdir",
+    default=tempfile.tempdir,
+    type=click.Path(),
+    help="Temporary data is created during the execution of this program. This parameter allows you to control where this data will be written."
+)
 @click.option("-o", "--overwrite", is_flag=True)
 @click.version_option(version=__version__)
 def h3(
@@ -338,6 +344,7 @@ def h3(
     threads: int,
     table: str,
     geom_col: str,
+    tempdir: Union[str, Path],
     overwrite: bool,
 ):
     """
@@ -346,6 +353,7 @@ def h3(
     VECTOR_INPUT is the path to input vector geospatial data.
     OUTPUT_DIRECTORY should be a directory, not a file or database table, as it will instead be the write location for an Apache Parquet data store.
     """
+    tempfile.tempdir = tempdir
     if parent_res is not None and not int(parent_res) < int(resolution):
         raise ParentResolutionException(
             "Parent resolution ({pr}) must be less than target resolution ({r})".format(
