@@ -45,12 +45,10 @@ Options:
                                   to create an output that only includes H3
                                   cell ID and the ID given by the -id field
                                   (or the default index ID).
-  -p, --partitions INTEGER        The number of partitions to create.
-                                  Recommendation: at least as many partitions
-                                  as there are available `--threads`.
-                                  Partitions are processed in parallel once
-                                  they have been formed.  [default: 50;
-                                  required]
+  -ch, --chunksize INTEGER        The number of rows per index partition to
+                                  use when spatially partioning. Adjusting
+                                  this number will trade off memory use and
+                                  time.  [default: 50; required]
   -s, --spatial_sorting [hilbert|morton|geohash]
                                   Spatial sorting method when perfoming
                                   spatial partitioning.  [default: hilbert]
@@ -71,6 +69,10 @@ Options:
   -g, --geom_col TEXT             Column name to use when using a spatial
                                   database connection as input  [default:
                                   geom]
+  --tempdir PATH                  Temporary data is created during the
+                                  execution of this program. This parameter
+                                  allows you to control where this data will
+                                  be written.
   -o, --overwrite
   --version                       Show the version and exit.
   --help                          Show this message and exit.
