@@ -39,7 +39,7 @@ warnings.filterwarnings(
 
 
 DEFAULT_PARENT_OFFSET = 6
-
+DEFAULT_CHUNK_SIZE = 50
 
 class ParentResolutionException(Exception):
     pass
@@ -75,8 +75,14 @@ def polyfill(
         gpd.read_parquet(pq_in)
         .reset_index()
         .drop(columns=[spatial_sort_col])
-        .h3.polyfill_resample(resolution, return_geometry=False)
     )
+    if len(df.index) == 0:
+        # Input is empty, nothing to polyfill
+        return None
+    df = df.h3.polyfill_resample(resolution, return_geometry=False)
+    if len(df.index) == 0:
+        # Polyfill resulted in empty output (e.g. large cell, small feature)
+        return None
     df = pd.DataFrame(df).drop(columns=["index", "geometry"])
     df.index.rename(f"h3_{resolution:02}", inplace=True)
     parent_res: int = _get_parent_res(parent_res, resolution)
@@ -84,7 +90,7 @@ def polyfill(
     df.h3.h3_to_parent(parent_res).to_parquet(
         PurePath(output_directory, pq_in.name),
         engine="auto",
-        compression="ZSTD",
+        compression="ZSTD"
     )
     return None
 
@@ -129,7 +135,7 @@ def _index(
     resolution: int,
     parent_res: Union[None, int],
     keep_attributes: bool,
-    npartitions: int,
+    chunksize: int,
     spatial_sorting: str,
     cut_threshold: int,
     processes: int,
@@ -181,15 +187,16 @@ def _index(
             )
             pbar.update(1)
 
-    LOGGER.info("Preparing for spatial partitioning....")
+    LOGGER.info("Preparing for spatial partitioning...")
     df = (
         df.to_crs(4326)
         .explode(index_parts=False)  # Explode from GeometryCollection
         .explode(index_parts=False)  # Explode multipolygons to polygons
+        .drop(df[(df.geometry.is_empty|df.geometry.isna())].index)
         .reset_index()
     )
 
-    ddf = dgpd.from_geopandas(df, npartitions=npartitions)
+    ddf = dgpd.from_geopandas(df, chunksize=max(1, chunksize), sort=True)
 
     LOGGER.info("Spatially sorting and partitioning (%s)", spatial_sorting)
     ddf = ddf.spatial_shuffle(by=spatial_sorting)
@@ -262,12 +269,12 @@ def _index(
     help="Retain attributes in output. The default is to create an output that only includes H3 cell ID and the ID given by the -id field (or the default index ID).",
 )
 @click.option(
-    "-p",
-    "--partitions",
+    "-ch",
+    "--chunksize",
     required=True,
     type=int,
-    default=50,
-    help="The number of partitions to create. Recommendation: at least as many partitions as there are available `--threads`. Partitions are processed in parallel once they have been formed.",
+    default=DEFAULT_CHUNK_SIZE,
+    help="The number of rows per index partition to use when spatially partioning. Adjusting this number will trade off memory use and time.",
     nargs=1,
 )
 @click.option(
@@ -337,7 +344,7 @@ def h3(
     parent_res: str,
     id_field: str,
     keep_attributes: bool,
-    partitions: int,
+    chunksize: int,
     spatial_sorting: str,
     cut_crs: int,
     cut_threshold: int,
@@ -398,7 +405,7 @@ def h3(
             int(resolution),
             parent_res,
             keep_attributes,
-            partitions,
+            chunksize,
             spatial_sorting,
             cut_threshold,
             threads,

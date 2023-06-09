@@ -45,12 +45,10 @@ Options:
                                   to create an output that only includes H3
                                   cell ID and the ID given by the -id field
                                   (or the default index ID).
-  -p, --partitions INTEGER        The number of partitions to create.
-                                  Recommendation: at least as many partitions
-                                  as there are available `--threads`.
-                                  Partitions are processed in parallel once
-                                  they have been formed.  [default: 50;
-                                  required]
+  -ch, --chunksize INTEGER        The number of rows per index partition to
+                                  use when spatially partioning. Adjusting
+                                  this number will trade off memory use and
+                                  time.  [default: 50; required]
   -s, --spatial_sorting [hilbert|morton|geohash]
                                   Spatial sorting method when perfoming
                                   spatial partitioning.  [default: hilbert]
@@ -71,6 +69,10 @@ Options:
   -g, --geom_col TEXT             Column name to use when using a spatial
                                   database connection as input  [default:
                                   geom]
+  --tempdir PATH                  Temporary data is created during the
+                                  execution of this program. This parameter
+                                  allows you to control where this data will
+                                  be written.
   -o, --overwrite
   --version                       Show the version and exit.
   --help                          Show this message and exit.
@@ -155,13 +157,13 @@ vector2dggs h3 -v DEBUG -id ogc_fid -r 9 -p 5 -t 4 --overwrite -tbl topo50_lake 
   title={{vector2dggs}},
   author={Ardo, James and Law, Richard},
   url={https://github.com/manaakiwhenua/vector2dggs},
-  version={0.4.0},
+  version={0.5.0},
   date={2023-04-20}
 }
 ```
 
 APA/Harvard
 
-> Ardo, J., & Law, R. (2023). vector2dggs (0.4.0) [Computer software]. https://github.com/manaakiwhenua/vector2dggs
+> Ardo, J., & Law, R. (2023). vector2dggs (0.5.0) [Computer software]. https://github.com/manaakiwhenua/vector2dggs
 
 [![manaakiwhenua-standards](https://github.com/manaakiwhenua/vector2dggs/workflows/manaakiwhenua-standards/badge.svg)](https://github.com/manaakiwhenua/manaakiwhenua-standards)
