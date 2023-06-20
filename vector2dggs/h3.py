@@ -187,12 +187,15 @@ def _index(
             )
             pbar.update(1)
 
-    LOGGER.info("Preparing for spatial partitioning...")
+    LOGGER.info("Exploding geometry collections and multipolygons")
     df = (
         df.to_crs(4326)
         .explode(index_parts=False)  # Explode from GeometryCollection
         .explode(index_parts=False)  # Explode multipolygons to polygons
-        .drop(df[(df.geometry.is_empty|df.geometry.isna())].index)
+    ).reset_index()
+    LOGGER.info("Dropping empty or null geometries")
+    df = (
+        df.drop(df[(df.geometry.is_empty|df.geometry.isna())].index)
         .reset_index()
     )
 
