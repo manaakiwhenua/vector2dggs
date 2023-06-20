@@ -48,8 +48,8 @@ def katana(geometry, threshold, count=0) -> GeometryCollection:
     ):
         c = geometry.intersection(d)
         if not isinstance(c, GeometryCollection):
-            c = [c]
-        for e in c:
+            c = GeometryCollection([c])
+        for e in c.geoms:
             if isinstance(e, (Polygon, MultiPolygon)):
                 result.extend(katana(e, threshold, count + 1))
     if count > 0:

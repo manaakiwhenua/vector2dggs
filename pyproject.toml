@@ -16,7 +16,7 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.10"
-gdal = "^3.6.2"
+gdal = "^3.6.4"
 geopandas = "^0.12.2"
 h3pandas = "^0.2.3"
 dask-geopandas = "^0.3.0"
