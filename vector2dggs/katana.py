@@ -26,6 +26,9 @@ def katana(geometry, threshold, count=0) -> GeometryCollection:
     if not geometry.is_valid:
         # print(explain_validity(geometry))
         geometry = make_valid(geometry)
+        if geometry.type == 'GeometryCollection':
+            geometry.normalize()
+        geometry = geometry.buffer(0)
     bounds = geometry.bounds
     width = bounds[2] - bounds[0]
     height = bounds[3] - bounds[1]
