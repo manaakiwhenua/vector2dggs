@@ -41,6 +41,7 @@ warnings.filterwarnings(
 DEFAULT_PARENT_OFFSET = 6
 DEFAULT_CHUNK_SIZE = 50
 
+
 class ParentResolutionException(Exception):
     pass
 
@@ -71,11 +72,7 @@ def polyfill(
     Reads a geoparquet, performs H3 polyfilling,
     and writes out to parquet.
     """
-    df = (
-        gpd.read_parquet(pq_in)
-        .reset_index()
-        .drop(columns=[spatial_sort_col])
-    )
+    df = gpd.read_parquet(pq_in).reset_index().drop(columns=[spatial_sort_col])
     if len(df.index) == 0:
         # Input is empty, nothing to polyfill
         return None
@@ -88,9 +85,7 @@ def polyfill(
     parent_res: int = _get_parent_res(parent_res, resolution)
     # Secondary (parent) H3 index, used later for partitioning
     df.h3.h3_to_parent(parent_res).to_parquet(
-        PurePath(output_directory, pq_in.name),
-        engine="auto",
-        compression="ZSTD"
+        PurePath(output_directory, pq_in.name), engine="auto", compression="ZSTD"
     )
     return None
 
@@ -128,16 +123,25 @@ def _parent_partitioning(
 
     return
 
-def drop_condition(df : pd.DataFrame, drop_index : pd.Index, log_statement : str, warning_threshold : float =0.01):
+
+def drop_condition(
+    df: pd.DataFrame,
+    drop_index: pd.Index,
+    log_statement: str,
+    warning_threshold: float = 0.01,
+):
     LOGGER.info(log_statement)
     _before = len(df)
     df = df.drop(drop_index)
     _after = len(df)
     _diff = _before - _after
     if _diff:
-        log_method = LOGGER.info if (_diff/float(_before)) < warning_threshold else LOGGER.warn
+        log_method = (
+            LOGGER.info if (_diff / float(_before)) < warning_threshold else LOGGER.warn
+        )
         log_method(f"Dropped {_diff} rows ({_diff/float(_before)*100:.2f}%)")
     return df
+
 
 def _index(
     input_file: Union[Path, str],
@@ -206,16 +210,21 @@ def _index(
 
     drop_conditions = [
         {
-            'index': lambda frame: frame[(frame.geometry.is_empty|frame.geometry.isna())],
-            'message': "Dropping empty or null geometries"
-        }, {
-            'index': lambda frame: frame[(frame.geometry.geom_type!="Polygon")], # NB currently points and lines are lost; in principle, these could be indexed
-            'message': "Dropping non-polygonal geometries"
-        }
+            "index": lambda frame: frame[
+                (frame.geometry.is_empty | frame.geometry.isna())
+            ],
+            "message": "Dropping empty or null geometries",
+        },
+        {
+            "index": lambda frame: frame[
+                (frame.geometry.geom_type != "Polygon")
+            ],  # NB currently points and lines are lost; in principle, these could be indexed
+            "message": "Dropping non-polygonal geometries",
+        },
     ]
     for condition in drop_conditions:
-        df = drop_condition(df, condition['index'](df).index, condition['message'])
-    
+        df = drop_condition(df, condition["index"](df).index, condition["message"])
+
     ddf = dgpd.from_geopandas(df, chunksize=max(1, chunksize), sort=True)
 
     LOGGER.info("Spatially sorting and partitioning (%s)", spatial_sorting)
@@ -353,7 +362,7 @@ def _index(
     "--tempdir",
     default=tempfile.tempdir,
     type=click.Path(),
-    help="Temporary data is created during the execution of this program. This parameter allows you to control where this data will be written."
+    help="Temporary data is created during the execution of this program. This parameter allows you to control where this data will be written.",
 )
 @click.option("-o", "--overwrite", is_flag=True)
 @click.version_option(version=__version__)
