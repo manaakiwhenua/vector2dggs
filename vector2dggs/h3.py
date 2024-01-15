@@ -69,18 +69,40 @@ def polyfill(
     output_directory: str,
 ) -> None:
     """
-    Reads a geoparquet, performs H3 polyfilling,
-    and writes out to parquet.
+    Reads a geoparquet, performs H3 polyfilling (for polygons),
+    linetracing (for linestrings), and writes out to parquet.
     """
     df = gpd.read_parquet(pq_in).reset_index().drop(columns=[spatial_sort_col])
     if len(df.index) == 0:
         # Input is empty, nothing to polyfill
         return None
-    df = df.h3.polyfill_resample(resolution, return_geometry=False)
+
+    df_polygon = df[df.geom_type == "Polygon"]
+    if len(df_polygon.index) > 0:
+        df_polygon = df_polygon.h3.polyfill_resample(
+            resolution, return_geometry=False
+        ).drop(columns=["index"])
+
+    df_linestring = df[df.geom_type == "LineString"]
+    if len(df_linestring.index) > 0:
+        df_linestring = (
+            df_linestring.h3.linetrace(resolution)
+            .explode("h3_linetrace")
+            .set_index("h3_linetrace")
+        )
+        df_linestring = df_linestring[~df_linestring.index.duplicated(keep="first")]
+
+    df = pd.concat(
+        map(
+            lambda _df: pd.DataFrame(_df.drop(columns=[_df.geometry.name])),
+            [df_polygon, df_linestring],
+        )
+    )
+
     if len(df.index) == 0:
         # Polyfill resulted in empty output (e.g. large cell, small feature)
         return None
-    df = pd.DataFrame(df).drop(columns=["index", "geometry"])
+
     df.index.rename(f"h3_{resolution:02}", inplace=True)
     parent_res: int = _get_parent_res(parent_res, resolution)
     # Secondary (parent) H3 index, used later for partitioning
@@ -218,7 +240,8 @@ def _index(
         {
             "index": lambda frame: frame[
                 (frame.geometry.geom_type != "Polygon")
-            ],  # NB currently points and lines are lost; in principle, these could be indexed
+                & (frame.geometry.geom_type != "LineString")
+            ],  # NB currently points and other types are lost; in principle, these could be indexed
             "message": "Dropping non-polygonal geometries",
         },
     ]
