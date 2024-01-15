@@ -94,7 +94,7 @@ def polyfill(
 
     df = pd.concat(
         map(
-            lambda _df: pd.DataFrame(_df.drop(columns=[_df._geometry_column_name])),
+            lambda _df: pd.DataFrame(_df.drop(columns=[_df.geometry.name])),
             [df_polygon, df_linestring],
         )
     )
