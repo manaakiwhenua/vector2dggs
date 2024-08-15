@@ -11,13 +11,20 @@ Redistribution and use in source and binary forms, with or without modification,
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
-from shapely.geometry import box, Polygon, MultiPolygon, GeometryCollection
+from shapely.geometry import (
+    box,
+    Polygon,
+    MultiPolygon,
+    LineString,
+    MultiLineString,
+    GeometryCollection,
+)
 from shapely.validation import explain_validity, make_valid
 
 
 def katana(geometry, threshold, count=0) -> GeometryCollection:
     """
-    Split a polygon into two parts across it's shortest dimension.
+    Split a geometry into two parts across its shortest dimension.
     Invalid input `geometry` will silently be made valid (if possible).
     """
     if geometry is None:
@@ -53,7 +60,7 @@ def katana(geometry, threshold, count=0) -> GeometryCollection:
         if not isinstance(c, GeometryCollection):
             c = GeometryCollection([c])
         for e in c.geoms:
-            if isinstance(e, (Polygon, MultiPolygon)):
+            if isinstance(e, (Polygon, MultiPolygon, LineString, MultiLineString)):
                 result.extend(katana(e, threshold, count + 1))
     if count > 0:
         return result
