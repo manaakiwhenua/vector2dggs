@@ -124,6 +124,8 @@ In brief, to get started:
 
 If you run `poetry install`, the CLI tool will be aliased so you can simply use `vector2dggs` rather than `poetry run vector2dggs`, which is the alternative if you do not `poetry install`.
 
+Alternaively, it is also possible to isntall using pip with `pip install -e .`, and bypass Poetry.
+
 #### Code formatting
 
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
