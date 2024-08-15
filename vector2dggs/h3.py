@@ -11,8 +11,6 @@ from typing import Union
 from urllib.parse import urlparse
 import warnings
 
-os.environ["USE_PYGEOS"] = "0"
-
 import click
 import click_log
 import dask.dataframe as dd
@@ -69,8 +67,8 @@ def polyfill(
     output_directory: str,
 ) -> None:
     """
-    Reads a geoparquet, performs H3 polyfilling (for polygons),
-    linetracing (for linestrings), and writes out to parquet.
+    Reads a geoparquet, performs H3 polyfilling (for Polygon),
+    linetracing (for LineString), and writes out to parquet.
     """
     df = gpd.read_parquet(pq_in).reset_index().drop(columns=[spatial_sort_col])
     if len(df.index) == 0:
@@ -215,7 +213,7 @@ def _index(
         # Remove all attributes except the geometry
         df = df.loc[:, ["geometry"]]
 
-    LOGGER.info("Watch out for ninjas! (Cutting polygons)")
+    LOGGER.info("Cutting large geometries")
     with tqdm(total=df.shape[0]) as pbar:
         for index, row in df.iterrows():
             df.loc[index, "geometry"] = GeometryCollection(
@@ -242,7 +240,7 @@ def _index(
                 (frame.geometry.geom_type != "Polygon")
                 & (frame.geometry.geom_type != "LineString")
             ],  # NB currently points and other types are lost; in principle, these could be indexed
-            "message": "Dropping non-polygonal geometries",
+            "message": "Dropping unsupported geometries",
         },
     ]
     for condition in drop_conditions:
@@ -342,7 +340,7 @@ def _index(
     required=False,
     default=None,
     type=int,
-    help="Set the coordinate reference system (CRS) used for cutting large polygons (see `--cur-threshold`). Defaults to the same CRS as the input. Should be a valid EPSG code.",
+    help="Set the coordinate reference system (CRS) used for cutting large geometries (see `--cur-threshold`). Defaults to the same CRS as the input. Should be a valid EPSG code.",
     nargs=1,
 )
 @click.option(
@@ -351,7 +349,7 @@ def _index(
     required=True,
     default=5000,
     type=int,
-    help="Cutting up large polygons into smaller pieces based on a target length. Units are assumed to match the input CRS units unless the `--cut_crs` is also given, in which case units match the units of the supplied CRS.",
+    help="Cutting up large geometries into smaller geometries based on a target length. Units are assumed to match the input CRS units unless the `--cut_crs` is also given, in which case units match the units of the supplied CRS.",
     nargs=1,
 )
 @click.option(
