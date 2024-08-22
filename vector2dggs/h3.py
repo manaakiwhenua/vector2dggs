@@ -71,7 +71,7 @@ def polyfill(
     linetracing (for LineString), and writes out to parquet.
     """
     df = gpd.read_parquet(pq_in).reset_index()
- 
+
     if spatial_sort_col != "none":
         df = df.drop(columns=[spatial_sort_col])
 
@@ -252,8 +252,8 @@ def _index(
 
     ddf = dgpd.from_geopandas(df, chunksize=max(1, chunksize), sort=True)
 
-    # LOGGER.info("Spatially sorting and partitioning (%s)", spatial_sorting)
     if spatial_sorting != "none":
+        LOGGER.info("Spatially sorting and partitioning (%s)", spatial_sorting)
         ddf = ddf.spatial_shuffle(by=spatial_sorting)
 
     spatial_sort_col = (
