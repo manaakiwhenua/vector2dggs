@@ -70,7 +70,11 @@ def polyfill(
     Reads a geoparquet, performs H3 polyfilling (for Polygon),
     linetracing (for LineString), and writes out to parquet.
     """
-    df = gpd.read_parquet(pq_in).reset_index().drop(columns=[spatial_sort_col])
+    df = gpd.read_parquet(pq_in).reset_index()
+ 
+    if spatial_sort_col != "none":
+        df = df.drop(columns=[spatial_sort_col])
+
     if len(df.index) == 0:
         # Input is empty, nothing to polyfill
         return None
@@ -248,11 +252,13 @@ def _index(
 
     ddf = dgpd.from_geopandas(df, chunksize=max(1, chunksize), sort=True)
 
-    LOGGER.info("Spatially sorting and partitioning (%s)", spatial_sorting)
-    ddf = ddf.spatial_shuffle(by=spatial_sorting)
+    # LOGGER.info("Spatially sorting and partitioning (%s)", spatial_sorting)
+    if spatial_sorting != "none":
+        ddf = ddf.spatial_shuffle(by=spatial_sorting)
+
     spatial_sort_col = (
         spatial_sorting
-        if spatial_sorting == "geohash"
+        if (spatial_sorting == "geohash" or spatial_sorting == "none")
         else f"{spatial_sorting}_distance"
     )
 
@@ -330,9 +336,9 @@ def _index(
 @click.option(
     "-s",
     "--spatial_sorting",
-    type=click.Choice(["hilbert", "morton", "geohash"]),
-    default="hilbert",
-    help="Spatial sorting method when perfoming spatial partitioning.",
+    type=click.Choice(["hilbert", "morton", "geohash", "none"]),
+    default="none",
+    help="Spatial sorting method when perfoming spatial partitioning. Disabled (by default) with option 'none'. May improve performance in some situations.",
 )
 @click.option(
     "-crs",
