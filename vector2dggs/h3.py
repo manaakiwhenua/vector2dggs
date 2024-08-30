@@ -29,6 +29,7 @@ from vector2dggs import __version__
 
 LOGGER = logging.getLogger(__name__)
 click_log.basic_config(LOGGER)
+click_log.ColorFormatter.colors['info'] = dict(fg="green")
 MIN_H3, MAX_H3 = 0, 15
 
 warnings.filterwarnings(
@@ -150,7 +151,7 @@ def drop_condition(
     log_statement: str,
     warning_threshold: float = 0.01,
 ):
-    LOGGER.info(log_statement)
+    LOGGER.debug(log_statement)
     _before = len(df)
     df = df.drop(drop_index)
     _after = len(df)
@@ -201,7 +202,7 @@ def _index(
 
     if cut_crs:
         df = df.to_crs(cut_crs)
-    LOGGER.info("Cutting with CRS: %s", df.crs)
+    LOGGER.debug("Cutting with CRS: %s", df.crs)
 
     if id_field:
         df = df.set_index(id_field)
@@ -213,15 +214,15 @@ def _index(
         # Remove all attributes except the geometry
         df = df.loc[:, ["geometry"]]
 
-    LOGGER.info("Cutting large geometries")
-    with tqdm(total=df.shape[0]) as pbar:
+    LOGGER.debug("Cutting large geometries")
+    with tqdm(total=df.shape[0], desc='Splitting') as pbar:
         for index, row in df.iterrows():
             df.loc[index, "geometry"] = GeometryCollection(
                 katana.katana(row.geometry, cut_threshold)
             )
             pbar.update(1)
 
-    LOGGER.info("Exploding geometry collections and multipolygons")
+    LOGGER.debug("Exploding geometry collections and multipolygons")
     df = (
         df.to_crs(4326)
         .explode(index_parts=False)  # Explode from GeometryCollection
@@ -233,14 +234,14 @@ def _index(
             "index": lambda frame: frame[
                 (frame.geometry.is_empty | frame.geometry.isna())
             ],
-            "message": "Dropping empty or null geometries",
+            "message": "Considering empty or null geometries",
         },
         {
             "index": lambda frame: frame[
                 (frame.geometry.geom_type != "Polygon")
                 & (frame.geometry.geom_type != "LineString")
             ],  # NB currently points and other types are lost; in principle, these could be indexed
-            "message": "Dropping unsupported geometries",
+            "message": "Considering unsupported geometries",
         },
     ]
     for condition in drop_conditions:
@@ -248,7 +249,7 @@ def _index(
 
     ddf = dgpd.from_geopandas(df, chunksize=max(1, chunksize), sort=True)
 
-    LOGGER.info("Spatially sorting and partitioning (%s)", spatial_sorting)
+    LOGGER.debug("Spatially sorting and partitioning (%s)", spatial_sorting)
     ddf = ddf.spatial_shuffle(by=spatial_sorting)
     spatial_sort_col = (
         spatial_sorting
@@ -257,13 +258,13 @@ def _index(
     )
 
     with tempfile.TemporaryDirectory(suffix=".parquet") as tmpdir:
-        with TqdmCallback():
+        with TqdmCallback(desc=f'Spatially partitioning'):
             ddf.to_parquet(tmpdir, overwrite=True)
 
         filepaths = list(map(lambda f: f.absolute(), Path(tmpdir).glob("*")))
 
         # Multithreaded polyfilling
-        LOGGER.info(
+        LOGGER.debug(
             "H3 Indexing on spatial partitions by polyfill with H3 resolution: %d",
             resolution,
         )
@@ -273,7 +274,7 @@ def _index(
                     (filepath, spatial_sort_col, resolution, parent_res, tmpdir2)
                     for filepath in filepaths
                 ]
-                list(tqdm(pool.imap(polyfill_star, args), total=len(args)))
+                list(tqdm(pool.imap(polyfill_star, args), total=len(args), desc='DGGS indexing'))
 
             _parent_partitioning(
                 tmpdir2, output_directory, resolution, parent_res, overwrite=overwrite
@@ -424,7 +425,7 @@ def h3(
         con = sqlalchemy.create_engine(vector_input)
     elif not Path(vector_input).exists():
         if not scheme:
-            LOGGER.warning(
+            LOGGER.error(
                 f"Input vector {vector_input} does not exist, and is not recognised as a remote URI"
             )
             raise FileNotFoundError(
@@ -441,7 +442,7 @@ def h3(
             f"{output_directory} already exists; if you want to overwrite this, use the -o/--overwrite flag"
         )
     elif outputexists and overwrite:
-        LOGGER.info(f"Overwriting the contents of {output_directory}")
+        LOGGER.warn(f"Overwriting the contents of {output_directory}")
         shutil.rmtree(output_directory)
     output_directory.mkdir(parents=True, exist_ok=True)
 
