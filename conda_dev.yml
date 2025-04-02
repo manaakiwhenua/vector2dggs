@@ -1,0 +1,24 @@
+channels:
+  - conda-forge
+dependencies:
+  # Required
+  - python>=3.11.5
+  - gdal==3.8.4
+  - geopandas>=1.0.1
+  - h3pandas>=0.2.6
+  - dask-geopandas>=0.4.1
+  - dask>=2024.8.0
+  - click>=8.1.7
+  - tqdm>=4.66.5
+  - click-log>=0.4.0
+  - pyarrow>=16.0.0 # >=17.0.0
+  - pyproj>=3.6.1
+  - sqlalchemy>=2.0.32
+  - psycopg2>=2.9.9
+  - shapely>=1.8.5 # >=2.0.5
+  - numpy<2
+  - pip
+  - pip:
+    # Use pip to install rhppandas from dev branch of git repo
+    - git+https://github.com/manaakiwhenua/rHP-Pandas.git
+    - git+https://github.com/manaakiwhenua/rhealpixdggs-py.git
