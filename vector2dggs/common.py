@@ -233,7 +233,7 @@ def index(
     overwrite: bool = False,
 ) -> Path:
     """
-    Performs multi-threaded H3 polyfilling on (multi)polygons.
+    Performs multi-threaded polyfilling on (multi)polygons.
     """
 
     if table and con:
@@ -316,7 +316,7 @@ def index(
 
         # Multithreaded polyfilling
         LOGGER.debug(
-            "H3 Indexing on spatial partitions by polyfill with H3 resolution: %d",
+            "Indexing on spatial partitions by polyfill with resolution: %d",
             resolution,
         )
         with tempfile.TemporaryDirectory(suffix=".parquet") as tmpdir2:
