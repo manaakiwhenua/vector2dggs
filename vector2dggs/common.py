@@ -212,7 +212,7 @@ def polyfill_star(args) -> None:
     return polyfill(*args)
 
 
-def _index(
+def index(
     dggs: str,
     dggsfunc: Callable,
     secondary_index_func: Callable,

@@ -1,3 +1,4 @@
+import multiprocessing
 import warnings
 import tempfile
 
@@ -12,7 +13,7 @@ DEFAULTS = {
     "s": "hilbert",
     "crs": None,
     "c": 5000,
-    "t": 7,
+    "t": (multiprocessing.cpu_count() - 1),
     "tbl": None,
     "g": "geom",
     "tempdir": tempfile.tempdir,

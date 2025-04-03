@@ -1,13 +1,13 @@
-import multiprocessing
 import sys
-import tempfile
 import click
 import click_log
+import tempfile
 import pyproj
+
+import h3pandas  # Necessary import despite lack of explicit use
 
 import pandas as pd
 import geopandas as gpd
-import h3pandas  # Necessary import despite lack of explicit use
 
 from typing import Union
 from pathlib import Path
@@ -185,8 +185,7 @@ def h3(
         cut_crs = pyproj.CRS.from_user_input(cut_crs)
 
     try:
-        # TODO: needs to be common._index(...)
-        common._index(
+        common.index(
             "h3",
             h3polyfill,
             h3_secondary_index,
