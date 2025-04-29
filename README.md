@@ -6,9 +6,12 @@ Python-based CLI tool to index raster files to DGGS in parallel, writing out to 
 
 This is the vector equivalent of [raster2dggs](https://github.com/manaakiwhenua/raster2dggs).
 
-Currently only supports H3 DGGS, and probably has other limitations since it has been developed for a specific internal use case, though it is intended as a general-purpose abstraction. Contributions, suggestions, bug reports and strongly worded letters are all welcome.
+Currently this tool supports the following DGGSs:
 
-Currently only supports polygons; but both coverages (strictly non-overlapping polygons), and sets of polygons that do/may overlap, are supported. Overlapping polygons are captured by ensuring that DGGS cell IDs may be non-unique (repeated) in the output.
+- H3 (polygons, linestrings)
+- rHEALPix (polygons)
+
+Contributions (espeically for other DGGSs), suggestions, bug reports and strongly worded letters are all welcome.
 
 ![Example use case for vector2dggs, showing parcels indexed to a high H3 resolution](./docs/imgs/vector2dggs-example.png "Example use case for vector2dggs, showing parcels indexed to a high H3 resolution")
 
@@ -19,6 +22,19 @@ pip install vector2dggs
 ```
 
 ## Usage
+
+```bash
+vector2dggs --help                                                                                                                                                                                                           [11:22:14]
+Usage: vector2dggs [OPTIONS] COMMAND [ARGS]...
+
+Options:
+  --version  Show the version and exit.
+  --help     Show this message and exit.
+
+Commands:
+  h3   Ingest a vector dataset and index it to the H3 DGGS.
+  rhp  Ingest a vector dataset and index it to the rHEALPix DGGS.
+```
 
 ```bash
 vector2dggs h3 --help
@@ -118,7 +134,7 @@ In brief, to get started:
 - Install [Poetry](https://python-poetry.org/docs/basic-usage/)
 - Install [GDAL](https://gdal.org/)
     - If you're on Windows, `pip install gdal` may be necessary before running the subsequent commands.
-    - On Linux, install GDAL 3.6+ according to your platform-specific instructions, including development headers, i.e. `libgdal-dev`.
+    - On Linux, install GDAL 3.8+ according to your platform-specific instructions, including development headers, i.e. `libgdal-dev`.
 - Create the virtual environment with `poetry init`. This will install necessary dependencies.
 - Subsequently, the virtual environment can be re-activated with `poetry shell`.
 
@@ -154,13 +170,13 @@ vector2dggs h3 -v DEBUG -id ogc_fid -r 9 -p 5 -t 4 --overwrite -tbl topo50_lake 
   title={{vector2dggs}},
   author={Ardo, James and Law, Richard},
   url={https://github.com/manaakiwhenua/vector2dggs},
-  version={0.6.1},
+  version={0.6.3},
   date={2023-04-20}
 }
 ```
 
 APA/Harvard
 
-> Ardo, J., & Law, R. (2023). vector2dggs (0.6.1) [Computer software]. https://github.com/manaakiwhenua/vector2dggs
+> Ardo, J., & Law, R. (2023). vector2dggs (0.6.3) [Computer software]. https://github.com/manaakiwhenua/vector2dggs
 
 [![manaakiwhenua-standards](https://github.com/manaakiwhenua/vector2dggs/workflows/manaakiwhenua-standards/badge.svg)](https://github.com/manaakiwhenua/manaakiwhenua-standards)

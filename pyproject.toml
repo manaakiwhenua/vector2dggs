@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "vector2dggs"
-version = "0.6.1"
+version = "0.6.3"
 description = "CLI DGGS indexer for vector geospatial data"
 authors = ["James Ardo <ardoj@landcareresearch.co.nz>"]
 maintainers = ["Richard Law <lawr@landcareresearch.co.nz>"]
@@ -16,25 +16,27 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.11"
-gdal = "3.8.4"
+gdal = "^3.8"
 geopandas = "^1.0.1"
-h3pandas = "^0.2.6"
-dask-geopandas = "^0.4.1"
-dask = "^2024.8.0"
+h3pandas = "^0.3"
+dask-geopandas = "^0.4"
+dask = "^2025.1"
 click = "^8.1.7"
-tqdm = "^4.66.5"
+tqdm = "^4.67"
 click-log = "^0.4.0"
-pyarrow = "^17.0.0"
-pyproj = "^3.6.1"
+pyarrow = "^20.0"
+pyproj = "^3.7"
 sqlalchemy = "^2.0.32"
 psycopg2 = "^2.9.9"
-shapely = "^2.0.5"
-numpy = "<2"
-rhppandas = { git = "https://github.com/manaakiwhenua/rHP-Pandas.git" }
-rhealpixdggs = { git = "https://github.com/manaakiwhenua/rhealpixdggs-py.git" }
+shapely = "^2.1"
+numpy = "^2"
+rhppandas = "^0.1.2"
+rhealpixdggs = "^0.5.5"
+pillow = "^11.2.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.2.2"
+twine ="*"
 black = "*"
 
 [tool.poetry.scripts]
