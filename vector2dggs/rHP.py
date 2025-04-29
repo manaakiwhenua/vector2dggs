@@ -4,7 +4,7 @@ import click_log
 import tempfile
 import pyproj
 
-import h3pandas  # Necessary import despite lack of explicit use
+import rhppandas  # Necessary import despite lack of explicit use
 
 import pandas as pd
 import geopandas as gpd
@@ -18,30 +18,36 @@ import vector2dggs.common as common
 from vector2dggs import __version__
 
 
-def h3_secondary_index(df: gpd.GeoDataFrame, parent_res: int) -> gpd.GeoDataFrame:
-    return df.h3.h3_to_parent(parent_res)
+def rhp_secondary_index(df: gpd.GeoDataFrame, parent_res: int) -> gpd.GeoDataFrame:
+    return df.rhp.rhp_to_parent(parent_res)
 
 
-def h3polyfill(df: gpd.GeoDataFrame, resolution: int):
+def rhppolyfill(df: gpd.GeoDataFrame, resolution: int):
     df_polygon = df[df.geom_type == "Polygon"]
     if len(df_polygon.index) > 0:
-        df_polygon = df_polygon.h3.polyfill_resample(
+        df_polygon = df_polygon.rhp.polyfill_resample(
             resolution, return_geometry=False
         ).drop(columns=["index"])
 
-    df_linestring = df[df.geom_type == "LineString"]
-    if len(df_linestring.index) > 0:
-        df_linestring = (
-            df_linestring.h3.linetrace(resolution)
-            .explode("h3_linetrace")
-            .set_index("h3_linetrace")
-        )
-        df_linestring = df_linestring[~df_linestring.index.duplicated(keep="first")]
+    df_multipolygon = df[df.geom_type == "MultiPolygon"]
+    if len(df_multipolygon.index) > 0:
+        df_multipolygon = df_multipolygon.rhp.polyfill_resample(
+            resolution, return_geometry=False
+        ).drop(columns=["index"])
+
+    # df_linestring = df[df.geom_type == "LineString"]
+    # if len(df_linestring.index) > 0:
+    #     df_linestring = (
+    #         df_linestring.h3.linetrace(resolution)
+    #         .explode("h3_linetrace")
+    #         .set_index("h3_linetrace")
+    #     )
+    #     df_linestring = df_linestring[~df_linestring.index.duplicated(keep="first")]
 
     return pd.concat(
         map(
             lambda _df: pd.DataFrame(_df.drop(columns=[_df.geometry.name])),
-            [df_polygon, df_linestring],
+            [df_polygon, df_multipolygon],  # df_linestring],
         )
     )
 
@@ -54,7 +60,7 @@ def h3polyfill(df: gpd.GeoDataFrame, resolution: int):
     "-r",
     "--resolution",
     required=True,
-    type=click.Choice(list(map(str, range(const.MIN_H3, const.MAX_H3 + 1)))),
+    type=click.Choice(list(map(str, range(const.MIN_RHP, const.MAX_RHP + 1)))),
     help="H3 resolution to index",
     nargs=1,
 )
@@ -62,7 +68,7 @@ def h3polyfill(df: gpd.GeoDataFrame, resolution: int):
     "-pr",
     "--parent_res",
     required=False,
-    type=click.Choice(list(map(str, range(const.MIN_H3, const.MAX_H3 + 1)))),
+    type=click.Choice(list(map(str, range(const.MIN_RHP, const.MAX_RHP + 1)))),
     help="H3 Parent resolution for the output partition. Defaults to resolution - 6",
 )
 @click.option(
@@ -80,7 +86,7 @@ def h3polyfill(df: gpd.GeoDataFrame, resolution: int):
     is_flag=True,
     show_default=True,
     default=const.DEFAULTS["k"],
-    help="Retain attributes in output. The default is to create an output that only includes H3 cell ID and the ID given by the -id field (or the default index ID).",
+    help="Retain attributes in output. The default is to create an output that only includes rHEALPix cell ID and the ID given by the -id field (or the default index ID).",
 )
 @click.option(
     "-ch",
@@ -151,7 +157,7 @@ def h3polyfill(df: gpd.GeoDataFrame, resolution: int):
 )
 @click.option("-o", "--overwrite", is_flag=True)
 @click.version_option(version=__version__)
-def h3(
+def rhp(
     vector_input: Union[str, Path],
     output_directory: Union[str, Path],
     resolution: str,
@@ -169,7 +175,7 @@ def h3(
     overwrite: bool,
 ):
     """
-    Ingest a vector dataset and index it to the H3 DGGS.
+    Ingest a vector dataset and index it to the rHEALPix DGGS.
 
     VECTOR_INPUT is the path to input vector geospatial data.
     OUTPUT_DIRECTORY should be a directory, not a file or database table, as it will instead be the write location for an Apache Parquet data store.
@@ -186,9 +192,9 @@ def h3(
 
     try:
         common.index(
-            "h3",
-            h3polyfill,
-            h3_secondary_index,
+            "rhp",
+            rhppolyfill,
+            rhp_secondary_index,
             vector_input,
             output_directory,
             int(resolution),
