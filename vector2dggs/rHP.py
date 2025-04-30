@@ -44,10 +44,16 @@ def rhppolyfill(df: gpd.GeoDataFrame, resolution: int):
     #     )
     #     df_linestring = df_linestring[~df_linestring.index.duplicated(keep="first")]
 
+    df_point = df[df.geom_type == "Point"]
+    if len(df_point.index) > 0:
+        df_point = df_point.rhp.geo_to_rhp(
+            resolution, set_index=True
+        )
+
     return pd.concat(
         map(
             lambda _df: pd.DataFrame(_df.drop(columns=[_df.geometry.name])),
-            [df_polygon, df_multipolygon],  # df_linestring],
+            [df_polygon, df_multipolygon, df_point],  # df_linestring],
         )
     )
 

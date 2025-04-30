@@ -104,7 +104,7 @@ def drop_condition(
     _diff = _before - _after
     if _diff:
         log_method = (
-            LOGGER.info if (_diff / float(_before)) < warning_threshold else LOGGER.warn
+            LOGGER.info if (_diff / float(_before)) < warning_threshold else LOGGER.warning
         )
         log_method(f"Dropped {_diff} rows ({_diff/float(_before)*100:.2f}%)")
     return df
@@ -179,25 +179,23 @@ def polyfill(
 ) -> None:
     """
     Reads a geoparquet, performs polyfilling (for Polygon),
-    linetracing (for LineString), and writes out to parquet.
+    linetracing (for LineString), or indexing (for Point),
+    and writes out to parquet.
     """
     df = gpd.read_parquet(pq_in).reset_index().drop(columns=[spatial_sort_col])
     if len(df.index) == 0:
-        # Input is empty, nothing to polyfill
+        # Input is empty, nothing to convert
         return None
 
-    # DGGS specific polyfill
+    # DGGS specific conversion
     df = dggsfunc(df, resolution)
 
     if len(df.index) == 0:
-        # Polyfill resulted in empty output (e.g. large cell, small feature)
+        # Conversion resulted in empty output (e.g. large cell, small feature)
         return None
 
     df.index.rename(f"{dggs}_{resolution:02}", inplace=True)
     parent_res: int = get_parent_res(dggs, parent_res, resolution)
-    # print(parent_res)
-    # print(df.index)
-    # print(df.columns)
 
     # Secondary (parent) index, used later for partitioning
     df = secondary_index_func(df, parent_res)
@@ -233,7 +231,7 @@ def index(
     overwrite: bool = False,
 ) -> Path:
     """
-    Performs multi-threaded polyfilling on (multi)polygons.
+    Performs multi-threaded DGGS indexing on geometries (including multipart and collections).
     """
 
     if table and con:
@@ -291,7 +289,8 @@ def index(
             "index": lambda frame: frame[
                 (frame.geometry.geom_type != "Polygon")
                 & (frame.geometry.geom_type != "LineString")
-            ],  # NB currently points and other types are lost; in principle, these could be indexed
+                & (frame.geometry.geom_type != "Point")
+            ],
             "message": "Considering unsupported geometries",
         },
     ]
@@ -314,9 +313,9 @@ def index(
 
         filepaths = list(map(lambda f: f.absolute(), Path(tmpdir).glob("*")))
 
-        # Multithreaded polyfilling
+        # Multithreaded DGGS indexing
         LOGGER.debug(
-            "Indexing on spatial partitions by polyfill with resolution: %d",
+            "DGGS indexing by spatial partitions with resolution: %d",
             resolution,
         )
         with tempfile.TemporaryDirectory(suffix=".parquet") as tmpdir2:
@@ -344,7 +343,7 @@ def index(
 
             parent_partitioning(
                 dggs,
-                tmpdir2,
+                Path(tmpdir2),
                 output_directory,
                 resolution,
                 parent_res,

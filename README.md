@@ -8,8 +8,8 @@ This is the vector equivalent of [raster2dggs](https://github.com/manaakiwhenua/
 
 Currently this tool supports the following DGGSs:
 
-- H3 (polygons, linestrings)
-- rHEALPix (polygons)
+- H3
+- rHEALPix (points, polygons)
 
 Contributions (espeically for other DGGSs), suggestions, bug reports and strongly worded letters are all welcome.
 
