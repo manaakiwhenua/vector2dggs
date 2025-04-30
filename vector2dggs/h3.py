@@ -24,7 +24,7 @@ def h3_secondary_index(df: gpd.GeoDataFrame, parent_res: int) -> gpd.GeoDataFram
 
 def h3polyfill(df: gpd.GeoDataFrame, resolution: int):
     df_polygon = df[df.geom_type == "Polygon"]
-    if len(df_polygon.index) > 0:
+    if not df_polygon.empty:
         df_polygon = df_polygon.h3.polyfill_resample(
             resolution, return_geometry=False
         ).drop(columns=["index"])
@@ -38,10 +38,14 @@ def h3polyfill(df: gpd.GeoDataFrame, resolution: int):
         )
         df_linestring = df_linestring[~df_linestring.index.duplicated(keep="first")]
 
+    df_point = df[df.geom_type == "Point"]
+    if len(df_point.index) > 0:
+        df_point = df_point.h3.geo_to_h3(resolution, set_index=True)
+
     return pd.concat(
         map(
             lambda _df: pd.DataFrame(_df.drop(columns=[_df.geometry.name])),
-            [df_polygon, df_linestring],
+            [df_polygon, df_linestring, df_point],
         )
     )
 
