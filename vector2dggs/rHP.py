@@ -46,9 +46,7 @@ def rhppolyfill(df: gpd.GeoDataFrame, resolution: int):
 
     df_point = df[df.geom_type == "Point"]
     if len(df_point.index) > 0:
-        df_point = df_point.rhp.geo_to_rhp(
-            resolution, set_index=True
-        )
+        df_point = df_point.rhp.geo_to_rhp(resolution, set_index=True)
 
     return pd.concat(
         map(

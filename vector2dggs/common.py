@@ -104,7 +104,9 @@ def drop_condition(
     _diff = _before - _after
     if _diff:
         log_method = (
-            LOGGER.info if (_diff / float(_before)) < warning_threshold else LOGGER.warning
+            LOGGER.info
+            if (_diff / float(_before)) < warning_threshold
+            else LOGGER.warning
         )
         log_method(f"Dropped {_diff} rows ({_diff/float(_before)*100:.2f}%)")
     return df

@@ -40,9 +40,7 @@ def h3polyfill(df: gpd.GeoDataFrame, resolution: int):
 
     df_point = df[df.geom_type == "Point"]
     if len(df_point.index) > 0:
-        df_point = df_point.h3.geo_to_h3(
-            resolution, set_index=True
-        )
+        df_point = df_point.h3.geo_to_h3(resolution, set_index=True)
 
     return pd.concat(
         map(
