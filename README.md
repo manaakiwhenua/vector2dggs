@@ -38,10 +38,10 @@ Options:
   --help     Show this message and exit.
 
 Commands:
+  geohash  Ingest a vector dataset and index it using the Geohash geocode...
   h3       Ingest a vector dataset and index it to the H3 DGGS.
   rhp      Ingest a vector dataset and index it to the rHEALPix DGGS.
-  geohash  Ingest a vector dataset and index it to the Geohash DGGS.
-  s2   Ingest a vector dataset and index it to the S2 DGGS.
+  s2       Ingest a vector dataset and index it to the S2 DGGS.
 ```
 
 ```bash
