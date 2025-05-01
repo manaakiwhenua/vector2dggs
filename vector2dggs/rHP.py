@@ -38,9 +38,9 @@ def rhppolyfill(df: gpd.GeoDataFrame, resolution: int):
     # df_linestring = df[df.geom_type == "LineString"]
     # if len(df_linestring.index) > 0:
     #     df_linestring = (
-    #         df_linestring.h3.linetrace(resolution)
-    #         .explode("h3_linetrace")
-    #         .set_index("h3_linetrace")
+    #         df_linestring.rhp.linetrace(resolution)
+    #         .explode("rhp_linetrace")
+    #         .set_index("rhp_linetrace")
     #     )
     #     df_linestring = df_linestring[~df_linestring.index.duplicated(keep="first")]
 
@@ -65,7 +65,7 @@ def rhppolyfill(df: gpd.GeoDataFrame, resolution: int):
     "--resolution",
     required=True,
     type=click.Choice(list(map(str, range(const.MIN_RHP, const.MAX_RHP + 1)))),
-    help="H3 resolution to index",
+    help="rHEALPix resolution to index",
     nargs=1,
 )
 @click.option(
@@ -73,7 +73,7 @@ def rhppolyfill(df: gpd.GeoDataFrame, resolution: int):
     "--parent_res",
     required=False,
     type=click.Choice(list(map(str, range(const.MIN_RHP, const.MAX_RHP + 1)))),
-    help="H3 Parent resolution for the output partition. Defaults to resolution - 6",
+    help="rHEALPix Parent resolution for the output partition. Defaults to resolution - 6",
 )
 @click.option(
     "-id",
