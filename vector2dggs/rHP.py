@@ -51,7 +51,7 @@ def rhppolyfill(df: gpd.GeoDataFrame, resolution: int):
     return pd.concat(
         map(
             lambda _df: pd.DataFrame(_df.drop(columns=[_df.geometry.name])),
-            [df_polygon, df_multipolygon, df_point],  # df_linestring],
+            [df_polygon, df_multipolygon, df_point],
         )
     )
 

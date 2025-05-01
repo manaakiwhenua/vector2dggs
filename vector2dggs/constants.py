@@ -20,6 +20,12 @@ DEFAULTS = {
     "tempdir": tempfile.tempdir,
 }
 
+DEFAULT_DGGS_PARENT_RES = {
+    "h3": lambda resolution: max(MIN_H3, (resolution - DEFAULT_PARENT_OFFSET)),
+    "rhp": lambda resolution:  max(MIN_RHP, (resolution - DEFAULT_PARENT_OFFSET)),
+    "geohash": lambda resolution: max(MIN_GEOHASH, (resolution - DEFAULT_PARENT_OFFSET))
+}
+
 DEFAULT_PARENT_OFFSET = 6
 
 warnings.filterwarnings(

@@ -4,7 +4,7 @@ import click_log
 import tempfile
 import pyproj
 
-from geohash_polygon import polygon_to_geohashes as ptg  # rusty-polygon-geohasher
+from geohash_polygon import polygon_to_geohashes  # rusty-polygon-geohasher
 from geohash import encode, decode  # python-geohash
 
 import pandas as pd
@@ -29,8 +29,8 @@ def gh_secondary_index(df: gpd.GeoDataFrame, parent_res: int) -> gpd.GeoDataFram
 # A future version of vector2dggs may support within/intersects modality, at which point that would just be outer/inner with no further computation
 def _polygon_to_geohashes(polygon: Polygon, level: int) -> set[str]:
     # Function to compute geohash set for one polygon geometry
-    outer: set[str] = ptg(polygon, level, inner=False)
-    inner: set[str] = ptg(polygon, level, inner=True)
+    outer: set[str] = polygon_to_geohashes(polygon, level, inner=False)
+    inner: set[str] = polygon_to_geohashes(polygon, level, inner=True)
     edge: set[str] = {
         h
         for h in (outer - inner)  # All edge cells
@@ -68,7 +68,7 @@ def gh_polyfill(df: gpd.GeoDataFrame, level: int):
     return pd.concat(
         map(
             lambda _df: pd.DataFrame(_df.drop(columns=[_df.geometry.name])),
-            [df_point, df_polygon],
+            [df_polygon, df_point],
         )
     )
 
