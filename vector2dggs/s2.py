@@ -119,7 +119,7 @@ def s2_polyfill(df: gpd.GeoDataFrame, resolution: int):
     "--resolution",
     required=True,
     type=click.Choice(list(map(str, range(const.MIN_S2, const.MAX_S2 + 1)))),
-    help="H3 resolution to index",
+    help="S2 level to index",
     nargs=1,
 )
 @click.option(
@@ -127,7 +127,7 @@ def s2_polyfill(df: gpd.GeoDataFrame, resolution: int):
     "--parent_res",
     required=False,
     type=click.Choice(list(map(str, range(const.MIN_S2, const.MAX_S2 + 1)))),
-    help="H3 Parent resolution for the output partition. Defaults to resolution - 6",
+    help="S2 parent level for the output partition. Defaults to resolution - 6",
 )
 @click.option(
     "-id",
@@ -144,7 +144,7 @@ def s2_polyfill(df: gpd.GeoDataFrame, resolution: int):
     is_flag=True,
     show_default=True,
     default=const.DEFAULTS["k"],
-    help="Retain attributes in output. The default is to create an output that only includes H3 cell ID and the ID given by the -id field (or the default index ID).",
+    help="Retain attributes in output. The default is to create an output that only includes S2 cell ID and the ID given by the -id field (or the default index ID).",
 )
 @click.option(
     "-ch",
