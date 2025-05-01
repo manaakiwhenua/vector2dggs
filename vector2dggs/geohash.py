@@ -4,10 +4,12 @@ import click_log
 import tempfile
 import pyproj
 
-import rhppandas  # Necessary import despite lack of explicit use
+from geohash_polygon import polygon_to_geohashes  # rusty-polygon-geohasher
+from geohash import encode, decode  # python-geohash
 
 import pandas as pd
 import geopandas as gpd
+from shapely.geometry import Point, Polygon
 
 from typing import Union
 from pathlib import Path
@@ -18,40 +20,55 @@ import vector2dggs.common as common
 from vector2dggs import __version__
 
 
-def rhp_secondary_index(df: gpd.GeoDataFrame, parent_res: int) -> gpd.GeoDataFrame:
-    return df.rhp.rhp_to_parent(parent_res)
+def gh_secondary_index(df: gpd.GeoDataFrame, parent_res: int) -> gpd.GeoDataFrame:
+    df[f"geohash_{parent_res:02}"] = df.index.to_series().str[:parent_res]
+    return df
 
 
-def rhppolyfill(df: gpd.GeoDataFrame, resolution: int):
-    df_polygon = df[df.geom_type == "Polygon"]
-    if len(df_polygon.index) > 0:
-        df_polygon = df_polygon.rhp.polyfill_resample(
-            resolution, return_geometry=False
-        ).drop(columns=["index"])
+# NB this implements a point-inside hash, but geohash_polygon only supports "within" or "intersects" (on the basis of geohashes as _polygon_ geometries) which means we have to perform additional computation to support "polyfill" as defined by H3
+# A future version of vector2dggs may support within/intersects modality, at which point that would just be outer/inner with no further computation
+def _polygon_to_geohashes(polygon: Polygon, level: int) -> set[str]:
+    # Function to compute geohash set for one polygon geometry
+    outer: set[str] = polygon_to_geohashes(polygon, level, inner=False)
+    inner: set[str] = polygon_to_geohashes(polygon, level, inner=True)
+    edge: set[str] = {
+        h
+        for h in (outer - inner)  # All edge cells
+        if Point(*reversed(decode(h))).within(polygon)
+    }  # Edge cells with a center within the polygon
+    return edge | inner
 
-    df_multipolygon = df[df.geom_type == "MultiPolygon"]
-    if len(df_multipolygon.index) > 0:
-        df_multipolygon = df_multipolygon.rhp.polyfill_resample(
-            resolution, return_geometry=False
-        ).drop(columns=["index"])
 
-    # df_linestring = df[df.geom_type == "LineString"]
-    # if len(df_linestring.index) > 0:
-    #     df_linestring = (
-    #         df_linestring.rhp.linetrace(resolution)
-    #         .explode("rhp_linetrace")
-    #         .set_index("rhp_linetrace")
-    #     )
-    #     df_linestring = df_linestring[~df_linestring.index.duplicated(keep="first")]
+def gh_polyfill(df: gpd.GeoDataFrame, level: int):
+    gh_col = f"geohash"
+    df_polygon = df[df.geom_type == "Polygon"].copy()
+    if not df_polygon.empty:
+        df_polygon = (
+            df_polygon.assign(
+                **{
+                    gh_col: df_polygon.geometry.apply(
+                        lambda geom: _polygon_to_geohashes(geom, level)
+                    )
+                }
+            )
+            .explode(gh_col, ignore_index=True)
+            .set_index(gh_col)
+        )
 
-    df_point = df[df.geom_type == "Point"]
+    # TODO linestring support
+    # e.g. JS implementation https://github.com/alrico88/geohashes-along
+
+    df_point = df[df.geom_type == "Point"].copy()
     if len(df_point.index) > 0:
-        df_point = df_point.rhp.geo_to_rhp(resolution, set_index=True)
+        df_point[gh_col] = df_point.geometry.apply(
+            lambda geom: encode(geom.y, geom.x, precision=level)
+        )
+        df_point = df_point.set_index(gh_col)
 
     return pd.concat(
         map(
             lambda _df: pd.DataFrame(_df.drop(columns=[_df.geometry.name])),
-            [df_polygon, df_multipolygon, df_point],
+            [df_polygon, df_point],
         )
     )
 
@@ -64,16 +81,16 @@ def rhppolyfill(df: gpd.GeoDataFrame, resolution: int):
     "-r",
     "--resolution",
     required=True,
-    type=click.Choice(list(map(str, range(const.MIN_RHP, const.MAX_RHP + 1)))),
-    help="rHEALPix resolution to index",
+    type=click.Choice(list(map(str, range(const.MIN_GEOHASH, const.MAX_GEOHASH + 1)))),
+    help="Geohash level to index",
     nargs=1,
 )
 @click.option(
     "-pr",
     "--parent_res",
     required=False,
-    type=click.Choice(list(map(str, range(const.MIN_RHP, const.MAX_RHP + 1)))),
-    help="rHEALPix Parent resolution for the output partition. Defaults to resolution - 6",
+    type=click.Choice(list(map(str, range(const.MIN_GEOHASH, const.MAX_GEOHASH + 1)))),
+    help="Geohash parent resolution for the output partition. Defaults to resolution - 6",
 )
 @click.option(
     "-id",
@@ -90,7 +107,7 @@ def rhppolyfill(df: gpd.GeoDataFrame, resolution: int):
     is_flag=True,
     show_default=True,
     default=const.DEFAULTS["k"],
-    help="Retain attributes in output. The default is to create an output that only includes rHEALPix cell ID and the ID given by the -id field (or the default index ID).",
+    help="Retain attributes in output. The default is to create an output that only includes Geohash cell ID and the ID given by the -id field (or the default index ID).",
 )
 @click.option(
     "-ch",
@@ -161,7 +178,7 @@ def rhppolyfill(df: gpd.GeoDataFrame, resolution: int):
 )
 @click.option("-o", "--overwrite", is_flag=True)
 @click.version_option(version=__version__)
-def rhp(
+def geohash(
     vector_input: Union[str, Path],
     output_directory: Union[str, Path],
     resolution: str,
@@ -179,7 +196,7 @@ def rhp(
     overwrite: bool,
 ):
     """
-    Ingest a vector dataset and index it to the rHEALPix DGGS.
+    Ingest a vector dataset and index it using the Geohash geocode system.
 
     VECTOR_INPUT is the path to input vector geospatial data.
     OUTPUT_DIRECTORY should be a directory, not a file or database table, as it will instead be the write location for an Apache Parquet data store.
@@ -196,9 +213,9 @@ def rhp(
 
     try:
         common.index(
-            "rhp",
-            rhppolyfill,
-            rhp_secondary_index,
+            "geohash",
+            gh_polyfill,
+            gh_secondary_index,
             vector_input,
             output_directory,
             int(resolution),

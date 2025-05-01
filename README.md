@@ -8,8 +8,12 @@ This is the vector equivalent of [raster2dggs](https://github.com/manaakiwhenua/
 
 Currently this tool supports the following DGGSs:
 
-- H3
-- rHEALPix (points, polygons)
+- [H3](https://h3geo.org/)
+- [rHEALPix](https://datastore.landcareresearch.co.nz/dataset/rhealpix-discrete-global-grid-system)
+
+... and the following geocode systems:
+
+- [Geohash](https://en.wikipedia.org/wiki/Geohash) (points, polygons)
 
 Contributions (espeically for other DGGSs), suggestions, bug reports and strongly worded letters are all welcome.
 
@@ -24,7 +28,8 @@ pip install vector2dggs
 ## Usage
 
 ```bash
-vector2dggs --help                                                                                                                                                                                                           [11:22:14]
+vector2dggs --help
+
 Usage: vector2dggs [OPTIONS] COMMAND [ARGS]...
 
 Options:
@@ -32,8 +37,10 @@ Options:
   --help     Show this message and exit.
 
 Commands:
-  h3   Ingest a vector dataset and index it to the H3 DGGS.
-  rhp  Ingest a vector dataset and index it to the rHEALPix DGGS.
+  geohash  Ingest a vector dataset and index it to the Geohash DGGS.
+  h3       Ingest a vector dataset and index it to the H3 DGGS.
+  rhp      Ingest a vector dataset and index it to the rHEALPix DGGS.
+
 ```
 
 ```bash
