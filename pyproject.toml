@@ -33,6 +33,7 @@ numpy = "^2"
 rhppandas = "^0.1.2"
 rhealpixdggs = "^0.5.5"
 pillow = "^11.2.1"
+s2geometry = "^0.9.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.2.2"

@@ -5,6 +5,7 @@ import tempfile
 
 MIN_H3, MAX_H3 = 0, 15
 MIN_RHP, MAX_RHP = 0, 15
+MIN_S2, MAX_S2 = 0, 30
 
 DEFAULTS = {
     "id": None,

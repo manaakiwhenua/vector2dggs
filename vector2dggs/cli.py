@@ -3,6 +3,7 @@ import click
 from vector2dggs import __version__
 from vector2dggs.h3 import h3
 from vector2dggs.rHP import rhp
+from vector2dggs.s2 import s2
 
 #   If the program does terminal interaction, make it output a short
 # notice like this when it starts in an interactive mode:
@@ -21,7 +22,7 @@ def cli():
 
 cli.add_command(h3)
 cli.add_command(rhp)
-
+cli.add_command(s2)
 
 def main():
     cli()

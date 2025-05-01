@@ -132,9 +132,15 @@ def get_parent_res(dggs: str, parent_res: Union[None, int], resolution: int):
             if parent_res is not None
             else max(const.MIN_RHP, (resolution - const.DEFAULT_PARENT_OFFSET))
         )
+    elif dggs == "s2":
+        return (
+            parent_res
+            if parent_res is not None
+            else max(const.MIN_S2, (resolution - const.DEFAULT_PARENT_OFFSET))
+        )
     else:
         raise RuntimeError(
-            "Unknown dggs {dggs}) -  must be one of [ 'h3', 'rhp' ]".format(dggs=dggs)
+            "Unknown dggs {dggs}) -  must be one of [ 'h3', 'rhp', 's2' ]".format(dggs=dggs)
         )
 
 
