@@ -20,8 +20,8 @@ import vector2dggs.common as common
 from vector2dggs import __version__
 
 
-def gh_secondary_index(df: gpd.GeoDataFrame, parent_res: int) -> gpd.GeoDataFrame:
-    df[f"geohash_{parent_res:02}"] = df.index.to_series().str[:parent_res]
+def gh_secondary_index(df: gpd.GeoDataFrame, parent_level: int) -> gpd.GeoDataFrame:
+    df[f"geohash_{parent_level:02}"] = df.index.to_series().str[:parent_level]
     return df
 
 
@@ -80,6 +80,7 @@ def gh_polyfill(df: gpd.GeoDataFrame, level: int):
 @click.option(
     "-r",
     "--resolution",
+    "level",
     required=True,
     type=click.Choice(list(map(str, range(const.MIN_GEOHASH, const.MAX_GEOHASH + 1)))),
     help="Geohash level to index",
@@ -88,9 +89,10 @@ def gh_polyfill(df: gpd.GeoDataFrame, level: int):
 @click.option(
     "-pr",
     "--parent_res",
+    "parent_level",
     required=False,
     type=click.Choice(list(map(str, range(const.MIN_GEOHASH, const.MAX_GEOHASH + 1)))),
-    help="Geohash parent resolution for the output partition. Defaults to resolution - 6",
+    help="Geohash parent level for the output partition. Defaults to resolution - 6",
 )
 @click.option(
     "-id",
@@ -181,8 +183,8 @@ def gh_polyfill(df: gpd.GeoDataFrame, level: int):
 def geohash(
     vector_input: Union[str, Path],
     output_directory: Union[str, Path],
-    resolution: str,
-    parent_res: str,
+    level: str,
+    parent_level: str,
     id_field: str,
     keep_attributes: bool,
     chunksize: int,
@@ -203,7 +205,7 @@ def geohash(
     """
     tempfile.tempdir = tempdir if tempdir is not None else tempfile.tempdir
 
-    common.check_resolutions(resolution, parent_res)
+    common.check_resolutions(level, parent_level)
 
     con, vector_input = common.db_conn_and_input_path(vector_input)
     output_directory = common.resolve_output_path(output_directory, overwrite)
@@ -218,8 +220,8 @@ def geohash(
             gh_secondary_index,
             vector_input,
             output_directory,
-            int(resolution),
-            parent_res,
+            int(level),
+            parent_level,
             keep_attributes,
             chunksize,
             spatial_sorting,

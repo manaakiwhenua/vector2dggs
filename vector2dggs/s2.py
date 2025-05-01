@@ -3,11 +3,15 @@ import click
 import click_log
 import tempfile
 import pyproj
+from math import ceil
 
 from s2geometry import pywraps2 as S2
 
 import pandas as pd
 import geopandas as gpd
+from shapely.geometry import box, Polygon
+from shapely.ops import transform
+from pyproj import CRS, Transformer
 
 from typing import Union
 from pathlib import Path
@@ -18,14 +22,42 @@ import vector2dggs.common as common
 from vector2dggs import __version__
 
 
-def s2_secondary_index(df: gpd.GeoDataFrame, parent_res: int) -> gpd.GeoDataFrame:
+def s2_secondary_index(df: gpd.GeoDataFrame, parent_level: int) -> gpd.GeoDataFrame:
     # NB also converts the index to S2 cell tokens
     index_series = df.index.to_series()
-    df[f"s2_{parent_res:02}"] = index_series.map(
-        lambda cell: cell.parent(parent_res).ToToken()
+    df[f"s2_{parent_level:02}"] = index_series.map(
+        lambda cell: cell.parent(parent_level).ToToken()
     )
     df.index = index_series.map(lambda cell: cell.ToToken())
     return df
+
+
+def bbox_area_in_m2(
+    geom: Polygon,
+    src_crs: Union[str, CRS] = "EPSG:4326",
+    dst_crs: Union[str, CRS] = "EPSG:6933",
+) -> float:
+    """
+    Calculate the area of the bounding box of a geometry in square meters.
+    """
+    minx, miny, maxx, maxy = geom.bounds
+    bbox = box(minx, miny, maxx, maxy)
+    transformer = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
+    projected_bbox = transform(transformer.transform, bbox)
+    return projected_bbox.area
+
+
+def max_cells_for_geom(geom: Polygon, level: int, margin: float = 1.02) -> int:
+    """
+    Calculate the maximum number of S2 cells that are appropriate for the given geometry and level.
+    This is based on the area of the geometry's bounding box,
+    and the maximum area of S2 cells at the given level.
+    """
+    area = bbox_area_in_m2(geom)
+    max_cells = ceil(
+        max(1, area / const.S2_CELLS_MAX_AREA_M2_BY_LEVEL[level])
+    )
+    return ceil(max_cells * margin)
 
 
 def cell_center_is_inside_polygon(cell: S2.S2Cell, polygon: S2.S2Polygon) -> bool:
@@ -36,7 +68,7 @@ def cell_center_is_inside_polygon(cell: S2.S2Cell, polygon: S2.S2Polygon) -> boo
 
 def s2_polyfill_polygons(df: gpd.GeoDataFrame, level: int) -> gpd.GeoDataFrame:
     df = df[df.geom_type == "Polygon"].copy()
-    records = []
+    print(df)
 
     def generate_s2_covering(geom, level, centroid_inside=True):
         # Prepare loops: first the exterior loop, then the interior loops
@@ -46,7 +78,7 @@ def s2_polyfill_polygons(df: gpd.GeoDataFrame, level: int) -> gpd.GeoDataFrame:
             S2.S2LatLng.FromDegrees(lat, lon) for lon, lat in geom.exterior.coords
         ]
         s2loop = S2.S2Loop([latlng.ToPoint() for latlng in latlngs])
-        s2loop.Normalize()  # Ensure the exterior is oriented counter-clockwise
+        s2loop.Normalize()
         loops.append(s2loop)
 
         # Interior rings (polygon holes)
@@ -57,18 +89,18 @@ def s2_polyfill_polygons(df: gpd.GeoDataFrame, level: int) -> gpd.GeoDataFrame:
             s2interior_loop = S2.S2Loop(
                 [latlng.ToPoint() for latlng in interior_latlngs]
             )
-            s2interior_loop.Normalize()  # Ensure interior holes are oriented clockwise
+            s2interior_loop.Normalize()
             loops.append(s2interior_loop)
 
         # Build an S2Polygon from the loops
         s2polygon = S2.S2Polygon()
         s2polygon.InitNested(loops)
 
-        # Use S2RegionCoverer to get the cell IDs at the specified resolution
+        # Use S2RegionCoverer to get the cell IDs at the specified level
         coverer = S2.S2RegionCoverer()
 
-        # TODO experiment with using a compressed representation of the polygon and exploding it rather than using the same level for min and max
-        coverer.set_max_cells(5000)  # TODO parameterize this?
+        max_cells = max_cells_for_geom(geom, level)
+        coverer.set_max_cells(max_cells)
         coverer.set_min_level(level)
         coverer.set_max_level(level)
 
@@ -88,15 +120,15 @@ def s2_polyfill_polygons(df: gpd.GeoDataFrame, level: int) -> gpd.GeoDataFrame:
     df["s2index"] = df["geometry"].apply(lambda geom: generate_s2_covering(geom, level))
     df = df[
         df["s2index"].map(lambda x: len(x) > 0)
-    ]  # Remove rows with no covering at this resolution
+    ]  # Remove rows with no covering at this level
 
     return df
 
 
-def s2_polyfill(df: gpd.GeoDataFrame, resolution: int):
+def s2_polyfill(df: gpd.GeoDataFrame, level: int):
 
     df_polygon = (
-        s2_polyfill_polygons(df, resolution).explode("s2index").set_index("s2index")
+        s2_polyfill_polygons(df, level).explode("s2index").set_index("s2index")
     )
 
     # TODO linestrings
@@ -117,6 +149,7 @@ def s2_polyfill(df: gpd.GeoDataFrame, resolution: int):
 @click.option(
     "-r",
     "--resolution",
+    "level",
     required=True,
     type=click.Choice(list(map(str, range(const.MIN_S2, const.MAX_S2 + 1)))),
     help="S2 level to index",
@@ -125,6 +158,7 @@ def s2_polyfill(df: gpd.GeoDataFrame, resolution: int):
 @click.option(
     "-pr",
     "--parent_res",
+    "parent_level",
     required=False,
     type=click.Choice(list(map(str, range(const.MIN_S2, const.MAX_S2 + 1)))),
     help="S2 parent level for the output partition. Defaults to resolution - 6",
@@ -218,8 +252,8 @@ def s2_polyfill(df: gpd.GeoDataFrame, resolution: int):
 def s2(
     vector_input: Union[str, Path],
     output_directory: Union[str, Path],
-    resolution: str,
-    parent_res: str,
+    level: str,
+    parent_level: str,
     id_field: str,
     keep_attributes: bool,
     chunksize: int,
@@ -240,7 +274,7 @@ def s2(
     """
     tempfile.tempdir = tempdir if tempdir is not None else tempfile.tempdir
 
-    common.check_resolutions(resolution, parent_res)
+    common.check_resolutions(level, parent_level)
 
     con, vector_input = common.db_conn_and_input_path(vector_input)
     output_directory = common.resolve_output_path(output_directory, overwrite)
@@ -255,8 +289,8 @@ def s2(
             s2_secondary_index,
             vector_input,
             output_directory,
-            int(resolution),
-            parent_res,
+            int(level),
+            parent_level,
             keep_attributes,
             chunksize,
             spatial_sorting,
