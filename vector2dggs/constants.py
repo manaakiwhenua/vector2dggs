@@ -6,6 +6,7 @@ import tempfile
 MIN_H3, MAX_H3 = 0, 15
 MIN_RHP, MAX_RHP = 0, 15
 MIN_S2, MAX_S2 = 0, 30
+MIN_GEOHASH, MAX_GEOHASH = 0, 12
 
 DEFAULTS = {
     "id": None,
@@ -18,6 +19,15 @@ DEFAULTS = {
     "tbl": None,
     "g": "geom",
     "tempdir": tempfile.tempdir,
+}
+
+DEFAULT_DGGS_PARENT_RES = {
+    "h3": lambda resolution: max(MIN_H3, (resolution - DEFAULT_PARENT_OFFSET)),
+    "rhp": lambda resolution: max(MIN_RHP, (resolution - DEFAULT_PARENT_OFFSET)),
+    "geohash": lambda resolution: max(
+        MIN_GEOHASH, (resolution - DEFAULT_PARENT_OFFSET)
+    ),
+    "s2": lambda resolution: max(MIN_S2, (resolution - DEFAULT_PARENT_OFFSET)),
 }
 
 DEFAULT_PARENT_OFFSET = 6

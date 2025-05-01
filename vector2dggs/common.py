@@ -120,28 +120,17 @@ def get_parent_res(dggs: str, parent_res: Union[None, int], resolution: int):
 
     Used for intermediate re-partioning.
     """
-    if dggs == "h3":
-        return (
-            parent_res
-            if parent_res is not None
-            else max(const.MIN_H3, (resolution - const.DEFAULT_PARENT_OFFSET))
-        )
-    elif dggs == "rhp":
-        return (
-            parent_res
-            if parent_res is not None
-            else max(const.MIN_RHP, (resolution - const.DEFAULT_PARENT_OFFSET))
-        )
-    elif dggs == "s2":
-        return (
-            parent_res
-            if parent_res is not None
-            else max(const.MIN_S2, (resolution - const.DEFAULT_PARENT_OFFSET))
-        )
-    else:
+    if not dggs in const.DEFAULT_DGGS_PARENT_RES.keys():
         raise RuntimeError(
-            "Unknown dggs {dggs}) -  must be one of [ 'h3', 'rhp', 's2' ]".format(dggs=dggs)
+            "Unknown dggs {dggs}) -  must be one of [ {options} ]".format(
+                dggs=dggs, options=", ".join(const.DEFAULT_DGGS_PARENT_RES.keys())
+            )
         )
+    return (
+        parent_res
+        if parent_res is not None
+        else const.DEFAULT_DGGS_PARENT_RES[dggs](resolution)
+    )
 
 
 def parent_partitioning(

@@ -1792,6 +1792,16 @@ files = [
 six = ">=1.5"
 
 [[package]]
+name = "python-geohash"
+version = "0.8.5"
+description = "Fast, accurate python geohashing library"
+optional = false
+python-versions = "*"
+files = [
+    {file = "python-geohash-0.8.5.tar.gz", hash = "sha256:05a21fcf4eda1a5eddbd291890ade23fc5ddaa6bb98f2ee23d2d384ed14f086d"},
+]
+
+[[package]]
 name = "pytz"
 version = "2025.2"
 description = "World timezone definitions, modern and historical"
@@ -2000,6 +2010,28 @@ pygments = ">=2.13.0,<3.0.0"
 
 [package.extras]
 jupyter = ["ipywidgets (>=7.5.1,<9)"]
+
+[[package]]
+name = "rusty-polygon-geohasher"
+version = "0.2.3"
+description = ""
+optional = false
+python-versions = "*"
+files = [
+    {file = "rusty_polygon_geohasher-0.2.3-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:f939e3571441c98fb282639cb62d6bebcdc282a7e43de36d3b90370b51363926"},
+    {file = "rusty_polygon_geohasher-0.2.3-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:83f44045fae42425a3ccfe1acbd52afbbca3cd7e108351c600d08eb2397724cd"},
+    {file = "rusty_polygon_geohasher-0.2.3-cp310-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:1e837a27d70c6b016ad1cc0dba291a478d58f45376aafabc27724a9555f0adee"},
+    {file = "rusty_polygon_geohasher-0.2.3-cp310-abi3-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:81765d8868b091bb6d406b8a5f3bca7307f1f01ad16cf0de192899b74fb3881e"},
+    {file = "rusty_polygon_geohasher-0.2.3-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:57c14a8daefe0d95f30dd22be9f81312996a7b7791a0cf851c88c199b501d940"},
+    {file = "rusty_polygon_geohasher-0.2.3-cp310-abi3-manylinux_2_5_i686.manylinux1_i686.whl", hash = "sha256:08634c54a914d283d2a3ed8cc1f8acf3c9a7cbedf8d2d5f9ee969ce3f62751b7"},
+    {file = "rusty_polygon_geohasher-0.2.3-cp310-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:d60cd9f65b3b214c86b3cc2e6b076b0a07f8e5e462317facfccf70623dd25a0e"},
+    {file = "rusty_polygon_geohasher-0.2.3-cp310-abi3-musllinux_1_2_armv7l.whl", hash = "sha256:8b010e8d043345cfa175b33ae72697a59b38c06fa4a947187678e39650438f92"},
+    {file = "rusty_polygon_geohasher-0.2.3-cp310-abi3-musllinux_1_2_i686.whl", hash = "sha256:be81339e3b52276614f9ad3dfe4d26744ece65695a6d7896ecf009a074c91809"},
+    {file = "rusty_polygon_geohasher-0.2.3-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:eb08697d48ea3b65e27d0bc403657e792a79cb98449cec81bcb2fcb2028c7ea6"},
+    {file = "rusty_polygon_geohasher-0.2.3-cp310-abi3-win32.whl", hash = "sha256:e646f6364f2a9bfdd148c370e5809093aeae66fd9113fa2f92fd0d4825db3727"},
+    {file = "rusty_polygon_geohasher-0.2.3-cp310-abi3-win_amd64.whl", hash = "sha256:6a7fbabeef9a58153c0827744fec9831e5c2c95961deb4a53f0b7c05d701c68a"},
+    {file = "rusty_polygon_geohasher-0.2.3.tar.gz", hash = "sha256:6b0935fddc33e5fbeab4e0aa3a6da869e68ebaa64a0126450a7b4299a8957288"},
+]
 
 [[package]]
 name = "s2geometry"
@@ -2374,4 +2406,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "e79bc71880a7520ed8bfb7516169167a24f05d47e8c906de266d8bf8a08addc5"
+content-hash = "647f309c5a0eed8c7960d7260275ccbf44d35d8471debd949f1097b14c67ac83"
