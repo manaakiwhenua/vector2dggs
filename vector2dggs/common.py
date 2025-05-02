@@ -126,7 +126,12 @@ def get_parent_res(dggs: str, parent_res: Union[None, int], resolution: int):
                 dggs=dggs, options=", ".join(const.DEFAULT_DGGS_PARENT_RES.keys())
             )
         )
-    return parent_res if parent_res is not None else const.DEFAULT_DGGS_PARENT_RES[dggs](resolution)
+    return (
+        parent_res
+        if parent_res is not None
+        else const.DEFAULT_DGGS_PARENT_RES[dggs](resolution)
+    )
+
 
 def parent_partitioning(
     dggs: str,

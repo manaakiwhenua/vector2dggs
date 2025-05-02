@@ -33,6 +33,7 @@ numpy = "^2"
 rhppandas = "^0.1.2"
 rhealpixdggs = "^0.5.5"
 pillow = "^11.2.1"
+s2geometry = "^0.9.0"
 rusty-polygon-geohasher = "^0.2.3"
 python-geohash = "^0.8.5"
 

@@ -3,13 +3,15 @@ import click
 import click_log
 import tempfile
 import pyproj
+from math import ceil
 
-from geohash_polygon import polygon_to_geohashes  # rusty-polygon-geohasher
-from geohash import encode, decode  # python-geohash
+from s2geometry import pywraps2 as S2
 
 import pandas as pd
 import geopandas as gpd
-from shapely.geometry import Point, Polygon
+from shapely.geometry import box, Polygon
+from shapely.ops import transform
+from pyproj import CRS, Transformer
 
 from typing import Union
 from pathlib import Path
@@ -20,55 +22,122 @@ import vector2dggs.common as common
 from vector2dggs import __version__
 
 
-def gh_secondary_index(df: gpd.GeoDataFrame, parent_level: int) -> gpd.GeoDataFrame:
-    df[f"geohash_{parent_level:02}"] = df.index.to_series().str[:parent_level]
+def s2_secondary_index(df: gpd.GeoDataFrame, parent_level: int) -> gpd.GeoDataFrame:
+    # NB also converts the index to S2 cell tokens
+    index_series = df.index.to_series()
+    df[f"s2_{parent_level:02}"] = index_series.map(
+        lambda cell: cell.parent(parent_level).ToToken()
+    )
+    df.index = index_series.map(lambda cell: cell.ToToken())
     return df
 
 
-# NB this implements a point-inside hash, but geohash_polygon only supports "within" or "intersects" (on the basis of geohashes as _polygon_ geometries) which means we have to perform additional computation to support "polyfill" as defined by H3
-# A future version of vector2dggs may support within/intersects modality, at which point that would just be outer/inner with no further computation
-def _polygon_to_geohashes(polygon: Polygon, level: int) -> set[str]:
-    # Function to compute geohash set for one polygon geometry
-    outer: set[str] = polygon_to_geohashes(polygon, level, inner=False)
-    inner: set[str] = polygon_to_geohashes(polygon, level, inner=True)
-    edge: set[str] = {
-        h
-        for h in (outer - inner)  # All edge cells
-        if Point(*reversed(decode(h))).within(polygon)
-    }  # Edge cells with a center within the polygon
-    return edge | inner
+def bbox_area_in_m2(
+    geom: Polygon,
+    src_crs: Union[str, CRS] = "EPSG:4326",
+    dst_crs: Union[str, CRS] = "EPSG:6933",
+) -> float:
+    """
+    Calculate the area of the bounding box of a geometry in square meters.
+    """
+    minx, miny, maxx, maxy = geom.bounds
+    bbox = box(minx, miny, maxx, maxy)
+    transformer = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
+    projected_bbox = transform(transformer.transform, bbox)
+    return projected_bbox.area
 
 
-def gh_polyfill(df: gpd.GeoDataFrame, level: int):
-    gh_col = f"geohash"
-    df_polygon = df[df.geom_type == "Polygon"].copy()
-    if not df_polygon.empty:
-        df_polygon = (
-            df_polygon.assign(
-                **{
-                    gh_col: df_polygon.geometry.apply(
-                        lambda geom: _polygon_to_geohashes(geom, level)
-                    )
-                }
+def max_cells_for_geom(geom: Polygon, level: int, margin: float = 1.02) -> int:
+    """
+    Calculate the maximum number of S2 cells that are appropriate for the given geometry and level.
+    This is based on the area of the geometry's bounding box,
+    and the maximum area of S2 cells at the given level.
+    """
+    area = bbox_area_in_m2(geom)
+    max_cells = ceil(
+        max(1, area / const.S2_CELLS_MAX_AREA_M2_BY_LEVEL[level])
+    )
+    return ceil(max_cells * margin)
+
+
+def cell_center_is_inside_polygon(cell: S2.S2Cell, polygon: S2.S2Polygon) -> bool:
+    """Determines if the center of the S2 cell is inside the polygon"""
+    cell_center = S2.S2Cell(cell).GetCenter()
+    return polygon.Contains(cell_center)
+
+
+def s2_polyfill_polygons(df: gpd.GeoDataFrame, level: int) -> gpd.GeoDataFrame:
+    df = df[df.geom_type == "Polygon"].copy()
+    print(df)
+
+    def generate_s2_covering(geom, level, centroid_inside=True):
+        # Prepare loops: first the exterior loop, then the interior loops
+        loops = []
+        # Exterior ring
+        latlngs = [
+            S2.S2LatLng.FromDegrees(lat, lon) for lon, lat in geom.exterior.coords
+        ]
+        s2loop = S2.S2Loop([latlng.ToPoint() for latlng in latlngs])
+        s2loop.Normalize()
+        loops.append(s2loop)
+
+        # Interior rings (polygon holes)
+        for interior in geom.interiors:
+            interior_latlngs = [
+                S2.S2LatLng.FromDegrees(lat, lon) for lon, lat in interior.coords
+            ]
+            s2interior_loop = S2.S2Loop(
+                [latlng.ToPoint() for latlng in interior_latlngs]
             )
-            .explode(gh_col, ignore_index=True)
-            .set_index(gh_col)
-        )
+            s2interior_loop.Normalize()
+            loops.append(s2interior_loop)
 
-    # TODO linestring support
-    # e.g. JS implementation https://github.com/alrico88/geohashes-along
+        # Build an S2Polygon from the loops
+        s2polygon = S2.S2Polygon()
+        s2polygon.InitNested(loops)
 
-    df_point = df[df.geom_type == "Point"].copy()
-    if len(df_point.index) > 0:
-        df_point[gh_col] = df_point.geometry.apply(
-            lambda geom: encode(geom.y, geom.x, precision=level)
-        )
-        df_point = df_point.set_index(gh_col)
+        # Use S2RegionCoverer to get the cell IDs at the specified level
+        coverer = S2.S2RegionCoverer()
+
+        max_cells = max_cells_for_geom(geom, level)
+        coverer.set_max_cells(max_cells)
+        coverer.set_min_level(level)
+        coverer.set_max_level(level)
+
+        covering: set[S2.Cell] = coverer.GetCovering(s2polygon)
+
+        if centroid_inside:
+            # Coverings are "intersects" modality, polyfill is "centre inside" modality
+            # ergo, filter out covering cells that are not inside the polygon
+            covering = {
+                cell
+                for cell in covering
+                if cell_center_is_inside_polygon(cell, s2polygon)
+            }
+
+        return covering
+
+    df["s2index"] = df["geometry"].apply(lambda geom: generate_s2_covering(geom, level))
+    df = df[
+        df["s2index"].map(lambda x: len(x) > 0)
+    ]  # Remove rows with no covering at this level
+
+    return df
+
+
+def s2_polyfill(df: gpd.GeoDataFrame, level: int):
+
+    df_polygon = (
+        s2_polyfill_polygons(df, level).explode("s2index").set_index("s2index")
+    )
+
+    # TODO linestrings
+    # TODO points
 
     return pd.concat(
         map(
             lambda _df: pd.DataFrame(_df.drop(columns=[_df.geometry.name])),
-            [df_polygon, df_point],
+            [df_polygon],
         )
     )
 
@@ -82,8 +151,8 @@ def gh_polyfill(df: gpd.GeoDataFrame, level: int):
     "--resolution",
     "level",
     required=True,
-    type=click.Choice(list(map(str, range(const.MIN_GEOHASH, const.MAX_GEOHASH + 1)))),
-    help="Geohash level to index",
+    type=click.Choice(list(map(str, range(const.MIN_S2, const.MAX_S2 + 1)))),
+    help="S2 level to index",
     nargs=1,
 )
 @click.option(
@@ -91,8 +160,8 @@ def gh_polyfill(df: gpd.GeoDataFrame, level: int):
     "--parent_res",
     "parent_level",
     required=False,
-    type=click.Choice(list(map(str, range(const.MIN_GEOHASH, const.MAX_GEOHASH + 1)))),
-    help="Geohash parent level for the output partition. Defaults to resolution - 6",
+    type=click.Choice(list(map(str, range(const.MIN_S2, const.MAX_S2 + 1)))),
+    help="S2 parent level for the output partition. Defaults to resolution - 6",
 )
 @click.option(
     "-id",
@@ -109,7 +178,7 @@ def gh_polyfill(df: gpd.GeoDataFrame, level: int):
     is_flag=True,
     show_default=True,
     default=const.DEFAULTS["k"],
-    help="Retain attributes in output. The default is to create an output that only includes Geohash cell ID and the ID given by the -id field (or the default index ID).",
+    help="Retain attributes in output. The default is to create an output that only includes S2 cell ID and the ID given by the -id field (or the default index ID).",
 )
 @click.option(
     "-ch",
@@ -180,7 +249,7 @@ def gh_polyfill(df: gpd.GeoDataFrame, level: int):
 )
 @click.option("-o", "--overwrite", is_flag=True)
 @click.version_option(version=__version__)
-def geohash(
+def s2(
     vector_input: Union[str, Path],
     output_directory: Union[str, Path],
     level: str,
@@ -198,7 +267,7 @@ def geohash(
     overwrite: bool,
 ):
     """
-    Ingest a vector dataset and index it using the Geohash geocode system.
+    Ingest a vector dataset and index it to the S2 DGGS.
 
     VECTOR_INPUT is the path to input vector geospatial data.
     OUTPUT_DIRECTORY should be a directory, not a file or database table, as it will instead be the write location for an Apache Parquet data store.
@@ -215,9 +284,9 @@ def geohash(
 
     try:
         common.index(
-            "geohash",
-            gh_polyfill,
-            gh_secondary_index,
+            "s2",
+            s2_polyfill,
+            s2_secondary_index,
             vector_input,
             output_directory,
             int(level),

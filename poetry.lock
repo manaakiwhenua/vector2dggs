@@ -2034,6 +2034,20 @@ files = [
 ]
 
 [[package]]
+name = "s2geometry"
+version = "0.9.0"
+description = "Computational geometry and spatial indexing on the sphere"
+optional = false
+python-versions = ">=3.4"
+files = [
+    {file = "s2geometry-0.9.0-cp35-cp35m-manylinux2010_x86_64.whl", hash = "sha256:ba100731d1639dd8022e61a211bf200ce25044409f6db1dd93fd1ebaab22774b"},
+    {file = "s2geometry-0.9.0-cp36-cp36m-manylinux2010_x86_64.whl", hash = "sha256:fd99d1d6ef8c96a0238c32a7aae06a20c8b6dedc1eeeb33636719f68ec968ee1"},
+    {file = "s2geometry-0.9.0-cp37-cp37m-manylinux2010_x86_64.whl", hash = "sha256:a8001325310f214bbdee380b9695978b2e3b56e0c5e9fc7889a36b53ad877537"},
+    {file = "s2geometry-0.9.0-cp38-cp38-manylinux2010_x86_64.whl", hash = "sha256:59dc034a8e83d4312cd436c594ae45f2c04bc8ae075973df41cf3a3ef2989676"},
+    {file = "s2geometry-0.9.0.tar.gz", hash = "sha256:ae395d8966e2865c4df93ab9e1b712f00b18308d064f64a01bf67fdaf9491e28"},
+]
+
+[[package]]
 name = "scipy"
 version = "1.15.2"
 description = "Fundamental algorithms for scientific computing in Python"
@@ -2392,4 +2406,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "b5ea0bdc6cc0fd734a78e241c9f640e610fc23a51d0630e0d65034c589d51ab0"
+content-hash = "647f309c5a0eed8c7960d7260275ccbf44d35d8471debd949f1097b14c67ac83"

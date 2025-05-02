@@ -9,7 +9,8 @@ This is the vector equivalent of [raster2dggs](https://github.com/manaakiwhenua/
 Currently this tool supports the following DGGSs:
 
 - [H3](https://h3geo.org/)
-- [rHEALPix](https://datastore.landcareresearch.co.nz/dataset/rhealpix-discrete-global-grid-system)
+- [rHEALPix](https://datastore.landcareresearch.co.nz/dataset/rhealpix-discrete-global-grid-system) (points, polygons)
+- [S2](https://s2geometry.io/) (polygons)
 
 ... and the following geocode systems:
 
@@ -37,10 +38,10 @@ Options:
   --help     Show this message and exit.
 
 Commands:
-  geohash  Ingest a vector dataset and index it to the Geohash DGGS.
+  geohash  Ingest a vector dataset and index it using the Geohash geocode...
   h3       Ingest a vector dataset and index it to the H3 DGGS.
   rhp      Ingest a vector dataset and index it to the rHEALPix DGGS.
-
+  s2       Ingest a vector dataset and index it to the S2 DGGS.
 ```
 
 ```bash
@@ -105,9 +106,9 @@ Options:
 
 Output is in the Apache Parquet format, a directory with one file per partition.
 
-For a quick view of your output, you can read Apache Parquet with pandas, and then use h3-pandas and geopandas to convert this into a GeoPackage or GeoParquet for visualisation in a desktop GIS, such as QGIS. The Apache Parquet output is indexed by an ID column (which you can specify), so it should be ready for two intended use-cases:
+For a quick view of your output, you can read Apache Parquet with pandas, and then use tools like h3-pandas and geopandas to convert this into a GeoPackage or GeoParquet for visualisation in a desktop GIS, such as QGIS. The Apache Parquet output is indexed by an ID column (which you can specify), so it should be ready for two intended use-cases:
 - Joining attribute data from the original feature-level data onto computer DGGS cells.
-- Joining other data to this output on the H3 cell ID. (The output has a column like `h3_\d{2}`, e.g. `h3_09` or `h3_12` according to the target resolution.)
+- Joining other data to this output on the DGGS cell ID. (The output has a column like `{dggs}_\d`, e.g. `h3_09` or `h3_12` according to the target resolution, zero-padded to account for the maximum resolution of the DGGS)
 
 Geoparquet output (hexagon boundaries):
 
@@ -134,6 +135,34 @@ h3_12
 >>> g.to_parquet('./output-data/parcels.12.geo.parquet')
 ```
 
+An example for S2 output (using `s2sphere`):
+
+
+```python
+import pandas as pd
+import geopandas as gpd
+import s2sphere
+from shapely.geometry import Polygon
+
+RES = 18
+df = pd.read_parquet(f'~/output-data/ponds-with-holes.s2.{RES}.pq')
+df = df.reset_index()
+
+def s2id_to_polygon(s2_id_hex):
+    cell_id = s2sphere.CellId.from_token(s2_id_hex)
+    cell = s2sphere.Cell(cell_id)
+    vertices = []
+    for i in range(4):
+        vertex = cell.get_vertex(i)
+        lat_lng = s2sphere.LatLng.from_point(vertex)
+        vertices.append((lat_lng.lng().degrees, lat_lng.lat().degrees))  # (lon, lat)
+    return Polygon(vertices)
+
+df['geometry'] = df[f's2_{RES}'].apply(s2id_to_polygon)
+df = gpd.GeoDataFrame(df, geometry='geometry', crs='EPSG:4326')  # WGS84
+df.to_parquet(f'sample-{RES}.parquet')
+```
+
 ### For development
 
 In brief, to get started:
@@ -143,6 +172,7 @@ In brief, to get started:
     - If you're on Windows, `pip install gdal` may be necessary before running the subsequent commands.
     - On Linux, install GDAL 3.8+ according to your platform-specific instructions, including development headers, i.e. `libgdal-dev`.
 - Create the virtual environment with `poetry init`. This will install necessary dependencies.
+  - If the installation of `s2geometry` fails, you may require SWIG to build it. (A command like `conda install swig` or `sudo dnf install swig` depending on your platform).
 - Subsequently, the virtual environment can be re-activated with `poetry shell`.
 
 If you run `poetry install`, the CLI tool will be aliased so you can simply use `vector2dggs` rather than `poetry run vector2dggs`, which is the alternative if you do not `poetry install`.
