@@ -29,12 +29,6 @@ def rhppolyfill(df: gpd.GeoDataFrame, resolution: int):
             resolution, return_geometry=False
         ).drop(columns=["index"])
 
-    df_multipolygon = df[df.geom_type == "MultiPolygon"]
-    if len(df_multipolygon.index) > 0:
-        df_multipolygon = df_multipolygon.rhp.polyfill_resample(
-            resolution, return_geometry=False
-        ).drop(columns=["index"])
-
     # df_linestring = df[df.geom_type == "LineString"]
     # if len(df_linestring.index) > 0:
     #     df_linestring = (
