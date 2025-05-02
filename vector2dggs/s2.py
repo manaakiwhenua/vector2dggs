@@ -29,7 +29,6 @@ def s2_secondary_index(df: pd.DataFrame, parent_level: int) -> pd.DataFrame:
         lambda cell_id: cell_id.parent(parent_level).ToToken()
     )
     df.index = index_series.map(lambda cell_id: cell_id.ToToken())
-    print(df)
     return df
 
 
