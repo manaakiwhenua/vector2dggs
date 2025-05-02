@@ -10,7 +10,7 @@ Currently this tool supports the following DGGSs:
 
 - [H3](https://h3geo.org/)
 - [rHEALPix](https://datastore.landcareresearch.co.nz/dataset/rhealpix-discrete-global-grid-system) (points, polygons)
-- [S2](https://s2geometry.io/) (polygons)
+- [S2](https://s2geometry.io/)
 
 ... and the following geocode systems:
 
