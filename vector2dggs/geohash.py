@@ -20,7 +20,7 @@ import vector2dggs.common as common
 from vector2dggs import __version__
 
 
-def gh_secondary_index(df: gpd.GeoDataFrame, parent_level: int) -> gpd.GeoDataFrame:
+def gh_secondary_index(df: pd.DataFrame, parent_level: int) -> pd.DataFrame:
     df[f"geohash_{parent_level:02}"] = df.index.to_series().str[:parent_level]
     return df
 
@@ -39,7 +39,7 @@ def _polygon_to_geohashes(polygon: Polygon, level: int) -> set[str]:
     return edge | inner
 
 
-def gh_polyfill(df: gpd.GeoDataFrame, level: int):
+def gh_polyfill(df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
     gh_col = f"geohash"
     df_polygon = df[df.geom_type == "Polygon"].copy()
     if not df_polygon.empty:

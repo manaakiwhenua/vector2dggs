@@ -18,11 +18,11 @@ import vector2dggs.common as common
 from vector2dggs import __version__
 
 
-def h3_secondary_index(df: gpd.GeoDataFrame, parent_res: int) -> gpd.GeoDataFrame:
+def h3_secondary_index(df: pd.DataFrame, parent_res: int) -> pd.DataFrame:
     return df.h3.h3_to_parent(parent_res)
 
 
-def h3polyfill(df: gpd.GeoDataFrame, resolution: int):
+def h3polyfill(df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
     df_polygon = df[df.geom_type == "Polygon"]
     if not df_polygon.empty:
         df_polygon = df_polygon.h3.polyfill_resample(
