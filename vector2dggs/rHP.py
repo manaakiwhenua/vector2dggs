@@ -18,11 +18,11 @@ import vector2dggs.common as common
 from vector2dggs import __version__
 
 
-def rhp_secondary_index(df: gpd.GeoDataFrame, parent_res: int) -> gpd.GeoDataFrame:
+def rhp_secondary_index(df: pd.date_range, parent_res: int) -> pd.DataFrame:
     return df.rhp.rhp_to_parent(parent_res)
 
 
-def rhppolyfill(df: gpd.GeoDataFrame, resolution: int):
+def rhppolyfill(df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
     df_polygon = df[df.geom_type == "Polygon"]
     if len(df_polygon.index) > 0:
         df_polygon = df_polygon.rhp.polyfill_resample(

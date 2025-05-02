@@ -9,7 +9,7 @@ from s2geometry import pywraps2 as S2
 
 import pandas as pd
 import geopandas as gpd
-from shapely.geometry import box, Polygon
+from shapely.geometry import box, Polygon, LineString, Point
 from shapely.ops import transform
 from pyproj import CRS, Transformer
 
@@ -22,13 +22,13 @@ import vector2dggs.common as common
 from vector2dggs import __version__
 
 
-def s2_secondary_index(df: gpd.GeoDataFrame, parent_level: int) -> gpd.GeoDataFrame:
+def s2_secondary_index(df: pd.DataFrame, parent_level: int) -> pd.DataFrame:
     # NB also converts the index to S2 cell tokens
-    index_series = df.index.to_series()
+    index_series = df.index.to_series().astype(object)
     df[f"s2_{parent_level:02}"] = index_series.map(
-        lambda cell: cell.parent(parent_level).ToToken()
+        lambda cell_id: cell_id.parent(parent_level).ToToken()
     )
-    df.index = index_series.map(lambda cell: cell.ToToken())
+    df.index = index_series.map(lambda cell_id: cell_id.ToToken())
     return df
 
 
@@ -47,30 +47,30 @@ def bbox_area_in_m2(
     return projected_bbox.area
 
 
-def max_cells_for_geom(geom: Polygon, level: int, margin: float = 1.02) -> int:
+def max_cells_for_geom(
+    geom: Union[Polygon, LineString], level: int, margin: float = 1.02
+) -> int:
     """
     Calculate the maximum number of S2 cells that are appropriate for the given geometry and level.
     This is based on the area of the geometry's bounding box,
     and the maximum area of S2 cells at the given level.
     """
     area = bbox_area_in_m2(geom)
-    max_cells = ceil(
-        max(1, area / const.S2_CELLS_MAX_AREA_M2_BY_LEVEL[level])
-    )
+    max_cells = ceil(max(1, area / const.S2_CELLS_MAX_AREA_M2_BY_LEVEL[level]))
     return ceil(max_cells * margin)
 
 
-def cell_center_is_inside_polygon(cell: S2.S2Cell, polygon: S2.S2Polygon) -> bool:
+def cell_center_is_inside_polygon(cell: S2.S2CellId, polygon: S2.S2Polygon) -> bool:
     """Determines if the center of the S2 cell is inside the polygon"""
     cell_center = S2.S2Cell(cell).GetCenter()
     return polygon.Contains(cell_center)
 
 
 def s2_polyfill_polygons(df: gpd.GeoDataFrame, level: int) -> gpd.GeoDataFrame:
-    df = df[df.geom_type == "Polygon"].copy()
-    print(df)
 
-    def generate_s2_covering(geom, level, centroid_inside=True):
+    def generate_s2_covering(
+        geom: Polygon, level: int, centroid_inside: bool = True
+    ) -> set[S2.S2CellId]:
         # Prepare loops: first the exterior loop, then the interior loops
         loops = []
         # Exterior ring
@@ -104,7 +104,7 @@ def s2_polyfill_polygons(df: gpd.GeoDataFrame, level: int) -> gpd.GeoDataFrame:
         coverer.set_min_level(level)
         coverer.set_max_level(level)
 
-        covering: set[S2.Cell] = coverer.GetCovering(s2polygon)
+        covering: list[S2.S2CellId] = coverer.GetCovering(s2polygon)
 
         if centroid_inside:
             # Coverings are "intersects" modality, polyfill is "centre inside" modality
@@ -114,6 +114,8 @@ def s2_polyfill_polygons(df: gpd.GeoDataFrame, level: int) -> gpd.GeoDataFrame:
                 for cell in covering
                 if cell_center_is_inside_polygon(cell, s2polygon)
             }
+        else:
+            set(covering)
 
         return covering
 
@@ -125,19 +127,57 @@ def s2_polyfill_polygons(df: gpd.GeoDataFrame, level: int) -> gpd.GeoDataFrame:
     return df
 
 
-def s2_polyfill(df: gpd.GeoDataFrame, level: int):
+def s2_cell_ids_from_linestring(
+    linestring: LineString, level: int
+) -> list[S2.S2CellId]:
+    latlngs = [S2.S2LatLng.FromDegrees(lat, lon) for lon, lat in linestring.coords]
+    polyline = S2.S2Polyline(latlngs)
 
-    df_polygon = (
-        s2_polyfill_polygons(df, level).explode("s2index").set_index("s2index")
-    )
+    coverer = S2.S2RegionCoverer()
+    max_cells = max_cells_for_geom(linestring, level)
+    coverer.set_max_cells(max_cells)
+    coverer.set_min_level(level)
+    coverer.set_max_level(level)
 
-    # TODO linestrings
-    # TODO points
+    return coverer.GetCovering(polyline)
+
+
+def s2_cell_id_from_point(geom: Point, level: int) -> S2.S2CellId:
+    """
+    Convert a point geometry to an S2 cell at the specified level.
+    """
+    latlng = S2.S2LatLng.FromDegrees(geom.y, geom.x)
+    return S2.S2CellId(latlng).parent(level)
+
+
+def s2_polyfill(df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
+
+    df_polygon = df[df.geom_type == "Polygon"].copy()
+    if len(df_polygon.index) > 0:
+        df_polygon = (
+            s2_polyfill_polygons(df_polygon, level)
+            .explode("s2index")
+            .set_index("s2index")
+        )
+
+    df_linestring = df[df.geom_type == "LineString"].copy()
+    if len(df_linestring.index) > 0:
+        df_linestring["s2index"] = df_linestring.geometry.apply(
+            lambda geom: s2_cell_ids_from_linestring(geom, level)
+        )
+        df_linestring = df_linestring.explode("s2index").set_index("s2index")
+
+    df_point = df[df.geom_type == "Point"].copy()
+    if len(df_point.index) > 0:
+        df_point["s2index"] = df_point.geometry.apply(
+            lambda geom: s2_cell_id_from_point(geom, level)
+        )
+        df_point = df_point.set_index("s2index")
 
     return pd.concat(
         map(
             lambda _df: pd.DataFrame(_df.drop(columns=[_df.geometry.name])),
-            [df_polygon],
+            [df_polygon, df_linestring, df_point],
         )
     )
 
