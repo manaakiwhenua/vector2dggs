@@ -19,6 +19,4 @@ dependencies:
   - numpy<2
   - pip
   - pip:
-    # Use pip to install rhppandas from dev branch of git repo
-    - git+https://github.com/manaakiwhenua/rHP-Pandas.git
-    - git+https://github.com/manaakiwhenua/rhealpixdggs-py.git
+    - rhppandas>=0.2.0
