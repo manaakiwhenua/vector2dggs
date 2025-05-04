@@ -11,6 +11,7 @@ import geopandas as gpd
 
 from typing import Union
 from pathlib import Path
+from rhppandas.util.const import COLUMNS
 
 import vector2dggs.constants as const
 import vector2dggs.common as common
@@ -29,14 +30,14 @@ def rhppolyfill(df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
             resolution, return_geometry=False
         ).drop(columns=["index"])
 
-    # df_linestring = df[df.geom_type == "LineString"]
-    # if len(df_linestring.index) > 0:
-    #     df_linestring = (
-    #         df_linestring.rhp.linetrace(resolution)
-    #         .explode("rhp_linetrace")
-    #         .set_index("rhp_linetrace")
-    #     )
-    #     df_linestring = df_linestring[~df_linestring.index.duplicated(keep="first")]
+    df_linestring = df[df.geom_type == "LineString"]
+    if len(df_linestring.index) > 0:
+        df_linestring = (
+            df_linestring.rhp.linetrace(resolution)
+            .explode(COLUMNS["linetrace"])
+            .set_index(COLUMNS["linetrace"])
+        )
+        df_linestring = df_linestring[~df_linestring.index.duplicated(keep="first")]
 
     df_point = df[df.geom_type == "Point"]
     if len(df_point.index) > 0:
@@ -45,7 +46,7 @@ def rhppolyfill(df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
     return pd.concat(
         map(
             lambda _df: pd.DataFrame(_df.drop(columns=[_df.geometry.name])),
-            [df_polygon, df_point],
+            [df_polygon, df_linestring, df_point],
         )
     )
 
