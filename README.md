@@ -9,7 +9,7 @@ This is the vector equivalent of [raster2dggs](https://github.com/manaakiwhenua/
 Currently this tool supports the following DGGSs:
 
 - [H3](https://h3geo.org/)
-- [rHEALPix](https://datastore.landcareresearch.co.nz/dataset/rhealpix-discrete-global-grid-system) (points, polygons)
+- [rHEALPix](https://datastore.landcareresearch.co.nz/dataset/rhealpix-discrete-global-grid-system)
 - [S2](https://s2geometry.io/)
 
 ... and the following geocode systems:
