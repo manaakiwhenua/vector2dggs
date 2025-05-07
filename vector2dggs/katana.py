@@ -19,7 +19,7 @@ from shapely.geometry import (
     MultiLineString,
     GeometryCollection,
 )
-from shapely.validation import explain_validity, make_valid
+from shapely.validation import make_valid
 
 
 def katana(geometry, threshold, count=0) -> GeometryCollection:
