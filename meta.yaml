@@ -1,0 +1,58 @@
+package:
+  name: vector2dggs
+  version: 0.8.0
+
+source:
+  url: https://pypi.io/packages/source/v/vector2dggs/vector2dggs-0.8.0.tar.gz
+  sha256: 1b3dc1c6d698ca473f2c8ca2cae3e724557f005c0121a3553c7b3ea6cfb7ea08
+
+build:
+  noarch: python
+  script: pip install .
+  number: 0
+
+requirements:
+  host:
+    - python >=3.11, <3.12
+    - poetry >=1.00
+    - wheel
+    - pip
+  run:
+    - python >=3.11, <3.12
+    ### - gdal >=3.8, <3.9
+    - gdal >=3.8
+    - geopandas >=1.0.1, <2.0
+    - h3pandas >=0.3, <1.0
+    - dask-geopandas >=0.4, <1.0
+    - dask >=2025.1, <2026
+    - click >=8.1.7, <9.0
+    - tqdm >=4.67, <5
+    - click-log >=0.4.0, <0.5
+    - pyarrow >=20.0, <21
+    - pyproj >=3.7, <4.0
+    - sqlalchemy >=2.0.32, <2.1
+    - psycopg2 >=2.9.9, <2.10
+    - shapely >=2.1, <3.0
+    - numpy >=2, <3
+    - rhppandas >=0.2.0, <0.3
+    - pillow >=11.2.1, <11.3
+    - s2geometry >=0.9.0, <1.0
+    ### - rusty-polygon-geohasher >=0.2.3, <0.3
+    - python-geohash >=0.8.5, <0.9
+
+## tests require rhppandas
+### tests:
+  ### - python:
+      ### imports:
+        ### - vector2dggs
+      ### ### ### pip_check: true
+
+about:
+  repository: "https://github.com/manaakiwhenua/vector2dggs"
+  summary: "CLI DGGS indexer for vector geospatial data"
+  license: "LGPL-3.0-or-later"
+
+### extra:
+  ### recipe-maintainers:
+    ### - name_of_maintainer
+
