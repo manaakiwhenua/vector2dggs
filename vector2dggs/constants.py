@@ -6,7 +6,7 @@ import tempfile
 MIN_H3, MAX_H3 = 0, 15
 MIN_RHP, MAX_RHP = 0, 15
 MIN_S2, MAX_S2 = 0, 30
-MIN_GEOHASH, MAX_GEOHASH = 0, 12
+MIN_GEOHASH, MAX_GEOHASH = 1, 12
 
 DEFAULTS = {
     "id": None,
