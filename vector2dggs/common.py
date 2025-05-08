@@ -112,7 +112,7 @@ def drop_condition(
     return df
 
 
-def get_parent_res(dggs: str, parent_res: Union[None, int], resolution: int):
+def get_parent_res(dggs: str, parent_res: Union[None, str], resolution: int) -> int:
     """
     Uses a parent resolution,
     OR,
@@ -127,7 +127,7 @@ def get_parent_res(dggs: str, parent_res: Union[None, int], resolution: int):
             )
         )
     return (
-        parent_res
+        int(parent_res)
         if parent_res is not None
         else const.DEFAULT_DGGS_PARENT_RES[dggs](resolution)
     )
@@ -138,10 +138,9 @@ def parent_partitioning(
     input_dir: Path,
     output_dir: Path,
     resolution: int,
-    parent_res: Union[None, int],
+    parent_res: int,
     **kwargs,
 ) -> None:
-    parent_res: int = get_parent_res(dggs, parent_res, resolution)
     partition_col = f"{dggs}_{parent_res:02}"
 
     with TqdmCallback(desc="Repartitioning"):
@@ -171,7 +170,7 @@ def polyfill(
     pq_in: Path,
     spatial_sort_col: str,
     resolution: int,
-    parent_res: Union[None, int],
+    parent_res: int,
     output_directory: str,
 ) -> None:
     """
@@ -192,7 +191,6 @@ def polyfill(
         return None
 
     df.index.rename(f"{dggs}_{resolution:02}", inplace=True)
-    parent_res: int = get_parent_res(dggs, parent_res, resolution)
 
     # Secondary (parent) index, used later for partitioning
     df = secondary_index_func(df, parent_res)
@@ -230,6 +228,7 @@ def index(
     """
     Performs multi-threaded DGGS indexing on geometries (including multipart and collections).
     """
+    parent_res = get_parent_res(dggs, parent_res, resolution)
 
     if table and con:
         # Database connection
