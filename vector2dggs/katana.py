@@ -18,20 +18,23 @@ from shapely.geometry import (
     LineString,
     MultiLineString,
     GeometryCollection,
+    LinearRing,
 )
+from shapely.geometry.base import BaseGeometry
 from shapely.validation import make_valid
+from typing import Union, List
 
-
-def katana(geometry, threshold, count=0) -> GeometryCollection:
+def katana(geometry: Union[BaseGeometry, None], threshold: float, count: int=0) -> List[BaseGeometry]:
     """
-    Split a geometry into two parts across its shortest dimension.
+    Recursively split a geometry into two parts across its shortest dimension.
     Invalid input `geometry` will silently be made valid (if possible).
+    Any LinearRings will be converted to Polygons.
     """
     if geometry is None:
-        # Empty geometry collection
-        return GeometryCollection([])
+        return []
+    if isinstance(geometry, LinearRing):
+        geometry = Polygon(geometry)
     if not geometry.is_valid:
-        # print(explain_validity(geometry))
         geometry = make_valid(geometry)
         if geometry.geom_type == "GeometryCollection":
             geometry.normalize()
@@ -60,16 +63,7 @@ def katana(geometry, threshold, count=0) -> GeometryCollection:
         if not isinstance(c, GeometryCollection):
             c = GeometryCollection([c])
         for e in c.geoms:
-            if isinstance(e, (Polygon, MultiPolygon, LineString, MultiLineString)):
+            if isinstance(e, (Polygon, MultiPolygon, LineString, MultiLineString, LinearRing)):
                 result.extend(katana(e, threshold, count + 1))
-    if count > 0:
-        return result
-    # convert multipart into singlepart
-    final_result = []
-    for g in result:
-        # if isinstance(g, MultiPolygon):
-        #     final_result.extend(g)
-        # else:
-        # final_result.append(g)
-        final_result.append(g)
-    return final_result
+    
+    return result
