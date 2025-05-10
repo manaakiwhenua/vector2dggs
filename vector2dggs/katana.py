@@ -11,6 +11,7 @@ Redistribution and use in source and binary forms, with or without modification,
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
+from shapely import force_2d, has_z, has_m
 from shapely.geometry import (
     box,
     Polygon,
@@ -26,7 +27,10 @@ from typing import Union, List
 
 
 def katana(
-    geometry: Union[BaseGeometry, None], threshold: float, count: int = 0
+    geometry: Union[BaseGeometry, None],
+    threshold: float,
+    count: int = 0,
+    check_2D: bool = True,
 ) -> List[BaseGeometry]:
     """
     Recursively split a geometry into two parts across its shortest dimension.
@@ -37,6 +41,9 @@ def katana(
         return []
     if isinstance(geometry, LinearRing):
         geometry = Polygon(geometry)
+    if check_2D and (has_z(geometry) or has_m(geometry)):
+        geometry = force_2d(geometry)
+        check_2D = False  # No further 2D check needed
     if not geometry.is_valid:
         geometry = make_valid(geometry)
         if geometry.geom_type == "GeometryCollection":
@@ -69,6 +76,6 @@ def katana(
             if isinstance(
                 e, (Polygon, MultiPolygon, LineString, MultiLineString, LinearRing)
             ):
-                result.extend(katana(e, threshold, count + 1))
+                result.extend(katana(e, threshold, count + 1, check_2D))
 
     return result
