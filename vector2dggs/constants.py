@@ -12,7 +12,7 @@ DEFAULTS = {
     "id": None,
     "k": False,
     "ch": 50,
-    "s": "hilbert",
+    "s": "none",
     "crs": None,
     "c": 5000,
     "t": (multiprocessing.cpu_count() - 1),
@@ -20,6 +20,8 @@ DEFAULTS = {
     "g": "geom",
     "tempdir": tempfile.tempdir,
 }
+
+SPATIAL_SORTING_METHODS = ["hilbert", "morton", "geohash", "none"]
 
 DEFAULT_DGGS_PARENT_RES = {
     "h3": lambda resolution: max(MIN_H3, (resolution - DEFAULT_PARENT_OFFSET)),

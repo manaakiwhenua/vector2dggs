@@ -98,7 +98,7 @@ def h3polyfill(df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
 @click.option(
     "-s",
     "--spatial_sorting",
-    type=click.Choice(["hilbert", "morton", "geohash"]),
+    type=click.Choice(const.SPATIAL_SORTING_METHODS),
     default=const.DEFAULTS["s"],
     help="Spatial sorting method when perfoming spatial partitioning.",
 )

@@ -24,7 +24,10 @@ from shapely.geometry.base import BaseGeometry
 from shapely.validation import make_valid
 from typing import Union, List
 
-def katana(geometry: Union[BaseGeometry, None], threshold: float, count: int=0) -> List[BaseGeometry]:
+
+def katana(
+    geometry: Union[BaseGeometry, None], threshold: float, count: int = 0
+) -> List[BaseGeometry]:
     """
     Recursively split a geometry into two parts across its shortest dimension.
     Invalid input `geometry` will silently be made valid (if possible).
@@ -63,7 +66,9 @@ def katana(geometry: Union[BaseGeometry, None], threshold: float, count: int=0) 
         if not isinstance(c, GeometryCollection):
             c = GeometryCollection([c])
         for e in c.geoms:
-            if isinstance(e, (Polygon, MultiPolygon, LineString, MultiLineString, LinearRing)):
+            if isinstance(
+                e, (Polygon, MultiPolygon, LineString, MultiLineString, LinearRing)
+            ):
                 result.extend(katana(e, threshold, count + 1))
-    
+
     return result

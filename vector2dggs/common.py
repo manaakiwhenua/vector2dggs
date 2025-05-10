@@ -178,7 +178,9 @@ def polyfill(
     linetracing (for LineString), or indexing (for Point),
     and writes out to parquet.
     """
-    df = gpd.read_parquet(pq_in).reset_index().drop(columns=[spatial_sort_col])
+    df = gpd.read_parquet(pq_in).reset_index()
+    if spatial_sort_col != "none":
+        df = df.drop(columns=[spatial_sort_col])
     if len(df.index) == 0:
         # Input is empty, nothing to convert
         return None
@@ -295,11 +297,12 @@ def index(
 
     ddf = dgpd.from_geopandas(df, chunksize=max(1, chunksize), sort=True)
 
-    LOGGER.debug("Spatially sorting and partitioning (%s)", spatial_sorting)
-    ddf = ddf.spatial_shuffle(by=spatial_sorting)
+    if spatial_sorting != "none":
+        LOGGER.debug("Spatially sorting and partitioning (%s)", spatial_sorting)
+        ddf = ddf.spatial_shuffle(by=spatial_sorting)
     spatial_sort_col = (
         spatial_sorting
-        if spatial_sorting == "geohash"
+        if (spatial_sorting == "geohash" or spatial_sorting == "none")
         else f"{spatial_sorting}_distance"
     )
 
