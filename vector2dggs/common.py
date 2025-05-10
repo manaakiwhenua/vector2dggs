@@ -221,7 +221,7 @@ def index(
     id_field: str = None,
     cut_crs: pyproj.CRS = None,
     con: SQLConnectionType = None,
-    table: str = None,
+    layer: str = None,
     geom_col: str = "geom",
     overwrite: bool = False,
 ) -> Path:
@@ -230,14 +230,14 @@ def index(
     """
     parent_res = get_parent_res(dggs, parent_res, resolution)
 
-    if table and con:
+    if layer and con:
         # Database connection
         if keep_attributes:
-            q = sqlalchemy.text(f"SELECT * FROM {table}")
+            q = sqlalchemy.text(f"SELECT * FROM {layer}")
         elif id_field and not keep_attributes:
-            q = sqlalchemy.text(f"SELECT {id_field}, {geom_col} FROM {table}")
+            q = sqlalchemy.text(f"SELECT {id_field}, {geom_col} FROM {layer}")
         else:
-            q = sqlalchemy.text(f"SELECT {geom_col} FROM {table}")
+            q = sqlalchemy.text(f"SELECT {geom_col} FROM {layer}")
         df = gpd.read_postgis(q, con.connect(), geom_col=geom_col).rename_geometry(
             "geometry"
         )
