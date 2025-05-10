@@ -88,8 +88,8 @@ Options:
                                   [default: 5000; required]
   -t, --threads INTEGER           Amount of threads used for operation
                                   [default: 7]
-  -tbl, --table TEXT              Name of the table to read when using a
-                                  spatial database connection as input
+  -lyr, --layer TEXT              Name of the layer or table to read when using a
+                                  an input that supports layers or tables
   -g, --geom_col TEXT             Column name to use when using a spatial
                                   database connection as input  [default:
                                   geom]
@@ -197,7 +197,7 @@ vector2dggs h3 -v DEBUG -id title_no -r 12 -o ~/Downloads/nz-property-titles.gpk
 With a PostgreSQL/PostGIS connection:
 
 ```bash
-vector2dggs h3 -v DEBUG -id ogc_fid -r 9 -p 5 -t 4 --overwrite -tbl topo50_lake postgresql://user:password@host:port/db ./topo50_lake.parquet
+vector2dggs h3 -v DEBUG -id ogc_fid -r 9 -p 5 -t 4 --overwrite -lyr topo50_lake postgresql://user:password@host:port/db ./topo50_lake.parquet
 ```
 
 ## Citation

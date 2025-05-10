@@ -155,12 +155,12 @@ def gh_polyfill(df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
     nargs=1,
 )
 @click.option(
-    "-tbl",
-    "--table",
+    "-lyr",
+    "--layer",
     required=False,
-    default=const.DEFAULTS["tbl"],
+    default=const.DEFAULTS["lyr"],
     type=str,
-    help="Name of the table to read when using a spatial database connection as input",
+    help="Name of the layer or table to read when using an input that supports layers or tables",
     nargs=1,
 )
 @click.option(
@@ -192,7 +192,7 @@ def geohash(
     cut_crs: int,
     cut_threshold: int,
     threads: int,
-    table: str,
+    layer: str,
     geom_col: str,
     tempdir: Union[str, Path],
     overwrite: bool,
@@ -230,7 +230,7 @@ def geohash(
             cut_crs=cut_crs,
             id_field=id_field,
             con=con,
-            table=table,
+            layer=layer,
             geom_col=geom_col,
             overwrite=overwrite,
         )
