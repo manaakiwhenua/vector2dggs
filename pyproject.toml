@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "vector2dggs"
-version = "0.8.0"
+version = "0.9.0"
 description = "CLI DGGS indexer for vector geospatial data"
 authors = ["James Ardo <ardoj@landcareresearch.co.nz>"]
 maintainers = ["Richard Law <lawr@landcareresearch.co.nz>"]
