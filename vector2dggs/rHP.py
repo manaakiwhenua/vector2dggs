@@ -131,6 +131,15 @@ def rhppolyfill(df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
     nargs=1,
 )
 @click.option(
+    "-cp",
+    "--compression",
+    required=False,
+    default=const.DEFAULTS["cp"],
+    type=str,
+    help="Compression method to use for the output Parquet files. Options include 'snappy', 'gzip', 'brotli', 'lz4', 'zstd', etc. Use 'none' for no compression.",
+    nargs=1,
+)
+@click.option(
     "-lyr",
     "--layer",
     required=False,
@@ -168,6 +177,7 @@ def rhp(
     cut_crs: int,
     cut_threshold: int,
     threads: int,
+    compression: str,
     layer: str,
     geom_col: str,
     tempdir: Union[str, Path],

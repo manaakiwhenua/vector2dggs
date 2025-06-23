@@ -87,7 +87,12 @@ Options:
                                   units match the units of the supplied CRS.
                                   [default: 5000; required]
   -t, --threads INTEGER           Amount of threads used for operation
-                                  [default: 7]
+                                  [default: NUM_CPUS - 1]
+  -cp, --compression TEXT         Compression method to use for the output
+                                  Parquet files. Options include 'snappy',
+                                  'gzip', 'brotli', 'lz4', 'zstd', etc. Use
+                                  'none' for no compression.  [default:
+                                  snappy]
   -lyr, --layer TEXT              Name of the layer or table to read when using a
                                   an input that supports layers or tables
   -g, --geom_col TEXT             Column name to use when using a spatial
