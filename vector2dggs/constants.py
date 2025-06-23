@@ -16,7 +16,7 @@ DEFAULTS = {
     "crs": None,
     "c": 5000,
     "t": (multiprocessing.cpu_count() - 1),
-    "cp": 'snappy',
+    "cp": "snappy",
     "lyr": None,
     "g": "geom",
     "tempdir": tempfile.tempdir,
