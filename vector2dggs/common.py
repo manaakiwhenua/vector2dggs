@@ -137,23 +137,50 @@ def parent_partitioning(
     dggs: str,
     input_dir: Path,
     output_dir: Path,
+    compaction_func: Callable,
     resolution: int,
     parent_res: int,
     **kwargs,
 ) -> None:
     partition_col = f"{dggs}_{parent_res:02}"
+    dggs_col = f"{dggs}_{resolution:02}"
 
-    with TqdmCallback(desc="Repartitioning and compressing"):
-        dd.read_parquet(input_dir, engine="pyarrow").to_parquet(
-            output_dir,
-            overwrite=kwargs.get("overwrite", False),
-            engine=kwargs.get("engine", "pyarrow"),
-            partition_on=partition_col,
-            compression=kwargs.get("compression", "snappy"),
-        )
-    LOGGER.debug("Parent cell repartitioning complete")
+    # Read the parquet files into a Dask DataFrame
+    ddf = dd.read_parquet(input_dir, engine="pyarrow")
+    # ddf = ddf.set_index(partition_col)
 
-    # Rename output to just be the partition key, suffix .parquet
+    if compaction_func:
+        with TqdmCallback(desc="Applying Compaction"):
+        # Apply the compaction function to each partition
+            ddf = ddf.map_partitions(
+                compaction_func, resolution, parent_res,
+                transform_divisions=True,
+                meta=ddf._meta,
+                enforce_metadata=False # Compaction intentionally changes the index
+            )
+            ddf.index = ddf.index.rename(dggs_col)
+            # ddf.persist()
+            # ddf = ddf.reset_index(drop=False)
+            # ddf.index.rename(dggs_col)
+            # ddf.index.rename(dggs_col)
+            # ddf = ddf.set_index(partition_col)
+            # ddf.index.name = dggs_col
+        # print(ddf.compute())
+        # print(ddf.index.name)
+    # else:
+        # print(ddf)
+
+    ddf.to_parquet(
+        output_dir,
+        overwrite=kwargs.get("overwrite", False),
+        engine=kwargs.get("engine", "pyarrow"),
+        partition_on=[partition_col],
+        compression=kwargs.get("compression", "ZSTD"),
+    )
+
+    LOGGER.debug("Parent cell partitioning complete")
+
+    # Append a .parquet suffix
     for f in os.listdir(output_dir):
         os.rename(
             os.path.join(output_dir, f),
@@ -161,7 +188,6 @@ def parent_partitioning(
         )
 
     return
-
 
 def polyfill(
     dggs: str,
@@ -212,6 +238,7 @@ def index(
     dggs: str,
     dggsfunc: Callable,
     secondary_index_func: Callable,
+    compaction_func: Callable,
     input_file: Union[Path, str],
     output_directory: Union[Path, str],
     resolution: int,
@@ -347,6 +374,7 @@ def index(
                 dggs,
                 Path(tmpdir2),
                 output_directory,
+                compaction_func,
                 resolution,
                 parent_res,
                 overwrite=overwrite,

@@ -4,6 +4,7 @@ import click_log
 import tempfile
 import pyproj
 
+import h3 as h3py
 import h3pandas  # Necessary import despite lack of explicit use
 
 import pandas as pd
@@ -49,6 +50,45 @@ def h3polyfill(df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
         )
     )
 
+def h3children(cell, desired_resolution: int) -> int:
+    """
+    Use h3 cell conversion to determine total number of children at some offset resolution
+    """
+    # NB we enumerate all children due to the presence of pentagonal cells
+    # The H3 API has cellToChildrenSize, but it is not available in Python API?
+    return len(h3py.cell_to_children(cell, desired_resolution))
+
+def h3compaction(df: pd.DataFrame, res: int, parent_res: int) -> pd.DataFrame:
+    """
+    Compacts an H3 dataframe up to a given low resolution (parent_res), up to an existing maximum resolution (res).
+    """
+    compaction_result : dict = {}
+    unprocessed_indices : set = set(df.index)
+
+    # Iterate from the minimum to the maximum resolution level
+    for r in range(parent_res, res):
+        
+        parents : set = {h3py.cell_to_parent(cell, r) for cell in unprocessed_indices}
+
+        for parent in parents:
+            expected_count : int = h3children(parent, res)
+            
+            # Collect indices for actual children of this parent
+            actual_children : set = {index for index in unprocessed_indices if h3py.cell_to_parent(index, r) == parent}
+            
+            if len(actual_children) == expected_count:
+                # Evaluate attributes for uniformity across these children
+                child_df = df.loc[list(actual_children)]
+                if child_df.apply(pd.Series.nunique).max() == 1:
+                    compaction_result[parent] = child_df.iloc[0]
+                    unprocessed_indices -= actual_children  # Mark these as processed by removing
+    
+    # Add any remaining cells >= max_res to the results
+    for index in unprocessed_indices:
+        compaction_result[index] = df.loc[index].to_frame()
+
+    # TODO how to handle overlapping data?
+    return pd.DataFrame.from_dict(compaction_result, orient='index')
 
 @click.command(context_settings={"show_default": True})
 @click_log.simple_verbosity_option(common.LOGGER)
@@ -162,6 +202,7 @@ def h3polyfill(df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
     type=click.Path(),
     help="Temporary data is created during the execution of this program. This parameter allows you to control where this data will be written.",
 )
+@click.option("-co", "--compact", is_flag=True, help="Compact the H3 cells up to the parent resolution. Compaction is not applied for cells without identical attributes.")
 @click.option("-o", "--overwrite", is_flag=True)
 @click.version_option(version=__version__)
 def h3(
@@ -180,6 +221,7 @@ def h3(
     layer: str,
     geom_col: str,
     tempdir: Union[str, Path],
+    compact: bool,
     overwrite: bool,
 ):
     """
@@ -203,6 +245,7 @@ def h3(
             "h3",
             h3polyfill,
             h3_secondary_index,
+            h3compaction if compact else None,
             vector_input,
             output_directory,
             int(resolution),
