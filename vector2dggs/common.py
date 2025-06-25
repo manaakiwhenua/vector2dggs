@@ -143,13 +143,13 @@ def parent_partitioning(
 ) -> None:
     partition_col = f"{dggs}_{parent_res:02}"
 
-    with TqdmCallback(desc="Repartitioning"):
+    with TqdmCallback(desc="Repartitioning and compressing"):
         dd.read_parquet(input_dir, engine="pyarrow").to_parquet(
             output_dir,
             overwrite=kwargs.get("overwrite", False),
             engine=kwargs.get("engine", "pyarrow"),
             partition_on=partition_col,
-            compression=kwargs.get("compression", "ZSTD"),
+            compression=kwargs.get("compression", "snappy"),
         )
     LOGGER.debug("Parent cell repartitioning complete")
 
@@ -172,6 +172,7 @@ def polyfill(
     resolution: int,
     parent_res: int,
     output_directory: str,
+    compression: str = "snappy",
 ) -> None:
     """
     Reads a geoparquet, performs polyfilling (for Polygon),
@@ -198,7 +199,7 @@ def polyfill(
     df = secondary_index_func(df, parent_res)
 
     df.to_parquet(
-        PurePath(output_directory, pq_in.name), engine="auto", compression="ZSTD"
+        PurePath(output_directory, pq_in.name), engine="auto", compression=compression
     )
     return None
 
@@ -220,6 +221,7 @@ def index(
     spatial_sorting: str,
     cut_threshold: int,
     processes: int,
+    compression: str = "snappy",
     id_field: str = None,
     cut_crs: pyproj.CRS = None,
     con: SQLConnectionType = None,
@@ -329,6 +331,7 @@ def index(
                         resolution,
                         parent_res,
                         tmpdir2,
+                        compression,
                     )
                     for filepath in filepaths
                 ]
@@ -347,6 +350,7 @@ def index(
                 resolution,
                 parent_res,
                 overwrite=overwrite,
+                compression=compression,
             )
 
     return output_directory
