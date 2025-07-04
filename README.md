@@ -2,7 +2,7 @@
 
 [![pypi](https://img.shields.io/pypi/v/vector2dggs?label=vector2dggs)](https://pypi.org/project/vector2dggs/)
 
-Python-based CLI tool to index raster files to DGGS in parallel, writing out to Parquet.
+Python-based CLI tool to index vector files to DGGS in parallel, writing out to Parquet.
 
 This is the vector equivalent of [raster2dggs](https://github.com/manaakiwhenua/raster2dggs).
 
@@ -16,7 +16,7 @@ Currently this tool supports the following DGGSs:
 
 - [Geohash](https://en.wikipedia.org/wiki/Geohash) (points, polygons)
 
-Contributions (espeically for other DGGSs), suggestions, bug reports and strongly worded letters are all welcome.
+Contributions (especially for other DGGSs), suggestions, bug reports and strongly worded letters are all welcome.
 
 ![Example use case for vector2dggs, showing parcels indexed to a high H3 resolution](./docs/imgs/vector2dggs-example.png "Example use case for vector2dggs, showing parcels indexed to a high H3 resolution")
 
