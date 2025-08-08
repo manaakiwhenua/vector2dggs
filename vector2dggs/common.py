@@ -247,7 +247,7 @@ def index(
         )
     else:
         # Read file
-        df = gpd.read_file(input_file)
+        df = gpd.read_file(input_file, layer=layer)
 
     if cut_crs:
         df = df.to_crs(cut_crs)
