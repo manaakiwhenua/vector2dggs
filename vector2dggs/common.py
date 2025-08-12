@@ -71,7 +71,6 @@ def compaction(
     """
     Compacts a dataframe up to a given low resolution (parent_res), from an existing maximum resolution (res).
     """
-    dggs_col = f"h3_{res:02}"
     df = df.reset_index(drop=False)
 
     feature_cell_groups = (
@@ -212,7 +211,7 @@ def parent_partitioning(
     dggs: str,
     input_dir: Path,
     output_dir: Path,
-    compaction_func: Callable,
+    compaction_func: Union[Callable, None],
     resolution: int,
     parent_res: int,
     id_field: str,
@@ -224,21 +223,12 @@ def parent_partitioning(
     # Read the parquet files into a Dask DataFrame
     ddf = dd.read_parquet(input_dir, engine="pyarrow")
     meta = ddf._meta
-    # print(ddf.compute())
 
     with TqdmCallback(
         desc=f"Parent partitioning, writing {'compacted ' if compaction_func else ''}output"
     ):
         if compaction_func:
             # Apply the compaction function to each partition
-            # ddf.persist()
-            # n_parts = ddf[partition_col].nunique().compute()
-            # unique_parents = sorted(list(ddf.index.unique().compute()))
-            # ddf = ddf.repartition(
-            #     divisions=(unique_parents + [unique_parents[-1]])
-            # )
-            # ddf = ddf.reset_index(drop=False).set_index(partition_col)
-            # NB index at this point should be DGGS at max res, not parent
             unique_parents = sorted(list(ddf[partition_col].unique().compute()))
             divisions = unique_parents + [unique_parents[-1]]
             ddf = (
@@ -248,37 +238,12 @@ def parent_partitioning(
                 .map_partitions(
                     compaction_func,
                     resolution,
-                    parent_res,
-                    col_order=meta.columns.to_list(),
-                    id_field=id_field,
-                    # transform_divisions=True,
+                    meta.columns.to_list(),  # Column order to be returned
+                    dggs_col,
+                    id_field,
                     meta=meta,
-                    # enforce_metadata=True # Compaction intentionally changes the index
                 )
-            )  # .reset_index(drop=False)
-            # print(ddf)
-            # ddf.index = ddf.index.rename(dggs_col)
-            # print(ddf.compute())
-            # print(ddf)
-            # ddf.persist()
-            # ddf = ddf.reset_index(drop=False)
-            # ddf.index.rename(dggs_col)
-            # ddf.index.rename(dggs_col)
-            # ddf = ddf.set_index(partition_col)
-            # ddf.index.name = dggs_col
-            # print(ddf.compute())
-            # print(ddf.index.name)
-        # else:
-        # print(ddf)
-
-        # ddf.index = ddf.index.rename(dggs_col)
-        # ddf = ddf.reset_index(drop=False)
-        # print(ddf)
-        # print(ddf.compute())
-        # kwargs = {
-        #     'partition_on': None,
-        #     'name_function': lambda i: f"{unique_parents[i]}.parquet",
-        # }
+            )
 
         ddf.to_parquet(
             output_dir,
@@ -350,7 +315,7 @@ def index(
     dggs: str,
     dggsfunc: Callable,
     secondary_index_func: Callable,
-    compaction_func: Callable,
+    compaction_func: Union[Callable, None],
     input_file: Union[Path, str],
     output_directory: Union[Path, str],
     resolution: int,

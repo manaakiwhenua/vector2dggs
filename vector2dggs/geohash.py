@@ -82,6 +82,7 @@ def gh_children(geohash: str, desired_resolution: int) -> int:
     return 32**additional_length  # Each new character increases resolution by 32
 
 
+# TODO this does not handle overlapping features
 def gh_compaction(df: pd.DataFrame, level: int, parent_level: int) -> pd.DataFrame:
     """
     Compacts a dataframe indexed by geohash from max to parent resolution.
@@ -232,7 +233,7 @@ def gh_compaction(df: pd.DataFrame, level: int, parent_level: int) -> pd.DataFra
     "-co",
     "--compact",
     is_flag=True,
-    help="Compact the H3 cells up to the parent resolution. Compaction is not applied for cells without identical attributes.",
+    help="Compact the geohash cells up to the parent resolution. Compaction requires an id_field.",
 )
 @click.option("-o", "--overwrite", is_flag=True)
 @click.version_option(version=__version__)

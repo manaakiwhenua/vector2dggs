@@ -11,7 +11,9 @@ import geopandas as gpd
 
 from typing import Union
 from pathlib import Path
+from rhealpixdggs.conversion import compress_order_cells
 from rhppandas.util.const import COLUMNS
+from rhealpixdggs.rhp_wrappers import rhp_to_center_child
 
 import vector2dggs.constants as const
 import vector2dggs.common as common
@@ -48,6 +50,27 @@ def rhppolyfill(df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
             lambda _df: pd.DataFrame(_df.drop(columns=[_df.geometry.name])),
             [df_polygon, df_linestring, df_point],
         )
+    )
+
+
+def rhpcompaction(
+    df: pd.DataFrame,
+    res: int,
+    col_order: list,
+    dggs_col: str,
+    id_field: str,
+) -> pd.DataFrame:
+    """
+    Compacts an H3 dataframe up to a given low resolution (parent_res), from an existing maximum resolution (res).
+    """
+    return common.compaction(
+        df,
+        res,
+        id_field,
+        col_order,
+        dggs_col,
+        compress_order_cells,  # TODO This doesn't compact like the h3 equivalent; possibly need a new function. Read the H3 one to write an equivalent?
+        rhp_to_center_child,
     )
 
 
@@ -163,6 +186,12 @@ def rhppolyfill(df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
     type=click.Path(),
     help="Temporary data is created during the execution of this program. This parameter allows you to control where this data will be written.",
 )
+@click.option(
+    "-co",
+    "--compact",
+    is_flag=True,
+    help="Compact the rHEALPix cells up to the parent resolution. Compaction requires an id_field.",
+)
 @click.option("-o", "--overwrite", is_flag=True)
 @click.version_option(version=__version__)
 def rhp(
@@ -181,6 +210,7 @@ def rhp(
     layer: str,
     geom_col: str,
     tempdir: Union[str, Path],
+    compact: bool,
     overwrite: bool,
 ):
     """
@@ -192,6 +222,7 @@ def rhp(
     tempfile.tempdir = tempdir if tempdir is not None else tempfile.tempdir
 
     common.check_resolutions(resolution, parent_res)
+    common.check_compaction_requirements(compact, id_field)
 
     con, vector_input = common.db_conn_and_input_path(vector_input)
     output_directory = common.resolve_output_path(output_directory, overwrite)
@@ -204,6 +235,7 @@ def rhp(
             "rhp",
             rhppolyfill,
             rhp_secondary_index,
+            rhpcompaction if compact else None,
             vector_input,
             output_directory,
             int(resolution),
@@ -213,6 +245,7 @@ def rhp(
             spatial_sorting,
             cut_threshold,
             threads,
+            compression=compression,
             cut_crs=cut_crs,
             id_field=id_field,
             con=con,

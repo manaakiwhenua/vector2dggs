@@ -53,12 +53,15 @@ def h3polyfill(df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
 
 
 def h3compaction(
-    df: pd.DataFrame, res: int, parent_res: int, col_order: list, id_field: str
+    df: pd.DataFrame,
+    res: int,
+    col_order: list,
+    dggs_col: str,
+    id_field: str,
 ) -> pd.DataFrame:
     """
     Compacts an H3 dataframe up to a given low resolution (parent_res), from an existing maximum resolution (res).
     """
-    dggs_col = f"h3_{res:02}"
     return common.compaction(
         df,
         res,
@@ -186,7 +189,7 @@ def h3compaction(
     "-co",
     "--compact",
     is_flag=True,
-    help="Compact the H3 cells up to the parent resolution. Compaction is not applied for cells without identical attributes.",
+    help="Compact the H3 cells up to the parent resolution. Compaction requires an id_field.",
 )
 @click.option("-o", "--overwrite", is_flag=True)
 @click.version_option(version=__version__)
