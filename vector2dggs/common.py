@@ -6,13 +6,14 @@ import click_log
 import sqlalchemy
 import shutil
 import pyproj
+from uuid import uuid4
 
 import pandas as pd
 import geopandas as gpd
 import dask.dataframe as dd
 import dask_geopandas as dgpd
 
-from typing import Union, Callable
+from typing import Union, Callable, Iterable
 from pathlib import Path, PurePath
 from urllib.parse import urlparse
 from tqdm import tqdm
@@ -36,6 +37,12 @@ class ParentResolutionException(Exception):
     pass
 
 
+class IdFieldError(ValueError):
+    """Raised when an invalid or missing ID field is provided."""
+
+    pass
+
+
 def check_resolutions(resolution: int, parent_res: int) -> None:
     if parent_res is not None and not int(parent_res) < int(resolution):
         raise ParentResolutionException(
@@ -43,6 +50,74 @@ def check_resolutions(resolution: int, parent_res: int) -> None:
                 pr=parent_res, r=resolution
             )
         )
+
+
+def check_compaction_requirements(compact: bool, id_field: Union[str, None]) -> None:
+    if compact and not id_field:
+        raise IdFieldError(
+            "An id_field is required for compaction, in order to handle the potential for overlapping features"
+        )
+
+
+def compaction(
+    df: pd.DataFrame,
+    res: int,
+    id_field: str,
+    col_order: list[str],
+    dggs_col: str,
+    compact_func: Callable[[Iterable[Union[str, int]]], Iterable[Union[str, int]]],
+    cell_to_child_func: Callable[[Union[str, int], int], Union[str, int]],
+):
+    """
+    Compacts a dataframe up to a given low resolution (parent_res), from an existing maximum resolution (res).
+    """
+    dggs_col = f"h3_{res:02}"
+    df = df.reset_index(drop=False)
+
+    feature_cell_groups = (
+        df.groupby(id_field)[dggs_col].apply(lambda x: set(x)).to_dict()
+    )
+    feature_cell_compact = {
+        id: set(compact_func(cells)) for id, cells in feature_cell_groups.items()
+    }
+
+    uncompressable = {
+        id: feature_cell_groups[id] & feature_cell_compact[id]
+        for id in feature_cell_groups.keys()
+    }
+    compressable = {
+        id: feature_cell_compact[id] - feature_cell_groups[id]
+        for id in feature_cell_groups.keys()
+    }
+
+    # Get rows that cannot be compressed
+    mask = pd.Series([False] * len(df), index=df.index)  # Init bool mask
+    for key, value_set in uncompressable.items():
+        mask |= (df[id_field] == key) & (df[dggs_col].isin(value_set))
+    uncompressable_df = df[mask].set_index(dggs_col)
+
+    # Get rows that can be compressed
+    # Convert each compressed (coarser resolution) cell into a cell at
+    #   the original resolution (usu using centre child as reference)
+    compression_mapping = {
+        (id, cell_to_child_func(cell, res)): cell
+        for id, cells in compressable.items()
+        if cells
+        for cell in cells
+    }
+    mask = pd.Series([False] * len(df), index=df.index)
+    composite_key = f"composite_key_{uuid4()}"
+    # Update mask for compressible rows and prepare for replacement
+    get_composite_key = lambda row: (row[id_field], row[dggs_col])
+    df[composite_key] = df.apply(get_composite_key, axis=1)
+    mask |= df[composite_key].isin(compression_mapping)
+    compressable_df = df[mask].copy()
+    compressable_df[dggs_col] = compressable_df[composite_key].map(
+        compression_mapping
+    )  # Replace DGGS cell ID with compressed representation
+    compressable_df = compressable_df.set_index(dggs_col)
+
+    return pd.concat([compressable_df, uncompressable_df])[col_order]
 
 
 def db_conn_and_input_path(
@@ -140,6 +215,7 @@ def parent_partitioning(
     compaction_func: Callable,
     resolution: int,
     parent_res: int,
+    id_field: str,
     **kwargs,
 ) -> None:
     partition_col = f"{dggs}_{parent_res:02}"
@@ -147,36 +223,71 @@ def parent_partitioning(
 
     # Read the parquet files into a Dask DataFrame
     ddf = dd.read_parquet(input_dir, engine="pyarrow")
-    # ddf = ddf.set_index(partition_col)
+    meta = ddf._meta
+    # print(ddf.compute())
 
-    if compaction_func:
-        with TqdmCallback(desc="Applying Compaction"):
-        # Apply the compaction function to each partition
-            ddf = ddf.map_partitions(
-                compaction_func, resolution, parent_res,
-                transform_divisions=True,
-                meta=ddf._meta,
-                enforce_metadata=False # Compaction intentionally changes the index
-            )
-            ddf.index = ddf.index.rename(dggs_col)
+    with TqdmCallback(
+        desc=f"Parent partitioning, writing {'compacted ' if compaction_func else ''}output"
+    ):
+        if compaction_func:
+            # Apply the compaction function to each partition
+            # ddf.persist()
+            # n_parts = ddf[partition_col].nunique().compute()
+            # unique_parents = sorted(list(ddf.index.unique().compute()))
+            # ddf = ddf.repartition(
+            #     divisions=(unique_parents + [unique_parents[-1]])
+            # )
+            # ddf = ddf.reset_index(drop=False).set_index(partition_col)
+            # NB index at this point should be DGGS at max res, not parent
+            unique_parents = sorted(list(ddf[partition_col].unique().compute()))
+            divisions = unique_parents + [unique_parents[-1]]
+            ddf = (
+                ddf.reset_index(drop=False)
+                .set_index(partition_col)
+                .repartition(divisions=divisions)
+                .map_partitions(
+                    compaction_func,
+                    resolution,
+                    parent_res,
+                    col_order=meta.columns.to_list(),
+                    id_field=id_field,
+                    # transform_divisions=True,
+                    meta=meta,
+                    # enforce_metadata=True # Compaction intentionally changes the index
+                )
+            )  # .reset_index(drop=False)
+            # print(ddf)
+            # ddf.index = ddf.index.rename(dggs_col)
+            # print(ddf.compute())
+            # print(ddf)
             # ddf.persist()
             # ddf = ddf.reset_index(drop=False)
             # ddf.index.rename(dggs_col)
             # ddf.index.rename(dggs_col)
             # ddf = ddf.set_index(partition_col)
             # ddf.index.name = dggs_col
-        # print(ddf.compute())
-        # print(ddf.index.name)
-    # else:
+            # print(ddf.compute())
+            # print(ddf.index.name)
+        # else:
         # print(ddf)
 
-    ddf.to_parquet(
-        output_dir,
-        overwrite=kwargs.get("overwrite", False),
-        engine=kwargs.get("engine", "pyarrow"),
-        partition_on=[partition_col],
-        compression=kwargs.get("compression", "ZSTD"),
-    )
+        # ddf.index = ddf.index.rename(dggs_col)
+        # ddf = ddf.reset_index(drop=False)
+        # print(ddf)
+        # print(ddf.compute())
+        # kwargs = {
+        #     'partition_on': None,
+        #     'name_function': lambda i: f"{unique_parents[i]}.parquet",
+        # }
+
+        ddf.to_parquet(
+            output_dir,
+            overwrite=kwargs.get("overwrite", False),
+            engine=kwargs.get("engine", "pyarrow"),
+            partition_on=[partition_col],
+            compression=kwargs.get("compression", "ZSTD"),
+            # **kwargs
+        )
 
     LOGGER.debug("Parent cell partitioning complete")
 
@@ -184,10 +295,11 @@ def parent_partitioning(
     for f in os.listdir(output_dir):
         os.rename(
             os.path.join(output_dir, f),
-            os.path.join(output_dir, f.replace(f"{partition_col}=", "") + ".parquet"),
+            os.path.join(output_dir, f.replace(f"{partition_col}=", "")),
         )
 
     return
+
 
 def polyfill(
     dggs: str,
@@ -377,6 +489,7 @@ def index(
                 compaction_func,
                 resolution,
                 parent_res,
+                id_field,
                 overwrite=overwrite,
                 compression=compression,
             )

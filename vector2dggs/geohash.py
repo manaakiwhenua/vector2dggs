@@ -72,13 +72,15 @@ def gh_polyfill(df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
         )
     )
 
+
 def gh_children(geohash: str, desired_resolution: int) -> int:
     """
     Determine the number of children in the geohash refinement, determined by the additional character levels.
     """
     current_resolution = len(geohash)
     additional_length = desired_resolution - current_resolution
-    return 32 ** additional_length  # Each new character increases resolution by 32
+    return 32**additional_length  # Each new character increases resolution by 32
+
 
 def gh_compaction(df: pd.DataFrame, level: int, parent_level: int) -> pd.DataFrame:
     """
@@ -95,8 +97,10 @@ def gh_compaction(df: pd.DataFrame, level: int, parent_level: int) -> pd.DataFra
         for parent in parents:
             expected_count = gh_children(parent, level)
 
-            actual_children = {idx for idx in unprocessed_indices if idx.startswith(parent)}
-            
+            actual_children = {
+                idx for idx in unprocessed_indices if idx.startswith(parent)
+            }
+
             if len(actual_children) == expected_count:
                 child_df = df.loc[list(actual_children)]
                 if child_df.apply(pd.Series.nunique).max() == 1:
@@ -106,8 +110,9 @@ def gh_compaction(df: pd.DataFrame, level: int, parent_level: int) -> pd.DataFra
     # Include remaining max-level geohashes
     for index in unprocessed_indices:
         compaction_result[index] = df.loc[index]
-                        
-    return pd.DataFrame.from_dict(compaction_result, orient='index')
+
+    return pd.DataFrame.from_dict(compaction_result, orient="index")
+
 
 @click.command(context_settings={"show_default": True})
 @click_log.simple_verbosity_option(common.LOGGER)
@@ -223,7 +228,12 @@ def gh_compaction(df: pd.DataFrame, level: int, parent_level: int) -> pd.DataFra
     type=click.Path(),
     help="Temporary data is created during the execution of this program. This parameter allows you to control where this data will be written.",
 )
-@click.option("-co", "--compact", is_flag=True, help="Compact the H3 cells up to the parent resolution. Compaction is not applied for cells without identical attributes.")
+@click.option(
+    "-co",
+    "--compact",
+    is_flag=True,
+    help="Compact the H3 cells up to the parent resolution. Compaction is not applied for cells without identical attributes.",
+)
 @click.option("-o", "--overwrite", is_flag=True)
 @click.version_option(version=__version__)
 def geohash(
