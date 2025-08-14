@@ -19,6 +19,8 @@ import vector2dggs.common as common
 
 from vector2dggs import __version__
 
+GEOHASH_BASE32_SET = set("0123456789bcdefghjkmnpqrstuvwxyz")
+
 
 def gh_secondary_index(df: pd.DataFrame, parent_level: int) -> pd.DataFrame:
     df[f"geohash_{parent_level:02}"] = df.index.to_series().str[:parent_level]
@@ -82,37 +84,71 @@ def gh_children(geohash: str, desired_resolution: int) -> int:
     return 32**additional_length  # Each new character increases resolution by 32
 
 
-# TODO this does not handle overlapping features
-def gh_compaction(df: pd.DataFrame, level: int, parent_level: int) -> pd.DataFrame:
+def compact(cells: set[str]) -> set[str]:
     """
-    Compacts a dataframe indexed by geohash from max to parent resolution.
+    Compact a set of geohash cells.
+    Cells must be at the same resolution.
     """
-    compaction_result = {}
-    unprocessed_indices = set(df.index)
+    current_set = set(cells)
+    while True:
+        parent_map = {}
+        for gh in current_set:
+            parent = gh[:-1]
+            if parent not in parent_map:
+                parent_map[parent] = set()
+            parent_map[parent].add(gh)
 
-    # Iterate with geohash length increments from parent to max length
-    for l in range(parent_level, level):
+        next_set = set()
+        for parent, siblings in parent_map.items():
+            if len(siblings) == 32:
+                next_set.add(parent)
+            else:
+                next_set.update(siblings)
 
-        parents = {idx[:l] for idx in unprocessed_indices}
+        if next_set == current_set:
+            break
+        current_set = next_set
 
-        for parent in parents:
-            expected_count = gh_children(parent, level)
+    return current_set
 
-            actual_children = {
-                idx for idx in unprocessed_indices if idx.startswith(parent)
-            }
 
-            if len(actual_children) == expected_count:
-                child_df = df.loc[list(actual_children)]
-                if child_df.apply(pd.Series.nunique).max() == 1:
-                    compaction_result[parent] = child_df.iloc[0]
-                    unprocessed_indices -= actual_children
+def get_central_child(geohash: str, precision: int):
+    """
+    Return an approximate central child of the geohash.
+    NB if only an arbitrary child is needed, use get_child_geohash
+    """
+    lat, lon = decode(geohash)
+    return encode(lat, lon, precision=precision)
 
-    # Include remaining max-level geohashes
-    for index in unprocessed_indices:
-        compaction_result[index] = df.loc[index]
 
-    return pd.DataFrame.from_dict(compaction_result, orient="index")
+def get_child_geohash(geohash: str, desired_length: int, child: str = "0"):
+    """
+    Get a child geohash of the specified length by extending the input geohash.
+    Child geohash is
+    """
+    if child not in GEOHASH_BASE32_SET:
+        raise ValueError(
+            f"Invalid child character '{child}'. Must be one of {''.join(GEOHASH_BASE32_SET)}."
+        )
+
+    if len(geohash) >= desired_length:
+        return geohash
+    return geohash.ljust(desired_length, child)
+
+
+def gh_compaction(
+    df: pd.DataFrame,
+    res: int,
+    col_order: list,
+    dggs_col: str,
+    id_field: str,
+) -> pd.DataFrame:
+    """
+    Compacts a geohash dataframe up to a given low resolution (parent_res), from an existing maximum resolution (res).
+    """
+    return common.compaction(
+        df, res, id_field, col_order, dggs_col, compact, get_child_geohash
+    )
 
 
 @click.command(context_settings={"show_default": True})

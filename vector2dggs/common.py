@@ -229,10 +229,13 @@ def parent_partitioning(
     ):
         if compaction_func:
             # Apply the compaction function to each partition
-            unique_parents = sorted(list(ddf[partition_col].unique().compute()))
+            unique_parents = sorted(
+                [v for v in ddf[partition_col].unique().compute() if pd.notna(v)]
+            )
             divisions = unique_parents + [unique_parents[-1]]
             ddf = (
                 ddf.reset_index(drop=False)
+                .dropna(subset=[partition_col])
                 .set_index(partition_col)
                 .repartition(divisions=divisions)
                 .map_partitions(

@@ -182,6 +182,54 @@ def s2_polyfill(df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
     )
 
 
+def compact_tokens(tokens: set[str]) -> set[str]:
+    """
+    Compact a set of S2 DGGS cells.
+    Cells must be at the same resolution.
+    """
+    cell_ids: list[S2.S2CellId] = [
+        S2.S2CellId.FromToken(token, len(token)) for token in tokens
+    ]
+    cell_union: S2.S2CellUnion = S2.S2CellUnion(
+        cell_ids
+    )  # Vector of sorted, non-overlapping S2CellId
+    cell_union.NormalizeS2CellUnion()  # Mutates; 'normalize' == 'compact'
+    return {c.ToToken() for c in cell_union.cell_ids()}
+
+
+def token_to_child_token(token: str, level: int) -> str:
+    """
+    Returns first child (as string token) of a cell (also represented as a string
+    token) at a specific level.
+    """
+    cell: S2.S2CellId = S2.S2CellId.FromToken(token, len(token))
+    if level <= cell.level():
+        raise ValueError("Level must be greater than the current level of the cell.")
+    # Get the child cell iterator
+    return cell.child_begin(level).ToToken()
+
+
+def s2_compaction(
+    df: pd.DataFrame,
+    res: int,
+    col_order: list,
+    dggs_col: str,
+    id_field: str,
+) -> pd.DataFrame:
+    """
+    Compacts an S2 dataframe up to a given low resolution (parent_res), from an existing maximum resolution (res).
+    """
+    return common.compaction(
+        df,
+        res,
+        id_field,
+        col_order,
+        dggs_col,
+        compact_tokens,
+        token_to_child_token,
+    )
+
+
 @click.command(context_settings={"show_default": True})
 @click_log.simple_verbosity_option(common.LOGGER)
 @click.argument("vector_input", required=True, type=click.Path(), nargs=1)
@@ -296,6 +344,12 @@ def s2_polyfill(df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
     type=click.Path(),
     help="Temporary data is created during the execution of this program. This parameter allows you to control where this data will be written.",
 )
+@click.option(
+    "-co",
+    "--compact",
+    is_flag=True,
+    help="Compact the rHEALPix cells up to the parent resolution. Compaction requires an id_field.",
+)
 @click.option("-o", "--overwrite", is_flag=True)
 @click.version_option(version=__version__)
 def s2(
@@ -314,6 +368,7 @@ def s2(
     layer: str,
     geom_col: str,
     tempdir: Union[str, Path],
+    compact: bool,
     overwrite: bool,
 ):
     """
@@ -337,6 +392,7 @@ def s2(
             "s2",
             s2_polyfill,
             s2_secondary_index,
+            s2_compaction if compact else None,
             vector_input,
             output_directory,
             int(level),
@@ -346,6 +402,7 @@ def s2(
             spatial_sorting,
             cut_threshold,
             threads,
+            compression=compression,
             cut_crs=cut_crs,
             id_field=id_field,
             con=con,

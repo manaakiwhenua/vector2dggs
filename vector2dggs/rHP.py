@@ -13,7 +13,12 @@ from typing import Union
 from pathlib import Path
 from rhealpixdggs.conversion import compress_order_cells
 from rhppandas.util.const import COLUMNS
-from rhealpixdggs.rhp_wrappers import rhp_to_center_child
+
+# from rhealpixdggs.rhp_wrappers import rhp_to_center_child, rhp_is_valid
+from rhealpixdggs.rhp_wrappers import rhp_is_valid
+from rhealpixdggs.dggs import RHEALPixDGGS
+from rhealpixdggs.dggs import WGS84_003
+from rhealpixdggs.cell import Cell
 
 import vector2dggs.constants as const
 import vector2dggs.common as common
@@ -29,7 +34,7 @@ def rhppolyfill(df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
     df_polygon = df[df.geom_type == "Polygon"]
     if len(df_polygon.index) > 0:
         df_polygon = df_polygon.rhp.polyfill_resample(
-            resolution, return_geometry=False
+            resolution, return_geometry=False, compress=False
         ).drop(columns=["index"])
 
     df_linestring = df[df.geom_type == "LineString"]
@@ -53,6 +58,69 @@ def rhppolyfill(df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
     )
 
 
+# TODO replace when merged https://github.com/manaakiwhenua/rhealpixdggs-py/pull/37
+def rhp_to_center_child(
+    rhpindex: str, res: int = None, dggs: RHEALPixDGGS = WGS84_003
+) -> str:
+    """
+    Returns central child of rhpindex at resolution res (immediate central
+    child if res == None).
+
+    Returns None if the cell index is invalid.
+
+    Returns None if the DGGS has an even number of cells on a side.
+
+    EXAMPLES::
+
+        >>> rhp_to_center_child('S001450634')
+        'S0014506344'
+        >>> rhp_to_center_child('S001450634', res=13)
+        'S001450634444'
+        >>> rhp_to_center_child('INVALID')
+    """
+    # Stop early if the cell index is invalid
+    if not rhp_is_valid(rhpindex, dggs):
+        return None
+
+    # DGGSs with even numbers of cells on a side never have a cell at the centre
+    if (dggs.N_side % 2) == 0:
+        return None
+
+    # Handle mismatch between cell resolution and requested child resolution
+    parent_res = len(rhpindex) - 1
+    if res is not None and res < parent_res:
+        return rhpindex
+
+    # Standard case (including parent_res == res)
+    else:
+        # res == None returns the central child from one level down (by convention)
+        added_levels = 1 if res is None else res - parent_res
+
+        # Derive index of centre child and append that to rhpindex
+        # NOTE: only works for odd values of N_side
+        c_index = int((dggs.N_side**2 - 1) / 2)
+
+        # Append the required number of child digits to cell index
+        child_index = rhpindex + "".join(str(c_index) for _ in range(0, added_levels))
+
+        return child_index
+
+
+def compact_cells(cells: set[str]) -> set[str]:
+    """
+    Compact a set of rHEALPix DGGS cells.
+    Cells must be at the same resolution.
+    See https://github.com/manaakiwhenua/rhealpixdggs-py/issues/35#issuecomment-3186073554
+    """
+    previous_result = set(cells)
+    while True:
+        current_result = set(compress_order_cells(previous_result))
+        if previous_result == current_result:
+            break
+        previous_result = current_result
+    return previous_result
+
+
 def rhpcompaction(
     df: pd.DataFrame,
     res: int,
@@ -61,7 +129,7 @@ def rhpcompaction(
     id_field: str,
 ) -> pd.DataFrame:
     """
-    Compacts an H3 dataframe up to a given low resolution (parent_res), from an existing maximum resolution (res).
+    Compacts an rHP dataframe up to a given low resolution (parent_res), from an existing maximum resolution (res).
     """
     return common.compaction(
         df,
@@ -69,7 +137,7 @@ def rhpcompaction(
         id_field,
         col_order,
         dggs_col,
-        compress_order_cells,  # TODO This doesn't compact like the h3 equivalent; possibly need a new function. Read the H3 one to write an equivalent?
+        compact_cells,
         rhp_to_center_child,
     )
 
