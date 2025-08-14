@@ -3,7 +3,6 @@ import click
 import click_log
 import tempfile
 import pyproj
-import uuid
 
 import h3 as h3py
 import h3pandas  # Necessary import despite lack of explicit use

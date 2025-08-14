@@ -18,7 +18,6 @@ from rhppandas.util.const import COLUMNS
 from rhealpixdggs.rhp_wrappers import rhp_is_valid
 from rhealpixdggs.dggs import RHEALPixDGGS
 from rhealpixdggs.dggs import WGS84_003
-from rhealpixdggs.cell import Cell
 
 import vector2dggs.constants as const
 import vector2dggs.common as common
