@@ -73,19 +73,19 @@ Options:
                                   use when spatially partioning. Adjusting
                                   this number will trade off memory use and
                                   time.  [default: 50; required]
-  -s, --spatial_sorting [hilbert|morton|geohash]
+  -s, --spatial_sorting [hilbert|morton|geohash|none]
                                   Spatial sorting method when perfoming
-                                  spatial partitioning.  [default: hilbert]
+                                  spatial partitioning.  [default: none]
   -crs, --cut_crs INTEGER         Set the coordinate reference system (CRS)
-                                  used for cutting large polygons (see `--cur-
-                                  threshold`). Defaults to the same CRS as the
-                                  input. Should be a valid EPSG code.
-  -c, --cut_threshold INTEGER     Cutting up large polygons into smaller
-                                  pieces based on a target length. Units are
-                                  assumed to match the input CRS units unless
-                                  the `--cut_crs` is also given, in which case
-                                  units match the units of the supplied CRS.
-                                  [default: 5000; required]
+                                  used for cutting large geometries (see
+                                  `--cut_threshold`). Defaults to the same CRS
+                                  as the input. Should be a valid EPSG code.
+  -c, --cut_threshold INTEGER     Cutting up large geometries into smaller
+                                  geometries based on a target length. Units
+                                  are assumed to match the input CRS units
+                                  unless the `--cut_crs` is also given, in
+                                  which case units match the units of the
+                                  supplied CRS.  [default: 5000; required]
   -t, --threads INTEGER           Amount of threads used for operation
                                   [default: NUM_CPUS - 1]
   -cp, --compression TEXT         Compression method to use for the output
@@ -93,8 +93,9 @@ Options:
                                   'gzip', 'brotli', 'lz4', 'zstd', etc. Use
                                   'none' for no compression.  [default:
                                   snappy]
-  -lyr, --layer TEXT              Name of the layer or table to read when using a
-                                  an input that supports layers or tables
+  -lyr, --layer TEXT              Name of the layer or table to read when
+                                  using an input that supports layers or
+                                  tables
   -g, --geom_col TEXT             Column name to use when using a spatial
                                   database connection as input  [default:
                                   geom]
@@ -102,6 +103,8 @@ Options:
                                   execution of this program. This parameter
                                   allows you to control where this data will
                                   be written.
+  -co, --compact                  Compact the H3 cells up to the parent
+                                  resolution. Compaction requires an id_field.
   -o, --overwrite
   --version                       Show the version and exit.
   --help                          Show this message and exit.
@@ -151,7 +154,6 @@ from shapely.geometry import Polygon
 
 RES = 18
 df = pd.read_parquet(f'~/output-data/ponds-with-holes.s2.{RES}.pq')
-df = df.reset_index()
 
 def s2id_to_polygon(s2_id_hex):
     cell_id = s2sphere.CellId.from_token(s2_id_hex)
@@ -163,10 +165,16 @@ def s2id_to_polygon(s2_id_hex):
         vertices.append((lat_lng.lng().degrees, lat_lng.lat().degrees))  # (lon, lat)
     return Polygon(vertices)
 
-df['geometry'] = df[f's2_{RES}'].apply(s2id_to_polygon)
+df['geometry'] = df.index.to_series().apply(s2id_to_polygon)
 df = gpd.GeoDataFrame(df, geometry='geometry', crs='EPSG:4326')  # WGS84
 df.to_parquet(f'sample-{RES}.parquet')
 ```
+
+## Compaction
+
+Compaction is supported with the `-co/--compact` argument. The result respects overlapping polygons by considering each feature independently. (In the below example output for rHEALPix, cells are shown with opacity; overlap is visible where there is a darker shade.) This does mean that the index of the result is not necessarily unique (unless your input is a vector _coverage_, i.e. it does not have overlaps.)
+
+![Example of compaction of overlapping vector features with the rHEALPix DGGS](docs/imgs/rhp-compaction-example.png)
 
 ### For development
 
