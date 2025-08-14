@@ -11,7 +11,13 @@ import geopandas as gpd
 
 from typing import Union
 from pathlib import Path
+from rhealpixdggs.conversion import compress_order_cells
 from rhppandas.util.const import COLUMNS
+
+# from rhealpixdggs.rhp_wrappers import rhp_to_center_child, rhp_is_valid
+from rhealpixdggs.rhp_wrappers import rhp_is_valid
+from rhealpixdggs.dggs import RHEALPixDGGS
+from rhealpixdggs.dggs import WGS84_003
 
 import vector2dggs.constants as const
 import vector2dggs.common as common
@@ -27,7 +33,7 @@ def rhppolyfill(df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
     df_polygon = df[df.geom_type == "Polygon"]
     if len(df_polygon.index) > 0:
         df_polygon = df_polygon.rhp.polyfill_resample(
-            resolution, return_geometry=False
+            resolution, return_geometry=False, compress=False
         ).drop(columns=["index"])
 
     df_linestring = df[df.geom_type == "LineString"]
@@ -48,6 +54,90 @@ def rhppolyfill(df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
             lambda _df: pd.DataFrame(_df.drop(columns=[_df.geometry.name])),
             [df_polygon, df_linestring, df_point],
         )
+    )
+
+
+# TODO replace when merged https://github.com/manaakiwhenua/rhealpixdggs-py/pull/37
+def rhp_to_center_child(
+    rhpindex: str, res: int = None, dggs: RHEALPixDGGS = WGS84_003
+) -> str:
+    """
+    Returns central child of rhpindex at resolution res (immediate central
+    child if res == None).
+
+    Returns None if the cell index is invalid.
+
+    Returns None if the DGGS has an even number of cells on a side.
+
+    EXAMPLES::
+
+        >>> rhp_to_center_child('S001450634')
+        'S0014506344'
+        >>> rhp_to_center_child('S001450634', res=13)
+        'S001450634444'
+        >>> rhp_to_center_child('INVALID')
+    """
+    # Stop early if the cell index is invalid
+    if not rhp_is_valid(rhpindex, dggs):
+        return None
+
+    # DGGSs with even numbers of cells on a side never have a cell at the centre
+    if (dggs.N_side % 2) == 0:
+        return None
+
+    # Handle mismatch between cell resolution and requested child resolution
+    parent_res = len(rhpindex) - 1
+    if res is not None and res < parent_res:
+        return rhpindex
+
+    # Standard case (including parent_res == res)
+    else:
+        # res == None returns the central child from one level down (by convention)
+        added_levels = 1 if res is None else res - parent_res
+
+        # Derive index of centre child and append that to rhpindex
+        # NOTE: only works for odd values of N_side
+        c_index = int((dggs.N_side**2 - 1) / 2)
+
+        # Append the required number of child digits to cell index
+        child_index = rhpindex + "".join(str(c_index) for _ in range(0, added_levels))
+
+        return child_index
+
+
+def compact_cells(cells: set[str]) -> set[str]:
+    """
+    Compact a set of rHEALPix DGGS cells.
+    Cells must be at the same resolution.
+    See https://github.com/manaakiwhenua/rhealpixdggs-py/issues/35#issuecomment-3186073554
+    """
+    previous_result = set(cells)
+    while True:
+        current_result = set(compress_order_cells(previous_result))
+        if previous_result == current_result:
+            break
+        previous_result = current_result
+    return previous_result
+
+
+def rhpcompaction(
+    df: pd.DataFrame,
+    res: int,
+    col_order: list,
+    dggs_col: str,
+    id_field: str,
+) -> pd.DataFrame:
+    """
+    Compacts an rHP dataframe up to a given low resolution (parent_res), from an existing maximum resolution (res).
+    """
+    return common.compaction(
+        df,
+        res,
+        id_field,
+        col_order,
+        dggs_col,
+        compact_cells,
+        rhp_to_center_child,
     )
 
 
@@ -109,7 +199,7 @@ def rhppolyfill(df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
     required=False,
     default=const.DEFAULTS["crs"],
     type=int,
-    help="Set the coordinate reference system (CRS) used for cutting large geometries (see `--cur-threshold`). Defaults to the same CRS as the input. Should be a valid EPSG code.",
+    help="Set the coordinate reference system (CRS) used for cutting large geometries (see `--cut_threshold`). Defaults to the same CRS as the input. Should be a valid EPSG code.",
     nargs=1,
 )
 @click.option(
@@ -163,6 +253,12 @@ def rhppolyfill(df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
     type=click.Path(),
     help="Temporary data is created during the execution of this program. This parameter allows you to control where this data will be written.",
 )
+@click.option(
+    "-co",
+    "--compact",
+    is_flag=True,
+    help="Compact the rHEALPix cells up to the parent resolution. Compaction requires an id_field.",
+)
 @click.option("-o", "--overwrite", is_flag=True)
 @click.version_option(version=__version__)
 def rhp(
@@ -181,6 +277,7 @@ def rhp(
     layer: str,
     geom_col: str,
     tempdir: Union[str, Path],
+    compact: bool,
     overwrite: bool,
 ):
     """
@@ -192,6 +289,7 @@ def rhp(
     tempfile.tempdir = tempdir if tempdir is not None else tempfile.tempdir
 
     common.check_resolutions(resolution, parent_res)
+    common.check_compaction_requirements(compact, id_field)
 
     con, vector_input = common.db_conn_and_input_path(vector_input)
     output_directory = common.resolve_output_path(output_directory, overwrite)
@@ -204,6 +302,7 @@ def rhp(
             "rhp",
             rhppolyfill,
             rhp_secondary_index,
+            rhpcompaction if compact else None,
             vector_input,
             output_directory,
             int(resolution),
@@ -213,6 +312,7 @@ def rhp(
             spatial_sorting,
             cut_threshold,
             threads,
+            compression=compression,
             cut_crs=cut_crs,
             id_field=id_field,
             con=con,

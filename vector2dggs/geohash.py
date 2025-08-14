@@ -19,6 +19,8 @@ import vector2dggs.common as common
 
 from vector2dggs import __version__
 
+GEOHASH_BASE32_SET = set("0123456789bcdefghjkmnpqrstuvwxyz")
+
 
 def gh_secondary_index(df: pd.DataFrame, parent_level: int) -> pd.DataFrame:
     df[f"geohash_{parent_level:02}"] = df.index.to_series().str[:parent_level]
@@ -70,6 +72,82 @@ def gh_polyfill(df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
             lambda _df: pd.DataFrame(_df.drop(columns=[_df.geometry.name])),
             [df_polygon, df_point],
         )
+    )
+
+
+def gh_children(geohash: str, desired_resolution: int) -> int:
+    """
+    Determine the number of children in the geohash refinement, determined by the additional character levels.
+    """
+    current_resolution = len(geohash)
+    additional_length = desired_resolution - current_resolution
+    return 32**additional_length  # Each new character increases resolution by 32
+
+
+def compact(cells: set[str]) -> set[str]:
+    """
+    Compact a set of geohash cells.
+    Cells must be at the same resolution.
+    """
+    current_set = set(cells)
+    while True:
+        parent_map = {}
+        for gh in current_set:
+            parent = gh[:-1]
+            if parent not in parent_map:
+                parent_map[parent] = set()
+            parent_map[parent].add(gh)
+
+        next_set = set()
+        for parent, siblings in parent_map.items():
+            if len(siblings) == 32:
+                next_set.add(parent)
+            else:
+                next_set.update(siblings)
+
+        if next_set == current_set:
+            break
+        current_set = next_set
+
+    return current_set
+
+
+def get_central_child(geohash: str, precision: int):
+    """
+    Return an approximate central child of the geohash.
+    NB if only an arbitrary child is needed, use get_child_geohash
+    """
+    lat, lon = decode(geohash)
+    return encode(lat, lon, precision=precision)
+
+
+def get_child_geohash(geohash: str, desired_length: int, child: str = "0"):
+    """
+    Get a child geohash of the specified length by extending the input geohash.
+    Child geohash is
+    """
+    if child not in GEOHASH_BASE32_SET:
+        raise ValueError(
+            f"Invalid child character '{child}'. Must be one of {''.join(GEOHASH_BASE32_SET)}."
+        )
+
+    if len(geohash) >= desired_length:
+        return geohash
+    return geohash.ljust(desired_length, child)
+
+
+def gh_compaction(
+    df: pd.DataFrame,
+    res: int,
+    col_order: list,
+    dggs_col: str,
+    id_field: str,
+) -> pd.DataFrame:
+    """
+    Compacts a geohash dataframe up to a given low resolution (parent_res), from an existing maximum resolution (res).
+    """
+    return common.compaction(
+        df, res, id_field, col_order, dggs_col, compact, get_child_geohash
     )
 
 
@@ -133,7 +211,7 @@ def gh_polyfill(df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
     required=False,
     default=const.DEFAULTS["crs"],
     type=int,
-    help="Set the coordinate reference system (CRS) used for cutting large geometries (see `--cur-threshold`). Defaults to the same CRS as the input. Should be a valid EPSG code.",
+    help="Set the coordinate reference system (CRS) used for cutting large geometries (see `--cut_threshold`). Defaults to the same CRS as the input. Should be a valid EPSG code.",
     nargs=1,
 )
 @click.option(
@@ -187,6 +265,12 @@ def gh_polyfill(df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
     type=click.Path(),
     help="Temporary data is created during the execution of this program. This parameter allows you to control where this data will be written.",
 )
+@click.option(
+    "-co",
+    "--compact",
+    is_flag=True,
+    help="Compact the geohash cells up to the parent resolution. Compaction requires an id_field.",
+)
 @click.option("-o", "--overwrite", is_flag=True)
 @click.version_option(version=__version__)
 def geohash(
@@ -205,6 +289,7 @@ def geohash(
     layer: str,
     geom_col: str,
     tempdir: Union[str, Path],
+    compact: bool,
     overwrite: bool,
 ):
     """
@@ -228,6 +313,7 @@ def geohash(
             "geohash",
             gh_polyfill,
             gh_secondary_index,
+            gh_compaction if compact else None,
             vector_input,
             output_directory,
             int(level),

@@ -4,6 +4,7 @@ import click_log
 import tempfile
 import pyproj
 
+import h3 as h3py
 import h3pandas  # Necessary import despite lack of explicit use
 
 import pandas as pd
@@ -47,6 +48,27 @@ def h3polyfill(df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
             lambda _df: pd.DataFrame(_df.drop(columns=[_df.geometry.name])),
             [df_polygon, df_linestring, df_point],
         )
+    )
+
+
+def h3compaction(
+    df: pd.DataFrame,
+    res: int,
+    col_order: list,
+    dggs_col: str,
+    id_field: str,
+) -> pd.DataFrame:
+    """
+    Compacts an H3 dataframe up to a given low resolution (parent_res), from an existing maximum resolution (res).
+    """
+    return common.compaction(
+        df,
+        res,
+        id_field,
+        col_order,
+        dggs_col,
+        h3py.compact_cells,
+        h3py.cell_to_center_child,
     )
 
 
@@ -108,7 +130,7 @@ def h3polyfill(df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
     required=False,
     default=const.DEFAULTS["crs"],
     type=int,
-    help="Set the coordinate reference system (CRS) used for cutting large geometries (see `--cur-threshold`). Defaults to the same CRS as the input. Should be a valid EPSG code.",
+    help="Set the coordinate reference system (CRS) used for cutting large geometries (see `--cut_threshold`). Defaults to the same CRS as the input. Should be a valid EPSG code.",
     nargs=1,
 )
 @click.option(
@@ -162,6 +184,12 @@ def h3polyfill(df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
     type=click.Path(),
     help="Temporary data is created during the execution of this program. This parameter allows you to control where this data will be written.",
 )
+@click.option(
+    "-co",
+    "--compact",
+    is_flag=True,
+    help="Compact the H3 cells up to the parent resolution. Compaction requires an id_field.",
+)
 @click.option("-o", "--overwrite", is_flag=True)
 @click.version_option(version=__version__)
 def h3(
@@ -180,6 +208,7 @@ def h3(
     layer: str,
     geom_col: str,
     tempdir: Union[str, Path],
+    compact: bool,
     overwrite: bool,
 ):
     """
@@ -191,6 +220,7 @@ def h3(
     tempfile.tempdir = tempdir if tempdir is not None else tempfile.tempdir
 
     common.check_resolutions(resolution, parent_res)
+    common.check_compaction_requirements(compact, id_field)
 
     con, vector_input = common.db_conn_and_input_path(vector_input)
     output_directory = common.resolve_output_path(output_directory, overwrite)
@@ -203,6 +233,7 @@ def h3(
             "h3",
             h3polyfill,
             h3_secondary_index,
+            h3compaction if compact else None,
             vector_input,
             output_directory,
             int(resolution),
