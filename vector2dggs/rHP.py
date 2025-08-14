@@ -200,7 +200,7 @@ def rhpcompaction(
     required=False,
     default=const.DEFAULTS["crs"],
     type=int,
-    help="Set the coordinate reference system (CRS) used for cutting large geometries (see `--cur-threshold`). Defaults to the same CRS as the input. Should be a valid EPSG code.",
+    help="Set the coordinate reference system (CRS) used for cutting large geometries (see `--cut_threshold`). Defaults to the same CRS as the input. Should be a valid EPSG code.",
     nargs=1,
 )
 @click.option(
