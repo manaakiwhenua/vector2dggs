@@ -333,4 +333,3 @@ def geohash(
         )
     except:
         raise
-

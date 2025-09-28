@@ -412,4 +412,3 @@ def s2(
         )
     except:
         raise
-
