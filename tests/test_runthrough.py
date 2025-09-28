@@ -15,7 +15,7 @@ class TestRunthrough(TestCase):
     """
     Parent class for the smoke tests. Handles temporary output files by
     overriding the built in setup and teardown methods from TestCase. Provides
-    a new member function to recurse through nested output folders to empty
+    two new member functions to recurse through nested output folders to empty
     them.
     """
 
