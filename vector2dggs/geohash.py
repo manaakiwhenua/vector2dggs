@@ -333,5 +333,4 @@ def geohash(
         )
     except:
         raise
-    else:
-        sys.exit(0)
+

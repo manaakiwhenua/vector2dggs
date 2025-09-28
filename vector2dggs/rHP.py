@@ -270,5 +270,4 @@ def rhp(
         )
     except:
         raise
-    else:
-        sys.exit(0)
+

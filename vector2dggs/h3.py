@@ -253,5 +253,3 @@ def h3(
         )
     except:
         raise
-    else:
-        sys.exit(0)
