@@ -3,7 +3,7 @@
 @author: ndemaio
 """
 
-from vector2dggs.interfaces import VectorIndexer
+from vectorindexer import VectorIndexer
 
 class H3VectorIndexer(VectorIndexer):
     pass

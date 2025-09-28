@@ -3,7 +3,7 @@
 @author: ndemaio
 """
 
-from vector2dggs.interfaces import VectorIndexer
+from vector2dggs.indexers import vectorindexer
 
 import vector2dggs.indexers.h3vectorindexer as h3vectorindexer
 import vector2dggs.indexers.rhpvectorindexer as rhpvectorindexer
@@ -28,7 +28,7 @@ as defined in the list of click commands
 """
 
 
-def indexer_instance(dggs: str) -> VectorIndexer:
+def indexer_instance(dggs: str) -> vectorindexer.VectorIndexer:
     # Create and return appropriate indexer instance
     # Raise an exception for unsupported DGGS names
     if not dggs in indexer_lookup.keys():

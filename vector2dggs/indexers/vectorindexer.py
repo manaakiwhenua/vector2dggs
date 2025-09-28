@@ -9,11 +9,10 @@ import geopandas as gpd
 
 class VectorIndexer:
     """
-    Provides a base class and interface for all indexers integrating a specific
-    DGGS. It should never be instantiated directly because all methods raise
-    a NotImplementedError by design - the only thing that's not abstract is
-    the DGGS name string as defined in the click command. The methods should
-    be implemented by the child classes deriving from this interface instead.
+    Provides an abstract base class and interface for all indexers integrating
+    a specific DGGS. It should never be instantiated directly because some
+    methods raise a NotImplementedError by design. Those methods should be
+    implemented by the child classes deriving from this interface instead.
     """
     
     def __init__(self, dggs: str):

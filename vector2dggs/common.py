@@ -59,6 +59,7 @@ def check_compaction_requirements(compact: bool, id_field: Union[str, None]) -> 
         )
 
 
+# TODO: to abstract base class VectorIndexer
 def compaction(
     df: pd.DataFrame,
     res: int,
@@ -207,6 +208,7 @@ def get_parent_res(dggs: str, parent_res: Union[None, str], resolution: int) -> 
     )
 
 
+# TODO: to abstract base class VectorIndexer
 def parent_partitioning(
     dggs: str,
     input_dir: Path,
