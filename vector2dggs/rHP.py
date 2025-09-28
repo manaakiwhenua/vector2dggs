@@ -163,7 +163,7 @@ def rhpcompaction(
     "-t",
     "--threads",
     required=False,
-    default=const.DEFAULTS["t"],
+    default=1,
     type=int,
     help="Amount of threads used for operation",
     nargs=1,
@@ -270,5 +270,3 @@ def rhp(
         )
     except:
         raise
-    else:
-        sys.exit(0)

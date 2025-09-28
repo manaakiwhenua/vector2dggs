@@ -198,6 +198,17 @@ Alternatively, it is also possible to install using pip with `pip install -e .`,
 
 Please run `black .` before committing.
 
+#### Tests
+
+Tests are included. To run them, set up a poetry environment, then follow these instructons:
+
+```bash
+cd tests
+python ./test_vector2dggs.py
+```
+
+Test data are included at `tests/data/`.
+
 ## Example commands
 
 With a local GPKG:
