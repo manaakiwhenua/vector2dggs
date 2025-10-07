@@ -18,7 +18,7 @@ from pathlib import Path, PurePath
 from urllib.parse import urlparse
 from tqdm import tqdm
 from tqdm.dask import TqdmCallback
-from multiprocessing.dummy import Pool
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from shapely.geometry import GeometryCollection
 
 import vector2dggs.constants as const
@@ -314,6 +314,10 @@ def polyfill_star(args) -> None:
     return polyfill(*args)
 
 
+def bisect_geometry(geometry, cut_threshold):
+    return GeometryCollection(katana.katana(geometry, cut_threshold))
+
+
 def index(
     dggs: str,
     dggsfunc: Callable,
@@ -370,13 +374,18 @@ def index(
         # Remove all attributes except the geometry
         df = df.loc[:, ["geometry"]]
 
-    LOGGER.debug("Cutting large geometries")
-    with tqdm(total=df.shape[0], desc="Splitting") as pbar:
+    LOGGER.debug("Bisecting large geometries")
+
+    with ThreadPoolExecutor(max_workers=max(1, processes)) as executor:
+        futures = []
         for index, row in df.iterrows():
-            df.loc[index, "geometry"] = GeometryCollection(
-                katana.katana(row.geometry, cut_threshold)
-            )
-            pbar.update(1)
+            future = executor.submit(bisect_geometry, row.geometry, cut_threshold)
+            futures.append((index, future))
+
+        with tqdm(total=len(futures), desc="Bisection") as pbar:
+            for index, future in futures:
+                df.at[index, "geometry"] = future.result()
+                pbar.update(1)
 
     LOGGER.debug("Exploding geometry collections and multipolygons")
     df = (
@@ -427,28 +436,32 @@ def index(
             resolution,
         )
         with tempfile.TemporaryDirectory(suffix=".parquet") as tmpdir2:
-            with Pool(processes=processes) as pool:
-                args = [
-                    (
-                        dggs,
-                        dggsfunc,
-                        secondary_index_func,
-                        filepath,
-                        spatial_sort_col,
-                        resolution,
-                        parent_res,
-                        tmpdir2,
-                        compression,
-                    )
-                    for filepath in filepaths
-                ]
-                list(
-                    tqdm(
-                        pool.imap(polyfill_star, args),
-                        total=len(args),
-                        desc="DGGS indexing",
-                    )
+
+            args = [
+                (
+                    dggs,
+                    dggsfunc,
+                    secondary_index_func,
+                    filepath,
+                    spatial_sort_col,
+                    resolution,
+                    parent_res,
+                    tmpdir2,
+                    compression,
                 )
+                for filepath in filepaths
+            ]
+
+            with ProcessPoolExecutor(max_workers=processes) as executor:
+                futures = {executor.submit(polyfill_star, arg): arg for arg in args}
+
+                for future in tqdm(
+                    as_completed(futures), total=len(futures), desc="DGGS indexing"
+                ):
+                    try:
+                        future.result()
+                    except Exception as e:
+                        LOGGER.error(f"Task failed with {e}")
 
             parent_partitioning(
                 dggs,
