@@ -80,12 +80,15 @@ Options:
                                   used for cutting large geometries (see
                                   `--cut_threshold`). Defaults to the same CRS
                                   as the input. Should be a valid EPSG code.
-  -c, --cut_threshold INTEGER     Cutting up large geometries into smaller
-                                  geometries based on a target length. Units
-                                  are assumed to match the input CRS units
-                                  unless the `--cut_crs` is also given, in
-                                  which case units match the units of the
-                                  supplied CRS.  [default: 5000; required]
+  -c, --cut_threshold FLOAT       Cutting up large geometries into smaller
+                                  geometries based on a target area. Units are
+                                  assumed to match the input CRS units unless
+                                  the `--cut_crs` is also given, in which case
+                                  units match the units of the supplied CRS.
+                                  If left unspecified, the threshold will be
+                                  the maximum area of a cell at the parent
+                                  resolution, in square metres or feet
+                                  according to the CRS.
   -t, --threads INTEGER           Amount of threads used for operation
                                   [default: NUM_CPUS - 1]
   -cp, --compression TEXT         Compression method to use for the output

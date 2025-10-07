@@ -315,6 +315,7 @@ def polyfill_star(args) -> None:
 
 
 def bisect_geometry(geometry, cut_threshold):
+    # TODO consider units!
     return GeometryCollection(katana.katana(geometry, cut_threshold))
 
 
@@ -330,7 +331,7 @@ def index(
     keep_attributes: bool,
     chunksize: int,
     spatial_sorting: str,
-    cut_threshold: int,
+    cut_threshold: Union[None, int],
     processes: int,
     compression: str = "snappy",
     id_field: str = None,
@@ -362,7 +363,34 @@ def index(
 
     if cut_crs:
         df = df.to_crs(cut_crs)
-    LOGGER.debug("Cutting with CRS: %s", df.crs)
+    else:
+        cut_crs = df.crs
+    if cut_crs is None:
+        LOGGER.warning("Input has no defined CRS, and cut_crs is not specified")
+    else:
+        LOGGER.debug("Cutting with CRS: %s", df.crs)
+
+    if not cut_crs.is_projected:
+        LOGGER.warning(
+            f"CRS {cut_crs} is not a projected coordinate system. Bisection will result in sections of varying area"
+        )
+    LOGGER.info(
+        f"Using CRS units for input polygon bisection: {cut_crs.axis_info[0].unit_name}"
+    )
+
+    if cut_threshold == None:
+        unit_name = cut_crs.axis_info[0].unit_name
+        cut_threshold_m2 = const.DEFAULT_AREA_THRESHOLD_M2(dggs, (int(parent_res)))
+        if unit_name == "metre":
+            cut_threshold = cut_threshold_m2
+        elif unit_name == "feet":
+            cut_threshold = cut_threshold_m2 * 3.28084
+        else:
+            cut_threshold = 0.5
+            LOGGER.warning(
+                f'Unspecified cut_threshold for {"projected" if cut_crs.is_projected else "geographic"} CRS: {cut_crs}, with squared units: {unit_name}'
+            )
+        LOGGER.info(f"Using default cut_threshold of {cut_threshold} ({unit_name}^2)")
 
     if id_field:
         df = df.set_index(id_field)
