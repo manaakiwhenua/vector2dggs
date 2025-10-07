@@ -103,7 +103,23 @@ class TestH3(TestRunthrough):
                 standalone_mode=False,
             )
         except Exception:
-            self.fail("H3 run through with reporjected CRS failed")
+            self.fail("H3 run through with reprojected CRS failed")
+
+    def test_h3_no_bisection(self):
+        try:
+            h3(
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "-r",
+                    "8",
+                    "-c",
+                    "0",
+                ],
+                standalone_mode=False,
+            )
+        except Exception:
+            self.fail("H3 run through without bisection failed")
 
 
 class TestRHP(TestRunthrough):
@@ -145,8 +161,6 @@ class TestRHP(TestRunthrough):
                     "8",
                     "-crs",
                     "3793",
-                    "-c",
-                    "4000",
                 ],
                 standalone_mode=False,
             )
@@ -170,7 +184,7 @@ class TestRHP(TestRunthrough):
                 standalone_mode=False,
             )
         except Exception:
-            self.fail("rHP run through with reporjected CRS failed")
+            self.fail("rHP run through with reprojected CRS failed")
 
 
 class TestS2(TestRunthrough):
@@ -237,7 +251,23 @@ class TestS2(TestRunthrough):
                 standalone_mode=False,
             )
         except Exception:
-            self.fail("S2 run through with reporjected CRS failed")
+            self.fail("S2 run through with reprojected CRS failed")
+
+    def test_s2_no_bisection(self):
+        try:
+            s2(
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "-r",
+                    "13",
+                    "-c",
+                    "0",
+                ],
+                standalone_mode=False,
+            )
+        except Exception:
+            self.fail("S2 run through without bisection failed")
 
 
 class TestGeohash(TestRunthrough):
@@ -269,19 +299,10 @@ class TestGeohash(TestRunthrough):
         except Exception:
             self.fail(f"geohash runthrough with overwrite failed.")
 
-    def test_sgeohash_cut_crs(self):
+    def test_geohash_cut_crs(self):
         try:
             geohash(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "-r",
-                    "6",
-                    "-crs",
-                    "3793",
-                    "-c",
-                    "4000",
-                ],
+                [TEST_FILE_PATH, str(TEST_OUTPUT_PATH), "-r", "6", "-crs", "3793"],
                 standalone_mode=False,
             )
 
@@ -304,4 +325,4 @@ class TestGeohash(TestRunthrough):
                 standalone_mode=False,
             )
         except Exception:
-            self.fail("geohash run through with reporjected CRS failed")
+            self.fail("geohash run through with reprojected CRS failed")

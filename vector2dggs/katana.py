@@ -52,7 +52,7 @@ def katana(
     bounds = geometry.bounds
     width = bounds[2] - bounds[0]
     height = bounds[3] - bounds[1]
-    if max(width, height) <= threshold or count == 250:
+    if (width * height) <= threshold or count == 250:
         # either the polygon is smaller than the threshold, or the maximum
         # number of recursions has been reached
         return [geometry]

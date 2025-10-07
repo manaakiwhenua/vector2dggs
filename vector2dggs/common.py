@@ -331,7 +331,7 @@ def index(
     keep_attributes: bool,
     chunksize: int,
     spatial_sorting: str,
-    cut_threshold: Union[None, int],
+    cut_threshold: Union[None, float],
     processes: int,
     compression: str = "snappy",
     id_field: str = None,
@@ -361,22 +361,25 @@ def index(
         # Read file
         df = gpd.read_file(input_file, layer=layer)
 
+    cut_threshold = float(cut_threshold) if cut_threshold != None else None
+
     if cut_crs:
         df = df.to_crs(cut_crs)
     else:
         cut_crs = df.crs
     if cut_crs is None:
         LOGGER.warning("Input has no defined CRS, and cut_crs is not specified")
-    else:
+    elif cut_threshold != 0:
         LOGGER.debug("Cutting with CRS: %s", df.crs)
 
-    if not cut_crs.is_projected:
+    if not cut_crs.is_projected and cut_threshold != 0:
         LOGGER.warning(
-            f"CRS {cut_crs} is not a projected coordinate system. Bisection will result in sections of varying area"
+            f"CRS {cut_crs} is not a projected coordinate system. (units: {cut_crs.axis_info[0].unit_name}) Bisection will result in sections of varying area"
         )
-    LOGGER.info(
-        f"Using CRS units for input polygon bisection: {cut_crs.axis_info[0].unit_name}"
-    )
+    elif cut_threshold != 0:
+        LOGGER.debug(
+            f"Using CRS units for input polygon bisection: {cut_crs.axis_info[0].unit_name}"
+        )
 
     if cut_threshold == None:
         unit_name = cut_crs.axis_info[0].unit_name
@@ -390,7 +393,7 @@ def index(
             LOGGER.warning(
                 f'Unspecified cut_threshold for {"projected" if cut_crs.is_projected else "geographic"} CRS: {cut_crs}, with squared units: {unit_name}'
             )
-        LOGGER.info(f"Using default cut_threshold of {cut_threshold} ({unit_name}^2)")
+        LOGGER.debug(f"Using default cut_threshold of {cut_threshold} ({unit_name}^2)")
 
     if id_field:
         df = df.set_index(id_field)
@@ -404,16 +407,19 @@ def index(
 
     LOGGER.debug("Bisecting large geometries")
 
-    with ThreadPoolExecutor(max_workers=max(1, processes)) as executor:
-        futures = []
-        for index, row in df.iterrows():
-            future = executor.submit(bisect_geometry, row.geometry, cut_threshold)
-            futures.append((index, future))
+    if cut_threshold is not None and cut_threshold > 0:
+        with ThreadPoolExecutor(max_workers=max(1, processes)) as executor:
+            futures = []
+            for index, row in df.iterrows():
+                future = executor.submit(bisect_geometry, row.geometry, cut_threshold)
+                futures.append((index, future))
 
-        with tqdm(total=len(futures), desc="Bisection") as pbar:
-            for index, future in futures:
-                df.at[index, "geometry"] = future.result()
-                pbar.update(1)
+            with tqdm(total=len(futures), desc="Bisection") as pbar:
+                for index, future in futures:
+                    df.at[index, "geometry"] = future.result()
+                    pbar.update(1)
+    else:
+        LOGGER.debug("No bisection applied to input.")
 
     LOGGER.debug("Exploding geometry collections and multipolygons")
     df = (
@@ -490,6 +496,7 @@ def index(
                         future.result()
                     except Exception as e:
                         LOGGER.error(f"Task failed with {e}")
+                        raise (e)
 
             parent_partitioning(
                 dggs,

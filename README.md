@@ -88,7 +88,9 @@ Options:
                                   If left unspecified, the threshold will be
                                   the maximum area of a cell at the parent
                                   resolution, in square metres or feet
-                                  according to the CRS.
+                                  according to the CRS. A threshold of 0 will
+                                  skip bissection entirely (effectively
+                                  ignoring --cut_crs).
   -t, --threads INTEGER           Amount of threads used for operation
                                   [default: NUM_CPUS - 1]
   -cp, --compression TEXT         Compression method to use for the output

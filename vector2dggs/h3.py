@@ -139,7 +139,7 @@ def h3compaction(
     required=False,
     default=const.DEFAULTS["c"],
     type=float,
-    help="Cutting up large geometries into smaller geometries based on a target area. Units are assumed to match the input CRS units unless the `--cut_crs` is also given, in which case units match the units of the supplied CRS. If left unspecified, the threshold will be the maximum area of a cell at the parent resolution, in square metres or feet according to the CRS.",
+    help="Cutting up large geometries into smaller geometries based on a target area. Units are assumed to match the input CRS units unless the `--cut_crs` is also given, in which case units match the units of the supplied CRS. If left unspecified, the threshold will be the maximum area of a cell at the parent resolution, in square metres or feet according to the CRS. A threshold of 0 will skip bissection entirely (effectively ignoring --cut_crs).",
     nargs=1,
 )
 @click.option(
