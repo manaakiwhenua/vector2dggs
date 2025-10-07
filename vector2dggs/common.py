@@ -315,7 +315,6 @@ def polyfill_star(args) -> None:
 
 
 def bisect_geometry(geometry, cut_threshold):
-    # TODO consider units!
     return GeometryCollection(katana.katana(geometry, cut_threshold))
 
 
@@ -389,7 +388,7 @@ def index(
         elif unit_name == "feet":
             cut_threshold = cut_threshold_m2 * 3.28084
         else:
-            cut_threshold = 0.5
+            cut_threshold = 100000000 if cut_crs.is_projected else 0.5
             LOGGER.warning(
                 f'Unspecified cut_threshold for {"projected" if cut_crs.is_projected else "geographic"} CRS: {cut_crs}, with squared units: {unit_name}'
             )
