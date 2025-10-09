@@ -37,7 +37,7 @@ def katana(
     Invalid input `geometry` will silently be made valid (if possible).
     Any LinearRings will be converted to Polygons.
     """
-    if geometry is None:
+    if (geometry is None) or (geometry.is_empty):
         return []
     if isinstance(geometry, LinearRing):
         geometry = Polygon(geometry)
@@ -65,6 +65,8 @@ def katana(
         a = box(bounds[0], bounds[1], bounds[0] + width / 2, bounds[3])
         b = box(bounds[0] + width / 2, bounds[1], bounds[2], bounds[3])
     result = []
+    # Add additional vertices to prevent indexing errors from reprojection to EPSG:4386 later along long edges 
+    a, b = map(lambda g: g.segmentize(min(width, height)/2), [a, b])
     for d in (
         a,
         b,
