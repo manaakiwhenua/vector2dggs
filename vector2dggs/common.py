@@ -18,7 +18,7 @@ from pathlib import Path, PurePath
 from urllib.parse import urlparse
 from tqdm import tqdm
 from tqdm.dask import TqdmCallback
-from multiprocessing.dummy import Pool
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from shapely.geometry import GeometryCollection
 
 import vector2dggs.constants as const
@@ -313,6 +313,47 @@ def polyfill(
 def polyfill_star(args) -> None:
     return polyfill(*args)
 
+def bisection_preparation(df: pd.DataFrame, dggs: str, parent_res: int, cut_crs: pyproj.CRS = None, cut_threshold: Union[None, float] = None) -> tuple[pd.DataFrame, pyproj.CRS, Union[None, float]]:
+    cut_threshold = float(cut_threshold) if cut_threshold != None else None
+    
+    if cut_threshold and cut_crs:
+        df = df.to_crs(cut_crs)
+    else:
+        cut_crs = df.crs
+
+    if cut_crs is None:
+        LOGGER.warning("Input has no defined CRS, and cut_crs is not specified")
+    elif cut_threshold != 0:
+        LOGGER.debug("Cutting with CRS: %s", df.crs)
+
+    if not cut_crs.is_projected and cut_threshold != 0:
+        LOGGER.warning(
+            f"CRS {cut_crs} is not a projected coordinate system. (units: {cut_crs.axis_info[0].unit_name}) Bisection will result in sections of varying area"
+        )
+    elif cut_threshold != 0:
+        LOGGER.debug(
+            f"Using CRS units for input polygon bisection: {cut_crs.axis_info[0].unit_name}"
+        )
+
+    if cut_threshold == None:
+        unit_name = cut_crs.axis_info[0].unit_name
+        cut_threshold_m2 = const.DEFAULT_AREA_THRESHOLD_M2(dggs, (int(parent_res)))
+        if unit_name == "metre":
+            cut_threshold = cut_threshold_m2
+        elif unit_name == "feet":
+            cut_threshold = cut_threshold_m2 * 3.28084
+        else:
+            cut_threshold = 100000000 if cut_crs.is_projected else 0.5
+            LOGGER.warning(
+                f'Unspecified cut_threshold for {"projected" if cut_crs.is_projected else "geographic"} CRS: {cut_crs}, with squared units: {unit_name}'
+            )
+        LOGGER.debug(f"Using default cut_threshold of {cut_threshold} ({unit_name}^2)")
+    
+    return df, cut_crs, cut_threshold
+
+def bisect_geometry(geometry, cut_threshold):
+    return GeometryCollection(katana.katana(geometry, cut_threshold))
+
 
 def index(
     dggs: str,
@@ -326,7 +367,7 @@ def index(
     keep_attributes: bool,
     chunksize: int,
     spatial_sorting: str,
-    cut_threshold: int,
+    cut_threshold: Union[None, float],
     processes: int,
     compression: str = "snappy",
     id_field: str = None,
@@ -356,9 +397,7 @@ def index(
         # Read file
         df = gpd.read_file(input_file, layer=layer)
 
-    if cut_crs:
-        df = df.to_crs(cut_crs)
-    LOGGER.debug("Cutting with CRS: %s", df.crs)
+    df, cut_crs, cut_threshold = bisection_preparation(df, dggs, parent_res, cut_crs, cut_threshold)
 
     if id_field:
         df = df.set_index(id_field)
@@ -370,13 +409,21 @@ def index(
         # Remove all attributes except the geometry
         df = df.loc[:, ["geometry"]]
 
-    LOGGER.debug("Cutting large geometries")
-    with tqdm(total=df.shape[0], desc="Splitting") as pbar:
-        for index, row in df.iterrows():
-            df.loc[index, "geometry"] = GeometryCollection(
-                katana.katana(row.geometry, cut_threshold)
-            )
-            pbar.update(1)
+    LOGGER.debug("Bisecting large geometries")
+
+    if cut_threshold is not None and cut_threshold > 0:
+        with ThreadPoolExecutor(max_workers=max(1, processes)) as executor:
+            futures = []
+            for index, row in df.iterrows():
+                future = executor.submit(bisect_geometry, row.geometry, cut_threshold)
+                futures.append((index, future))
+
+            with tqdm(total=len(futures), desc="Bisection") as pbar:
+                for index, future in futures:
+                    df.at[index, "geometry"] = future.result()
+                    pbar.update(1)
+    else:
+        LOGGER.debug("No bisection applied to input.")
 
     LOGGER.debug("Exploding geometry collections and multipolygons")
     df = (
@@ -427,28 +474,33 @@ def index(
             resolution,
         )
         with tempfile.TemporaryDirectory(suffix=".parquet") as tmpdir2:
-            with Pool(processes=processes) as pool:
-                args = [
-                    (
-                        dggs,
-                        dggsfunc,
-                        secondary_index_func,
-                        filepath,
-                        spatial_sort_col,
-                        resolution,
-                        parent_res,
-                        tmpdir2,
-                        compression,
-                    )
-                    for filepath in filepaths
-                ]
-                list(
-                    tqdm(
-                        pool.imap(polyfill_star, args),
-                        total=len(args),
-                        desc="DGGS indexing",
-                    )
+
+            args = [
+                (
+                    dggs,
+                    dggsfunc,
+                    secondary_index_func,
+                    filepath,
+                    spatial_sort_col,
+                    resolution,
+                    parent_res,
+                    tmpdir2,
+                    compression,
                 )
+                for filepath in filepaths
+            ]
+
+            with ProcessPoolExecutor(max_workers=processes) as executor:
+                futures = {executor.submit(polyfill_star, arg): arg for arg in args}
+
+                for future in tqdm(
+                    as_completed(futures), total=len(futures), desc="DGGS indexing"
+                ):
+                    try:
+                        future.result()
+                    except Exception as e:
+                        LOGGER.error(f"Task failed with {e}")
+                        raise (e)
 
             parent_partitioning(
                 dggs,
