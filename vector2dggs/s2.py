@@ -9,6 +9,7 @@ from s2geometry import pywraps2 as S2
 
 import pandas as pd
 import geopandas as gpd
+from shapely import force_2d
 from shapely.geometry import box, Polygon, LineString, Point
 from shapely.ops import transform
 from pyproj import CRS, Transformer
@@ -71,6 +72,7 @@ def s2_polyfill_polygons(df: gpd.GeoDataFrame, level: int) -> gpd.GeoDataFrame:
     def generate_s2_covering(
         geom: Polygon, level: int, centroid_inside: bool = True
     ) -> set[S2.S2CellId]:
+        geom = force_2d(geom)
         # Prepare loops: first the exterior loop, then the interior loops
         loops = []
         # Exterior ring
@@ -296,10 +298,10 @@ def s2_compaction(
 @click.option(
     "-c",
     "--cut_threshold",
-    required=True,
+    required=False,
     default=const.DEFAULTS["c"],
-    type=int,
-    help="Cutting up large geometries into smaller geometries based on a target length. Units are assumed to match the input CRS units unless the `--cut_crs` is also given, in which case units match the units of the supplied CRS.",
+    type=float,
+    help="Cutting up large geometries into smaller geometries based on a target area. Units are assumed to match the input CRS units unless the `--cut_crs` is also given, in which case units match the units of the supplied CRS. If left unspecified, the threshold will be the maximum area of a cell at the parent resolution, in square metres or feet according to the CRS. A threshold of 0 will skip bissection entirely (effectively ignoring --cut_crs).",
     nargs=1,
 )
 @click.option(

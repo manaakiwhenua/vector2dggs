@@ -80,12 +80,17 @@ Options:
                                   used for cutting large geometries (see
                                   `--cut_threshold`). Defaults to the same CRS
                                   as the input. Should be a valid EPSG code.
-  -c, --cut_threshold INTEGER     Cutting up large geometries into smaller
-                                  geometries based on a target length. Units
-                                  are assumed to match the input CRS units
-                                  unless the `--cut_crs` is also given, in
-                                  which case units match the units of the
-                                  supplied CRS.  [default: 5000; required]
+  -c, --cut_threshold FLOAT       Cutting up large geometries into smaller
+                                  geometries based on a target area. Units are
+                                  assumed to match the input CRS units unless
+                                  the `--cut_crs` is also given, in which case
+                                  units match the units of the supplied CRS.
+                                  If left unspecified, the threshold will be
+                                  the maximum area of a cell at the parent
+                                  resolution, in square metres or feet
+                                  according to the CRS. A threshold of 0 will
+                                  skip bissection entirely (effectively
+                                  ignoring --cut_crs).
   -t, --threads INTEGER           Amount of threads used for operation
                                   [default: NUM_CPUS - 1]
   -cp, --compression TEXT         Compression method to use for the output
@@ -231,13 +236,13 @@ vector2dggs h3 -v DEBUG -id ogc_fid -r 9 -p 5 -t 4 --overwrite -lyr topo50_lake 
   title={{vector2dggs}},
   author={Ardo, James and Law, Richard},
   url={https://github.com/manaakiwhenua/vector2dggs},
-  version={0.10.1},
+  version={0.11.0},
   date={2023-04-20}
 }
 ```
 
 APA/Harvard
 
-> Ardo, J., & Law, R. (2023). vector2dggs (0.10.1) [Computer software]. https://github.com/manaakiwhenua/vector2dggs
+> Ardo, J., & Law, R. (2023). vector2dggs (0.11.0) [Computer software]. https://github.com/manaakiwhenua/vector2dggs
 
 [![manaakiwhenua-standards](https://github.com/manaakiwhenua/vector2dggs/workflows/manaakiwhenua-standards/badge.svg)](https://github.com/manaakiwhenua/manaakiwhenua-standards)
