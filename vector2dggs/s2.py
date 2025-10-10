@@ -9,6 +9,7 @@ from s2geometry import pywraps2 as S2
 
 import pandas as pd
 import geopandas as gpd
+from shapely import force_2d
 from shapely.geometry import box, Polygon, LineString, Point
 from shapely.ops import transform
 from pyproj import CRS, Transformer
@@ -71,6 +72,7 @@ def s2_polyfill_polygons(df: gpd.GeoDataFrame, level: int) -> gpd.GeoDataFrame:
     def generate_s2_covering(
         geom: Polygon, level: int, centroid_inside: bool = True
     ) -> set[S2.S2CellId]:
+        geom = force_2d(geom)
         # Prepare loops: first the exterior loop, then the interior loops
         loops = []
         # Exterior ring
