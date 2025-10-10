@@ -30,12 +30,15 @@ def katana(
     geometry: Union[BaseGeometry, None],
     threshold: float,
     count: int = 0,
+    max_recursion_depth: int = 250,
     check_2D: bool = True,
 ) -> List[BaseGeometry]:
     """
     Recursively split a geometry into two parts across its shortest dimension.
     Invalid input `geometry` will silently be made valid (if possible).
     Any LinearRings will be converted to Polygons.
+    `threshold`: maximum acceptable area of the bounding box for any output geometry.
+    `count`: used to track recursion depth
     """
     if (geometry is None) or (geometry.is_empty):
         return []
@@ -52,9 +55,7 @@ def katana(
     bounds = geometry.bounds
     width = bounds[2] - bounds[0]
     height = bounds[3] - bounds[1]
-    if (width * height) <= threshold or count == 250:
-        # either the polygon is smaller than the threshold, or the maximum
-        # number of recursions has been reached
+    if ((width * height) <= threshold) or (count >= max_recursion_depth):
         return [geometry]
     if height >= width:
         # split left to right
@@ -64,9 +65,9 @@ def katana(
         # split top to bottom
         a = box(bounds[0], bounds[1], bounds[0] + width / 2, bounds[3])
         b = box(bounds[0] + width / 2, bounds[1], bounds[2], bounds[3])
+    # Add additional vertices to help prevent indexing errors from use of EPSG:4386 later under the presence of long edges
+    a, b = map(lambda g: g.segmentize(min(width, height) / 4), [a, b])
     result = []
-    # Add additional vertices to prevent indexing errors from reprojection to EPSG:4386 later along long edges 
-    a, b = map(lambda g: g.segmentize(min(width, height)/2), [a, b])
     for d in (
         a,
         b,
@@ -81,52 +82,3 @@ def katana(
                 result.extend(katana(e, threshold, count + 1, check_2D))
 
     return result
-
-
-if __name__ == "__main__":
-    from functools import wraps
-    from time import time
-
-    from shapely import wkt
-
-    from vector2dggs.common import timing
-
-    def timing(f):
-        @wraps(f)
-        def wrap(*args, **kw):
-            ts = time()
-            result = f(*args, **kw)
-            te = time()
-            print(
-                "func:%r args:[%r, %r] took: %2.4f sec"
-                % (f.__name__, args, kw, te - ts)
-            )
-            return result
-
-        return wrap
-
-    polygon_a = wkt.loads(
-        "POLYGON ((-62.490234 37.09024, -87.363281 30.524413, -86.484375 21.616579, "
-        "-81.5625 15.029686, -64.248047 16.972741, -64.599609 25.562265, "
-        "-70.576172 25.641526, -59.941406 31.052934, -52.470703 35.317366, "
-        "-62.490234 37.09024))"
-    )
-    polygon_b = wkt.loads(
-        "POLYGON ((35 10, 45 45, 15 40, 10 20, 35 10), (20 30, 35 35, 30 20, 20 30))"
-    )
-    polygon_c = wkt.loads(
-        "MULTIPOLYGON (((40 40, 20 45, 45 30, 40 40)),((20 35, 10 30, 10 10, 30 5, 45 20, 20 35),(30 20, 20 15, 20 25, 30 20)))"
-    )
-    polygon_d = wkt.loads(
-        "POLYGON ((-42.978516 31.952162, -65.478516 29.382175, -47.460937 26.509905, -72.509766 19.311143, -48.779297 20.632784, -47.109375 11.436955, -44.033203 21.207459, -34.980469 16.467695, -40.869141 23.483401, -27.333984 26.037042, -35.068359 28.304381, -43.242188 27.605671, -42.978516 31.952162))"
-    )
-
-    area_threshold = 0.5
-
-    @timing
-    def timed_test_execution(*args):
-        for geom in [polygon_a, polygon_b, polygon_c, polygon_d]:
-            collection = katana(geom, *args)
-            print(GeometryCollection(collection))
-
-    timed_test_execution(area_threshold)
