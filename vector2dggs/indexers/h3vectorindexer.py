@@ -2,6 +2,7 @@
 
 @author: ndemaio
 """
+
 import h3 as h3py
 import h3pandas  # Necessary import despite lack of explicit use
 
@@ -10,16 +11,17 @@ import geopandas as gpd
 
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 
+
 class H3VectorIndexer(VectorIndexer):
     """
     Provides integration for Uber's H3 DGGS.
     """
-    
+
     def polyfill(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
         """
         Implementation of abstract function.
         """
-        
+
         df_polygon = df[df.geom_type == "Polygon"]
         if not df_polygon.empty:
             df_polygon = df_polygon.h3.polyfill_resample(
@@ -45,14 +47,14 @@ class H3VectorIndexer(VectorIndexer):
                 [df_polygon, df_linestring, df_point],
             )
         )
-        
+
     def secondary_index(self, df: pd.DataFrame, parent_res: int) -> pd.DataFrame:
         """
         Implementation of abstract function.
         """
-        
+
         return df.h3.h3_to_parent(parent_res)
-        
+
     def compaction(
         self,
         df: pd.DataFrame,
@@ -64,7 +66,7 @@ class H3VectorIndexer(VectorIndexer):
         """
         Compacts an H3 dataframe up to a given low resolution (parent_res),
         from an existing maximum resolution (res).
-        
+
         Implementation of abstract function.
         """
         return self.compaction_common(
@@ -76,4 +78,3 @@ class H3VectorIndexer(VectorIndexer):
             h3py.compact_cells,
             h3py.cell_to_center_child,
         )
-

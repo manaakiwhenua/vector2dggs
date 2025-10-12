@@ -12,11 +12,12 @@ from shapely.geometry import Point, Polygon
 
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 
+
 class GeohashVectorIndexer(VectorIndexer):
     """
     Provides integration for the Geohash geocode system.
     """
-    
+
     def __init__(self, dggs):
         super().__init__(dggs=dggs)
         self.GEOHASH_BASE32_SET = set("0123456789bcdefghjkmnpqrstuvwxyz")
@@ -25,7 +26,7 @@ class GeohashVectorIndexer(VectorIndexer):
         """
         Implementation of abstract function.
         """
-        
+
         gh_col = "geohash"
         df_polygon = df[df.geom_type == "Polygon"].copy()
         if not df_polygon.empty:
@@ -57,15 +58,15 @@ class GeohashVectorIndexer(VectorIndexer):
                 [df_polygon, df_point],
             )
         )
-    
+
     def secondary_index(self, df: pd.DataFrame, parent_level: int) -> pd.DataFrame:
         """
         Implementation of abstract function.
         """
-        
+
         df[f"geohash_{parent_level:02}"] = df.index.to_series().str[:parent_level]
         return df
-    
+
     def compaction(
         self,
         df: pd.DataFrame,
@@ -77,18 +78,18 @@ class GeohashVectorIndexer(VectorIndexer):
         """
         Compacts a geohash dataframe up to a given low resolution (parent_res),
         from an existing maximum resolution (res).
-        
+
         Implementation of abstract function.
         """
         return self.compaction_common(
             df, res, id_field, col_order, dggs_col, self.compact, self.get_child_geohash
         )
-    
+
     def compact(self, cells: set[str]) -> set[str]:
         """
         Compact a set of geohash cells.
         Cells must be at the same resolution.
-        
+
         Not a part of the interface provided by VectorIndexer.
         """
         current_set = set(cells)
@@ -116,7 +117,7 @@ class GeohashVectorIndexer(VectorIndexer):
     def get_child_geohash(self, geohash: str, desired_length: int, child: str = "0"):
         """
         Get a child geohash of the specified length by extending the input geohash.
-        
+
         Not a part of the interface provided by VectorIndexer.
         """
         if child not in self.GEOHASH_BASE32_SET:
@@ -127,45 +128,41 @@ class GeohashVectorIndexer(VectorIndexer):
         if len(geohash) >= desired_length:
             return geohash
         return geohash.ljust(desired_length, child)
-    
+
     def gh_children(self, geohash: str, desired_resolution: int) -> int:
         """
-        Determine the number of children in the geohash refinement, determined by 
+        Determine the number of children in the geohash refinement, determined by
         the additional character levels.
-        
+
         Not a part of the interface provided by VectorIndexer.
         """
         current_resolution = len(geohash)
         additional_length = desired_resolution - current_resolution
         return 32**additional_length  # Each new character increases resolution by 32
 
-
-
     def get_central_child(self, geohash: str, precision: int):
         """
         Return an approximate central child of the geohash.
         NB if only an arbitrary child is needed, use get_child_geohash
-        
+
         Not a part of the interface provided by VectorIndexer.
         """
         lat, lon = decode(geohash)
         return encode(lat, lon, precision=precision)
 
-
-    
     def _polygon_to_geohashes(self, polygon: Polygon, level: int) -> set[str]:
         """
         Function to compute geohash set for one polygon geometry
-        
+
         NB this implements a point-inside hash, but geohash_polygon only
         supports "within" or "intersects" (on the basis of geohashes as
         _polygon_ geometries) which means we have to perform additional
         computation to support "polyfill" as defined by H3.
-        
+
         A future version of vector2dggs may support within/intersects modality,
         at which point that would just be outer/inner with no further
         computation.
-        
+
         Not a part of the interface provided by VectorIndexer.
         """
         outer: set[str] = polygon_to_geohashes(polygon, level, inner=False)

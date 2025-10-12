@@ -187,7 +187,7 @@ def h3(
             layer=layer,
             geom_col=geom_col,
             overwrite=overwrite,
-            compact=compact
+            compact=compact,
         )
     except:
         raise

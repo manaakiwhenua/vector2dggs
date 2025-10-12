@@ -14,16 +14,17 @@ import geopandas as gpd
 
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 
+
 class RHPVectorIndexer(VectorIndexer):
     """
     Provides integration for MWLR's rHEALPix DGGS.
     """
-    
+
     def polyfill(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
         """
         Implementation of abstract function.
         """
-        
+
         df_polygon = df[df.geom_type == "Polygon"]
         if len(df_polygon.index) > 0:
             df_polygon = df_polygon.rhp.polyfill_resample(
@@ -49,14 +50,14 @@ class RHPVectorIndexer(VectorIndexer):
                 [df_polygon, df_linestring, df_point],
             )
         )
-    
+
     def secondary_index(self, df: pd.DataFrame, parent_res: int) -> pd.DataFrame:
         """
         Implementation of abstract function.
         """
-        
+
         return df.rhp.rhp_to_parent(parent_res)
-    
+
     def compaction(
         self,
         df: pd.DataFrame,
@@ -68,7 +69,7 @@ class RHPVectorIndexer(VectorIndexer):
         """
         Compacts an rHP dataframe up to a given low resolution (parent_res),
         from an existing maximum resolution (res).
-        
+
         Implementation of abstract function.
         """
         return self.compaction_common(
@@ -80,13 +81,13 @@ class RHPVectorIndexer(VectorIndexer):
             self.compact_cells,
             rhp_to_center_child,
         )
-    
+
     def compact_cells(self, cells: set[str]) -> set[str]:
         """
         Compact a set of rHEALPix DGGS cells.
         Cells must be at the same resolution.
         See https://github.com/manaakiwhenua/rhealpixdggs-py/issues/35#issuecomment-3186073554
-        
+
         Not a part of the interface provided by VectorIndexer.
         """
         previous_result = set(cells)

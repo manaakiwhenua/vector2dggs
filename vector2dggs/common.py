@@ -13,7 +13,7 @@ import geopandas as gpd
 import dask.dataframe as dd
 import dask_geopandas as dgpd
 
-from typing import Union, Iterable #, Callable
+from typing import Union, Iterable  # , Callable
 from pathlib import Path, PurePath
 from urllib.parse import urlparse
 from tqdm import tqdm
@@ -253,9 +253,16 @@ def polyfill(
 def polyfill_star(args) -> None:
     return polyfill(*args)
 
-def bisection_preparation(df: pd.DataFrame, dggs: str, parent_res: int, cut_crs: pyproj.CRS = None, cut_threshold: Union[None, float] = None) -> tuple[pd.DataFrame, pyproj.CRS, Union[None, float]]:
+
+def bisection_preparation(
+    df: pd.DataFrame,
+    dggs: str,
+    parent_res: int,
+    cut_crs: pyproj.CRS = None,
+    cut_threshold: Union[None, float] = None,
+) -> tuple[pd.DataFrame, pyproj.CRS, Union[None, float]]:
     cut_threshold = float(cut_threshold) if cut_threshold != None else None
-    
+
     if cut_threshold and cut_crs:
         df = df.to_crs(cut_crs)
     else:
@@ -288,8 +295,9 @@ def bisection_preparation(df: pd.DataFrame, dggs: str, parent_res: int, cut_crs:
                 f'Unspecified cut_threshold for {"projected" if cut_crs.is_projected else "geographic"} CRS: {cut_crs}, with squared units: {unit_name}'
             )
         LOGGER.debug(f"Using default cut_threshold of {cut_threshold} ({unit_name}^2)")
-    
+
     return df, cut_crs, cut_threshold
+
 
 def bisect_geometry(geometry, cut_threshold):
     return GeometryCollection(katana.katana(geometry, cut_threshold))
@@ -336,7 +344,9 @@ def index(
         # Read file
         df = gpd.read_file(input_file, layer=layer)
 
-    df, cut_crs, cut_threshold = bisection_preparation(df, dggs, parent_res, cut_crs, cut_threshold)
+    df, cut_crs, cut_threshold = bisection_preparation(
+        df, dggs, parent_res, cut_crs, cut_threshold
+    )
 
     if id_field:
         df = df.set_index(id_field)

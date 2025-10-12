@@ -17,25 +17,25 @@ class VectorIndexer:
     methods raise a NotImplementedError by design. Those methods should be
     implemented by the child classes deriving from this interface instead.
     """
-    
+
     def __init__(self, dggs: str):
         """
         Value used across all child classes
         """
         self.dggs = dggs
-        
+
     def polyfill(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
         """
         Needs to be implemented by child class
         """
         raise NotImplementedError()
-        
+
     def secondary_index(self, df: pd.DataFrame, parent_res: int) -> pd.DataFrame:
         """
         Needs to be implemented by child class
         """
         raise NotImplementedError()
-        
+
     def compaction(
         self,
         df: pd.DataFrame,
@@ -48,7 +48,7 @@ class VectorIndexer:
         Needs to be implemented by child class
         """
         raise NotImplementedError()
-        
+
     def compaction_common(
         self,
         df: pd.DataFrame,
@@ -108,4 +108,3 @@ class VectorIndexer:
         compressable_df = compressable_df.set_index(dggs_col)
 
         return pd.concat([compressable_df, uncompressable_df])[col_order]
-

@@ -19,16 +19,17 @@ import vector2dggs.constants as const
 
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 
+
 class S2VectorIndexer(VectorIndexer):
     """
     Provides integration for Google's S2 DGGS.
     """
-    
+
     def polyfill(self, df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
         """
         Implementation of abstract function.
         """
-        
+
         df_polygon = df[df.geom_type == "Polygon"].copy()
         if len(df_polygon.index) > 0:
             df_polygon = (
@@ -57,12 +58,12 @@ class S2VectorIndexer(VectorIndexer):
                 [df_polygon, df_linestring, df_point],
             )
         )
-    
+
     def secondary_index(self, df: pd.DataFrame, parent_level: int) -> pd.DataFrame:
         """
         Implementation of abstract function.
         """
-        
+
         # NB also converts the index to S2 cell tokens
         index_series = df.index.to_series().astype(object)
         df[f"s2_{parent_level:02}"] = index_series.map(
@@ -70,7 +71,7 @@ class S2VectorIndexer(VectorIndexer):
         )
         df.index = index_series.map(lambda cell_id: cell_id.ToToken())
         return df
-    
+
     def compaction(
         self,
         df: pd.DataFrame,
@@ -82,7 +83,7 @@ class S2VectorIndexer(VectorIndexer):
         """
         Compacts an S2 dataframe up to a given low resolution (parent_res),
         from an existing maximum resolution (res).
-        
+
         Implementation of abstract function.
         """
         return self.compaction_common(
@@ -94,12 +95,12 @@ class S2VectorIndexer(VectorIndexer):
             self.compact_tokens,
             self.token_to_child_token,
         )
-    
+
     def polyfill_polygons(self, df: gpd.GeoDataFrame, level: int) -> gpd.GeoDataFrame:
         """
         Not a part of the interface provided by VectorIndexer.
         """
-        
+
         def generate_covering(
             geom: Polygon, level: int, centroid_inside: bool = True
         ) -> set[S2.S2CellId]:
@@ -152,7 +153,9 @@ class S2VectorIndexer(VectorIndexer):
 
             return covering
 
-        df["s2index"] = df["geometry"].apply(lambda geom: generate_covering(geom, level))
+        df["s2index"] = df["geometry"].apply(
+            lambda geom: generate_covering(geom, level)
+        )
         df = df[
             df["s2index"].map(lambda x: len(x) > 0)
         ]  # Remove rows with no covering at this level
@@ -166,7 +169,7 @@ class S2VectorIndexer(VectorIndexer):
         Calculate the maximum number of S2 cells that are appropriate for the given geometry and level.
         This is based on the area of the geometry's bounding box,
         and the maximum area of S2 cells at the given level.
-        
+
         Not a part of the interface provided by VectorIndexer.
         """
         area = self.bbox_area_in_m2(geom)
@@ -174,26 +177,28 @@ class S2VectorIndexer(VectorIndexer):
         return ceil(max_cells * margin)
 
     def bbox_area_in_m2(
-           self,
-           geom: Polygon,
-           src_crs: Union[str, CRS] = "EPSG:4326",
-           dst_crs: Union[str, CRS] = "EPSG:6933",
-       ) -> float:
-           """
-           Calculate the area of the bounding box of a geometry in square meters.
-           
-           Not a part of the interface provided by VectorIndexer.
-           """
-           minx, miny, maxx, maxy = geom.bounds
-           bbox = box(minx, miny, maxx, maxy)
-           transformer = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
-           projected_bbox = transform(transformer.transform, bbox)
-           return projected_bbox.area
+        self,
+        geom: Polygon,
+        src_crs: Union[str, CRS] = "EPSG:4326",
+        dst_crs: Union[str, CRS] = "EPSG:6933",
+    ) -> float:
+        """
+        Calculate the area of the bounding box of a geometry in square meters.
 
-    def cell_center_is_inside_polygon(self, cell: S2.S2CellId, polygon: S2.S2Polygon) -> bool:
+        Not a part of the interface provided by VectorIndexer.
+        """
+        minx, miny, maxx, maxy = geom.bounds
+        bbox = box(minx, miny, maxx, maxy)
+        transformer = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
+        projected_bbox = transform(transformer.transform, bbox)
+        return projected_bbox.area
+
+    def cell_center_is_inside_polygon(
+        self, cell: S2.S2CellId, polygon: S2.S2Polygon
+    ) -> bool:
         """
         Determines if the center of the S2 cell is inside the polygon
-        
+
         Not a part of the interface provided by VectorIndexer.
         """
         cell_center = S2.S2Cell(cell).GetCenter()
@@ -205,7 +210,7 @@ class S2VectorIndexer(VectorIndexer):
         """
         Not a part of the interface provided by VectorIndexer.
         """
-        
+
         latlngs = [S2.S2LatLng.FromDegrees(lat, lon) for lon, lat in linestring.coords]
         polyline = S2.S2Polyline(latlngs)
 
@@ -217,11 +222,10 @@ class S2VectorIndexer(VectorIndexer):
 
         return coverer.GetCovering(polyline)
 
-
     def cell_id_from_point(self, geom: Point, level: int) -> S2.S2CellId:
         """
         Convert a point geometry to an S2 cell at the specified level.
-        
+
         Not a part of the interface provided by VectorIndexer.
         """
         latlng = S2.S2LatLng.FromDegrees(geom.y, geom.x)
@@ -231,7 +235,7 @@ class S2VectorIndexer(VectorIndexer):
         """
         Compact a set of S2 DGGS cells.
         Cells must be at the same resolution.
-        
+
         Not a part of the interface provided by VectorIndexer.
         """
         cell_ids: list[S2.S2CellId] = [
@@ -243,16 +247,17 @@ class S2VectorIndexer(VectorIndexer):
         cell_union.NormalizeS2CellUnion()  # Mutates; 'normalize' == 'compact'
         return {c.ToToken() for c in cell_union.cell_ids()}
 
-
     def token_to_child_token(self, token: str, level: int) -> str:
         """
         Returns first child (as string token) of a cell (also represented as a
         string token) at a specific level.
-        
+
         Not a part of the interface provided by VectorIndexer.
         """
         cell: S2.S2CellId = S2.S2CellId.FromToken(token, len(token))
         if level <= cell.level():
-            raise ValueError("Level must be greater than the current level of the cell.")
+            raise ValueError(
+                "Level must be greater than the current level of the cell."
+            )
         # Get the child cell iterator
         return cell.child_begin(level).ToToken()
