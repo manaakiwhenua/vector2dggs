@@ -1,92 +1,15 @@
-import sys
 import click
 import click_log
 import tempfile
 import pyproj
 
-import rhppandas  # Necessary import despite lack of explicit use
-
-import pandas as pd
-import geopandas as gpd
-
 from typing import Union
 from pathlib import Path
-from rhealpixdggs.conversion import compress_order_cells
-from rhealpixdggs.rhp_wrappers import rhp_to_center_child
-from rhppandas.util.const import COLUMNS
 
 import vector2dggs.constants as const
 import vector2dggs.common as common
 
 from vector2dggs import __version__
-
-
-def rhp_secondary_index(df: pd.date_range, parent_res: int) -> pd.DataFrame:
-    return df.rhp.rhp_to_parent(parent_res)
-
-
-def rhppolyfill(df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
-    df_polygon = df[df.geom_type == "Polygon"]
-    if len(df_polygon.index) > 0:
-        df_polygon = df_polygon.rhp.polyfill_resample(
-            resolution, return_geometry=False, compress=False
-        ).drop(columns=["index"])
-
-    df_linestring = df[df.geom_type == "LineString"]
-    if len(df_linestring.index) > 0:
-        df_linestring = (
-            df_linestring.rhp.linetrace(resolution)
-            .explode(COLUMNS["linetrace"])
-            .set_index(COLUMNS["linetrace"])
-        )
-        df_linestring = df_linestring[~df_linestring.index.duplicated(keep="first")]
-
-    df_point = df[df.geom_type == "Point"]
-    if len(df_point.index) > 0:
-        df_point = df_point.rhp.geo_to_rhp(resolution, set_index=True)
-
-    return pd.concat(
-        map(
-            lambda _df: pd.DataFrame(_df.drop(columns=[_df.geometry.name])),
-            [df_polygon, df_linestring, df_point],
-        )
-    )
-
-
-def compact_cells(cells: set[str]) -> set[str]:
-    """
-    Compact a set of rHEALPix DGGS cells.
-    Cells must be at the same resolution.
-    See https://github.com/manaakiwhenua/rhealpixdggs-py/issues/35#issuecomment-3186073554
-    """
-    previous_result = set(cells)
-    while True:
-        current_result = set(compress_order_cells(previous_result))
-        if previous_result == current_result:
-            break
-        previous_result = current_result
-    return previous_result
-
-
-def rhpcompaction(
-    df: pd.DataFrame,
-    res: int,
-    col_order: list,
-    dggs_col: str,
-    id_field: str,
-) -> pd.DataFrame:
-    """
-    Compacts an rHP dataframe up to a given low resolution (parent_res), from an existing maximum resolution (res).
-    """
-    return common.compaction(
-        df,
-        res,
-        id_field,
-        col_order,
-        dggs_col,
-        compact_cells,
-        rhp_to_center_child,
-    )
 
 
 @click.command(context_settings={"show_default": True})
@@ -163,7 +86,7 @@ def rhpcompaction(
     "-t",
     "--threads",
     required=False,
-    default=1,
+    default=const.DEFAULTS["t"],
     type=int,
     help="Amount of threads used for operation",
     nargs=1,
@@ -248,9 +171,6 @@ def rhp(
     try:
         common.index(
             "rhp",
-            rhppolyfill,
-            rhp_secondary_index,
-            rhpcompaction if compact else None,
             vector_input,
             output_directory,
             int(resolution),
@@ -267,6 +187,7 @@ def rhp(
             layer=layer,
             geom_col=geom_col,
             overwrite=overwrite,
+            compact=compact,
         )
     except:
         raise
