@@ -29,14 +29,9 @@ as defined in the list of click commands
 
 
 def indexer_instance(dggs: str) -> vectorindexer.VectorIndexer:
-    # Create and return appropriate indexer instance
-    # Raise an exception for unsupported DGGS names
-    if not dggs in indexer_lookup.keys():
-        raise RuntimeError(
-            "Unknown dggs {dggs}) -  must be one of [ {options} ]".format(
-                dggs=dggs, options=", ".join(indexer_lookup.keys())
-            )
-        )
+    """
+    Create and return appropriate indexer instance
+    """
 
     indexer = indexer_lookup[dggs]
     return indexer(dggs)
