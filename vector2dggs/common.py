@@ -313,9 +313,16 @@ def polyfill(
 def polyfill_star(args) -> None:
     return polyfill(*args)
 
-def bisection_preparation(df: pd.DataFrame, dggs: str, parent_res: int, cut_crs: pyproj.CRS = None, cut_threshold: Union[None, float] = None) -> tuple[pd.DataFrame, pyproj.CRS, Union[None, float]]:
+
+def bisection_preparation(
+    df: pd.DataFrame,
+    dggs: str,
+    parent_res: int,
+    cut_crs: pyproj.CRS = None,
+    cut_threshold: Union[None, float] = None,
+) -> tuple[pd.DataFrame, pyproj.CRS, Union[None, float]]:
     cut_threshold = float(cut_threshold) if cut_threshold != None else None
-    
+
     if cut_threshold and cut_crs:
         df = df.to_crs(cut_crs)
     else:
@@ -348,8 +355,9 @@ def bisection_preparation(df: pd.DataFrame, dggs: str, parent_res: int, cut_crs:
                 f'Unspecified cut_threshold for {"projected" if cut_crs.is_projected else "geographic"} CRS: {cut_crs}, with squared units: {unit_name}'
             )
         LOGGER.debug(f"Using default cut_threshold of {cut_threshold} ({unit_name}^2)")
-    
+
     return df, cut_crs, cut_threshold
+
 
 def bisect_geometry(geometry, cut_threshold):
     return GeometryCollection(katana.katana(geometry, cut_threshold))
@@ -384,20 +392,29 @@ def index(
 
     if layer and con:
         # Database connection
-        if keep_attributes:
-            q = sqlalchemy.text(f"SELECT * FROM {layer}")
-        elif id_field and not keep_attributes:
-            q = sqlalchemy.text(f"SELECT {id_field}, {geom_col} FROM {layer}")
-        else:
-            q = sqlalchemy.text(f"SELECT {geom_col} FROM {layer}")
-        df = gpd.read_postgis(q, con.connect(), geom_col=geom_col).rename_geometry(
-            "geometry"
-        )
+        with con.connect() as connection:
+            query = None
+            params = {"layer": layer}
+
+            if keep_attributes:
+                query = f"SELECT * FROM {layer}"
+            elif id_field and not keep_attributes:
+                query = sqlalchemy.text("SELECT :id_field, :geom_col FROM :layer")
+                params.update({"id_field": id_field, "geom_col": geom_col})
+            else:
+                query = sqlalchemy.text("SELECT :geom_col FROM :layer")
+                params["geom_col"] = geom_col
+
+            df = gpd.read_postgis(
+                query, connection, geom_col=geom_col, params=params
+            ).rename_geometry("geometry")
     else:
         # Read file
         df = gpd.read_file(input_file, layer=layer)
 
-    df, cut_crs, cut_threshold = bisection_preparation(df, dggs, parent_res, cut_crs, cut_threshold)
+    df, cut_crs, cut_threshold = bisection_preparation(
+        df, dggs, parent_res, cut_crs, cut_threshold
+    )
 
     if id_field:
         df = df.set_index(id_field)
