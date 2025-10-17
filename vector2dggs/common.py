@@ -331,15 +331,22 @@ def index(
 
     if layer and con:
         # Database connection
-        if keep_attributes:
-            q = sqlalchemy.text(f"SELECT * FROM {layer}")
-        elif id_field and not keep_attributes:
-            q = sqlalchemy.text(f"SELECT {id_field}, {geom_col} FROM {layer}")
-        else:
-            q = sqlalchemy.text(f"SELECT {geom_col} FROM {layer}")
-        df = gpd.read_postgis(q, con.connect(), geom_col=geom_col).rename_geometry(
-            "geometry"
-        )
+        with con.connect() as connection:
+            query = None
+            params = {"layer": layer}
+
+            if keep_attributes:
+                query = f"SELECT * FROM {layer}"
+            elif id_field and not keep_attributes:
+                query = sqlalchemy.text("SELECT :id_field, :geom_col FROM :layer")
+                params.update({"id_field": id_field, "geom_col": geom_col})
+            else:
+                query = sqlalchemy.text("SELECT :geom_col FROM :layer")
+                params["geom_col"] = geom_col
+
+            df = gpd.read_postgis(
+                query, connection, geom_col=geom_col, params=params
+            ).rename_geometry("geometry")
     else:
         # Read file
         df = gpd.read_file(input_file, layer=layer)
