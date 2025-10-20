@@ -27,12 +27,6 @@ class TestKatana(TestRunthrough):
     Sends test data through katana cutting.
     """
 
-    def setUp(self):
-        pass
-
-    def tearDown(self):
-        pass
-
     def test_katana(self):
         area_threshold = 0.05
         try:

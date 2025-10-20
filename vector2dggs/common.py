@@ -13,7 +13,7 @@ import geopandas as gpd
 import dask.dataframe as dd
 import dask_geopandas as dgpd
 
-from typing import Union, Callable, Iterable
+from typing import Union, Iterable  # , Callable
 from pathlib import Path, PurePath
 from urllib.parse import urlparse
 from tqdm import tqdm
@@ -22,8 +22,10 @@ from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_compl
 from shapely.geometry import GeometryCollection
 
 import vector2dggs.constants as const
+import vector2dggs.indexerfactory as idxfactory
 
 from . import katana
+from vector2dggs.indexers.vectorindexer import VectorIndexer
 
 SQLConnectionType = Union[sqlalchemy.engine.Connection, sqlalchemy.engine.Engine]
 
@@ -57,66 +59,6 @@ def check_compaction_requirements(compact: bool, id_field: Union[str, None]) -> 
         raise IdFieldError(
             "An id_field is required for compaction, in order to handle the potential for overlapping features"
         )
-
-
-def compaction(
-    df: pd.DataFrame,
-    res: int,
-    id_field: str,
-    col_order: list[str],
-    dggs_col: str,
-    compact_func: Callable[[Iterable[Union[str, int]]], Iterable[Union[str, int]]],
-    cell_to_child_func: Callable[[Union[str, int], int], Union[str, int]],
-):
-    """
-    Compacts a dataframe up to a given low resolution (parent_res), from an existing maximum resolution (res).
-    """
-    df = df.reset_index(drop=False)
-
-    feature_cell_groups = (
-        df.groupby(id_field)[dggs_col].apply(lambda x: set(x)).to_dict()
-    )
-    feature_cell_compact = {
-        id: set(compact_func(cells)) for id, cells in feature_cell_groups.items()
-    }
-
-    uncompressable = {
-        id: feature_cell_groups[id] & feature_cell_compact[id]
-        for id in feature_cell_groups.keys()
-    }
-    compressable = {
-        id: feature_cell_compact[id] - feature_cell_groups[id]
-        for id in feature_cell_groups.keys()
-    }
-
-    # Get rows that cannot be compressed
-    mask = pd.Series([False] * len(df), index=df.index)  # Init bool mask
-    for key, value_set in uncompressable.items():
-        mask |= (df[id_field] == key) & (df[dggs_col].isin(value_set))
-    uncompressable_df = df[mask].set_index(dggs_col)
-
-    # Get rows that can be compressed
-    # Convert each compressed (coarser resolution) cell into a cell at
-    #   the original resolution (usu using centre child as reference)
-    compression_mapping = {
-        (id, cell_to_child_func(cell, res)): cell
-        for id, cells in compressable.items()
-        if cells
-        for cell in cells
-    }
-    mask = pd.Series([False] * len(df), index=df.index)
-    composite_key = f"composite_key_{uuid4()}"
-    # Update mask for compressible rows and prepare for replacement
-    get_composite_key = lambda row: (row[id_field], row[dggs_col])
-    df[composite_key] = df.apply(get_composite_key, axis=1)
-    mask |= df[composite_key].isin(compression_mapping)
-    compressable_df = df[mask].copy()
-    compressable_df[dggs_col] = compressable_df[composite_key].map(
-        compression_mapping
-    )  # Replace DGGS cell ID with compressed representation
-    compressable_df = compressable_df.set_index(dggs_col)
-
-    return pd.concat([compressable_df, uncompressable_df])[col_order]
 
 
 def db_conn_and_input_path(
@@ -208,26 +150,26 @@ def get_parent_res(dggs: str, parent_res: Union[None, str], resolution: int) -> 
 
 
 def parent_partitioning(
-    dggs: str,
+    indexer: VectorIndexer,
     input_dir: Path,
     output_dir: Path,
-    compaction_func: Union[Callable, None],
     resolution: int,
     parent_res: int,
     id_field: str,
+    compact: bool,
     **kwargs,
 ) -> None:
-    partition_col = f"{dggs}_{parent_res:02}"
-    dggs_col = f"{dggs}_{resolution:02}"
+    partition_col = f"{indexer.dggs}_{parent_res:02}"
+    dggs_col = f"{indexer.dggs}_{resolution:02}"
 
     # Read the parquet files into a Dask DataFrame
     ddf = dd.read_parquet(input_dir, engine="pyarrow")
     meta = ddf._meta
 
     with TqdmCallback(
-        desc=f"Parent partitioning, writing {'compacted ' if compaction_func else ''}output"
+        desc=f"Parent partitioning, writing {'compacted ' if compact else ''}output"
     ):
-        if compaction_func:
+        if compact:
             # Apply the compaction function to each partition
             unique_parents = sorted(
                 [v for v in ddf[partition_col].unique().compute() if pd.notna(v)]
@@ -239,7 +181,7 @@ def parent_partitioning(
                 .set_index(partition_col)
                 .repartition(divisions=divisions)
                 .map_partitions(
-                    compaction_func,
+                    indexer.compaction,
                     resolution,
                     meta.columns.to_list(),  # Column order to be returned
                     dggs_col,
@@ -270,9 +212,7 @@ def parent_partitioning(
 
 
 def polyfill(
-    dggs: str,
-    dggsfunc: Callable,
-    secondary_index_func: Callable,
+    indexer: VectorIndexer,
     pq_in: Path,
     spatial_sort_col: str,
     resolution: int,
@@ -293,16 +233,16 @@ def polyfill(
         return None
 
     # DGGS specific conversion
-    df = dggsfunc(df, resolution)
+    df = indexer.polyfill(df, resolution)
 
     if len(df.index) == 0:
         # Conversion resulted in empty output (e.g. large cell, small feature)
         return None
 
-    df.index.rename(f"{dggs}_{resolution:02}", inplace=True)
+    df.index.rename(f"{indexer.dggs}_{resolution:02}", inplace=True)
 
     # Secondary (parent) index, used later for partitioning
-    df = secondary_index_func(df, parent_res)
+    df = indexer.secondary_index(df, parent_res)
 
     df.to_parquet(
         PurePath(output_directory, pq_in.name), engine="auto", compression=compression
@@ -365,9 +305,6 @@ def bisect_geometry(geometry, cut_threshold):
 
 def index(
     dggs: str,
-    dggsfunc: Callable,
-    secondary_index_func: Callable,
-    compaction_func: Union[Callable, None],
     input_file: Union[Path, str],
     output_directory: Union[Path, str],
     resolution: int,
@@ -384,10 +321,12 @@ def index(
     layer: str = None,
     geom_col: str = "geom",
     overwrite: bool = False,
+    compact: bool = True,
 ) -> Path:
     """
     Performs multi-threaded DGGS indexing on geometries (including multipart and collections).
     """
+    indexer = idxfactory.indexer_instance(dggs)
     parent_res = get_parent_res(dggs, parent_res, resolution)
 
     if layer and con:
@@ -480,7 +419,7 @@ def index(
     )
 
     with tempfile.TemporaryDirectory(suffix=".parquet") as tmpdir:
-        with TqdmCallback(desc=f"Spatially partitioning"):
+        with TqdmCallback(desc="Spatially partitioning"):
             ddf.to_parquet(tmpdir, overwrite=True)
 
         filepaths = list(map(lambda f: f.absolute(), Path(tmpdir).glob("*")))
@@ -494,9 +433,7 @@ def index(
 
             args = [
                 (
-                    dggs,
-                    dggsfunc,
-                    secondary_index_func,
+                    indexer,
                     filepath,
                     spatial_sort_col,
                     resolution,
@@ -520,13 +457,13 @@ def index(
                         raise (e)
 
             parent_partitioning(
-                dggs,
+                indexer,
                 Path(tmpdir2),
                 output_directory,
-                compaction_func,
                 resolution,
                 parent_res,
                 id_field,
+                compact,
                 overwrite=overwrite,
                 compression=compression,
             )
