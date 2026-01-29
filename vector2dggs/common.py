@@ -370,7 +370,7 @@ def index(
         df, dggs, parent_res, cut_crs, cut_threshold
     )
 
-    if id_field:
+    if id_field and id_field in df.columns:
         df = df.set_index(id_field)
     else:
         df = df.reset_index()
