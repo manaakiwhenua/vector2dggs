@@ -185,19 +185,30 @@ def write_partition_as_geoparquet(
             partition_df.index.map(geo_serialisation_method), index=partition_df.index
         )
 
-    # Compute optional GeoParquet bbox / geometry_types metadata
-    valid = [g for g in geoms.tolist() if (g is not None and not g.is_empty)]
-    if len(valid):
-        arr = np.asarray(shapely.bounds(valid))
-        m = ~np.isnan(arr).any(axis=1)
-        bbox_vals = arr[m]
-        bbox = [
-            float(np.min(bbox_vals[:, 0])),
-            float(np.min(bbox_vals[:, 1])),
-            float(np.max(bbox_vals[:, 2])),
-            float(np.max(bbox_vals[:, 3])),
-        ]
-        geometry_types = sorted({g.geom_type for g in valid})
+    # Compute optional GeoParquet bbox / geometry_types metadata (vectorized)
+    geom_arr = geoms.to_numpy()
+    valid_mask = pd.notna(geom_arr)
+    if valid_mask.any():
+        valid_mask[valid_mask] &= ~shapely.is_empty(geom_arr[valid_mask])
+
+    if valid_mask.any():
+        bounds = np.asarray(shapely.bounds(geom_arr[valid_mask]))
+        bounds = np.atleast_2d(bounds)
+        finite_mask = ~np.isnan(bounds).any(axis=1)
+        bbox_vals = bounds[finite_mask]
+
+        if len(bbox_vals):
+            bbox = [
+                float(np.min(bbox_vals[:, 0])),
+                float(np.min(bbox_vals[:, 1])),
+                float(np.max(bbox_vals[:, 2])),
+                float(np.max(bbox_vals[:, 3])),
+            ]
+        else:
+            bbox = None
+
+        valid_geoms = geom_arr[valid_mask]
+        geometry_types = sorted({g.geom_type for g in valid_geoms})
     else:
         bbox = None
         geometry_types = []
