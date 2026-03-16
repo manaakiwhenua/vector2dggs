@@ -221,7 +221,10 @@ def write_partition_as_geoparquet(
 
     # Ensure geometry field is Binary
     geom_idx = table.schema.get_field_index("geometry")
-    if geom_idx >= 0 and not pa.types.is_binary(table.field(geom_idx).type):
+    if geom_idx >= 0 and not (
+        pa.types.is_binary(table.field(geom_idx).type)
+        or pa.types.is_large_binary(table.field(geom_idx).type)
+    ):
         geom_array = pa.array(table.column(geom_idx).to_pylist(), type=pa.binary())
         table = table.set_column(geom_idx, "geometry", geom_array)
 
