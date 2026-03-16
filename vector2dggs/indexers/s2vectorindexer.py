@@ -261,3 +261,22 @@ class S2VectorIndexer(VectorIndexer):
             )
         # Get the child cell iterator
         return cell.child_begin(level).ToToken()
+
+    @staticmethod
+    def cell_to_point(cell: str) -> Point:
+        cell_id = S2.S2CellId.FromToken(cell, len(cell))
+        latlng = cell_id.ToLatLng()
+        return Point(latlng.lng().degrees(), latlng.lat().degrees())
+
+    @staticmethod
+    def cell_to_polygon(cell: str) -> Polygon:
+        s2_cell = S2.S2Cell(S2.S2CellId.FromToken(cell, len(cell)))
+        return Polygon(
+            tuple(
+                (
+                    vertex.lng().degrees(),
+                    vertex.lat().degrees(),
+                )
+                for vertex in (s2_cell.GetS2LatLngVertex(i) for i in range(4))
+            )
+        )

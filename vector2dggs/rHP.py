@@ -119,6 +119,13 @@ from vector2dggs import __version__
     nargs=1,
 )
 @click.option(
+    "--geo",
+    required=False,
+    default=const.DEFAULTS["geo"],
+    type=click.Choice(const.GEOM_TYPES),
+    help="Write output as a GeoParquet (v1.1.0) with either point or polygon geometry.",
+)
+@click.option(
     "--tempdir",
     default=const.DEFAULTS["tempdir"],
     type=click.Path(),
@@ -147,6 +154,7 @@ def rhp(
     compression: str,
     layer: str,
     geom_col: str,
+    geo: str,
     tempdir: Union[str, Path],
     compact: bool,
     overwrite: bool,
@@ -158,6 +166,9 @@ def rhp(
     OUTPUT_DIRECTORY should be a directory, not a file or database table, as it will instead be the write location for an Apache Parquet data store.
     """
     tempfile.tempdir = tempdir if tempdir is not None else tempfile.tempdir
+
+    spatial_sorting = const.SpatialSortingMethod(spatial_sorting).value
+    geo = const.GeoOutputMode(geo).value
 
     common.check_resolutions(resolution, parent_res)
     common.check_compaction_requirements(compact, id_field)
@@ -186,6 +197,7 @@ def rhp(
             con=con,
             layer=layer,
             geom_col=geom_col,
+            geo=geo,
             overwrite=overwrite,
             compact=compact,
         )

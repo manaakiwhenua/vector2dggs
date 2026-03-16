@@ -4,11 +4,11 @@
 """
 
 from geohash_polygon import polygon_to_geohashes  # rusty-polygon-geohasher
-from geohash import encode, decode  # python-geohash
+from geohash import encode, decode, decode_exactly  # python-geohash
 
 import pandas as pd
 import geopandas as gpd
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point, Polygon, box
 
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 
@@ -173,3 +173,18 @@ class GeohashVectorIndexer(VectorIndexer):
             if Point(*reversed(decode(h))).within(polygon)
         }  # Edge cells with a center within the polygon
         return edge | inner
+
+    @staticmethod
+    def cell_to_point(cell: str) -> Point:
+        lat, lon, _, _ = decode_exactly(cell)
+        return Point(lon, lat)
+
+    @staticmethod
+    def cell_to_polygon(cell: str) -> Polygon:
+        lat, lon, lat_err, lon_err = decode_exactly(cell)
+        return box(
+            lon - lon_err,
+            lat - lat_err,
+            lon + lon_err,
+            lat + lat_err,
+        )

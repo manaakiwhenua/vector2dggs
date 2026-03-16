@@ -4,13 +4,19 @@
 """
 
 from rhealpixdggs.conversion import compress_order_cells
-from rhealpixdggs.rhp_wrappers import rhp_to_center_child
+from rhealpixdggs.rhp_wrappers import (
+    rhp_to_center_child,
+    rhp_to_geo,
+    rhp_to_geo_boundary,
+)
+from rhealpixdggs.dggs import WGS84_003
 from rhppandas.util.const import COLUMNS
 
 import rhppandas  # Necessary import despite lack of explicit use
 
 import pandas as pd
 import geopandas as gpd
+from shapely.geometry import Point, Polygon
 
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 
@@ -97,3 +103,16 @@ class RHPVectorIndexer(VectorIndexer):
                 break
             previous_result = current_result
         return previous_result
+
+    @staticmethod
+    def cell_to_point(cell: str) -> Point:
+        return Point(rhp_to_geo(cell, plane=False, dggs=WGS84_003))
+
+    @staticmethod
+    def cell_to_polygon(cell: str) -> Polygon:
+        return Polygon(
+            tuple(
+                coord
+                for coord in rhp_to_geo_boundary(cell, plane=False, dggs=WGS84_003)
+            )
+        )

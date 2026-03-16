@@ -1,14 +1,33 @@
 import multiprocessing
 import warnings
 import tempfile
-
+from enum import StrEnum, unique
 
 MIN_H3, MAX_H3 = 0, 15
 MIN_RHP, MAX_RHP = 0, 15
 MIN_S2, MAX_S2 = 0, 30
 MIN_GEOHASH, MAX_GEOHASH = 1, 12
 
-SPATIAL_SORTING_METHODS = ["hilbert", "morton", "geohash", "none"]
+
+@unique
+class SpatialSortingMethod(StrEnum):
+    HILBERT = "hilbert"
+    MORTON = "morton"
+    GEOHASH = "geohash"
+    NONE = "none"
+
+
+SPATIAL_SORTING_METHODS = tuple(mode.value for mode in SpatialSortingMethod)
+
+
+@unique
+class GeoOutputMode(StrEnum):
+    NONE = "none"
+    POINT = "point"
+    POLYGON = "polygon"
+
+
+GEOM_TYPES = tuple(mode.value for mode in GeoOutputMode)
 
 DEFAULT_DGGS_PARENT_RES = {
     "h3": lambda resolution: max(MIN_H3, (resolution - DEFAULT_PARENT_OFFSET)),
@@ -126,7 +145,7 @@ DEFAULTS = {
     "id": None,
     "k": False,
     "ch": 50,
-    "s": "none",
+    "s": SpatialSortingMethod.NONE.value,
     "crs": None,
     "c": None,
     "t": (multiprocessing.cpu_count() - 1),
@@ -134,8 +153,8 @@ DEFAULTS = {
     "lyr": None,
     "g": "geom",
     "tempdir": tempfile.tempdir,
+    "geo": GeoOutputMode.NONE.value,
 }
-
 
 warnings.filterwarnings(
     "ignore"

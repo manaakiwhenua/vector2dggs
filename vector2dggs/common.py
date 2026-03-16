@@ -1,5 +1,6 @@
 import os
 import errno
+import json
 import logging
 import tempfile
 import click_log
@@ -10,8 +11,13 @@ from uuid import uuid4
 
 import pandas as pd
 import geopandas as gpd
+import dask
 import dask.dataframe as dd
 import dask_geopandas as dgpd
+import numpy as np
+import shapely
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 from typing import Union, Iterable  # , Callable
 from pathlib import Path, PurePath
@@ -149,6 +155,95 @@ def get_parent_res(dggs: str, parent_res: Union[None, str], resolution: int) -> 
     )
 
 
+def write_partition_as_geoparquet(
+    partition_df: pd.DataFrame,
+    geo_serialisation_method,
+    output_dir: Path,
+    partition_col: str,
+    dggs_col: str,
+    compression: str,
+) -> int:
+    if len(partition_df.index) == 0:
+        return 0
+
+    if (
+        partition_col not in partition_df.columns
+        and partition_df.index.name == partition_col
+    ):
+        partition_df = partition_df.reset_index(drop=False)
+
+    if partition_col not in partition_df.columns:
+        raise KeyError(
+            f"Could not find partition column '{partition_col}' in partition write step"
+        )
+
+    # Build shapely geometries for this dask partition
+    if dggs_col in partition_df.columns:
+        geoms = partition_df[dggs_col].map(geo_serialisation_method)
+    else:
+        geoms = pd.Series(
+            partition_df.index.map(geo_serialisation_method), index=partition_df.index
+        )
+
+    # Compute optional GeoParquet bbox / geometry_types metadata
+    valid = [g for g in geoms.tolist() if (g is not None and not g.is_empty)]
+    if len(valid):
+        arr = np.asarray(shapely.bounds(valid))
+        m = ~np.isnan(arr).any(axis=1)
+        bbox_vals = arr[m]
+        bbox = [
+            float(np.min(bbox_vals[:, 0])),
+            float(np.min(bbox_vals[:, 1])),
+            float(np.max(bbox_vals[:, 2])),
+            float(np.max(bbox_vals[:, 3])),
+        ]
+        geometry_types = sorted({g.geom_type for g in valid})
+    else:
+        bbox = None
+        geometry_types = []
+
+    pdf = partition_df.copy()
+    pdf[partition_col] = pdf[partition_col].astype("string")
+    pdf["geometry"] = shapely.to_wkb(geoms, hex=False)
+
+    table = pa.Table.from_pandas(pdf, preserve_index=True)
+
+    # Ensure geometry field is Binary
+    geom_idx = table.schema.get_field_index("geometry")
+    if geom_idx >= 0 and not pa.types.is_binary(table.field(geom_idx).type):
+        geom_array = pa.array(table.column(geom_idx).to_pylist(), type=pa.binary())
+        table = table.set_column(geom_idx, "geometry", geom_array)
+
+    col_meta = {
+        "encoding": "WKB",
+        "crs": pyproj.CRS.from_epsg(4326).to_json_dict(),
+    }
+    if geometry_types:
+        col_meta["geometry_types"] = geometry_types
+    if bbox is not None:
+        col_meta["bbox"] = bbox
+
+    geo_meta = {
+        "version": "1.1.0",
+        "primary_column": "geometry",
+        "columns": {"geometry": col_meta},
+    }
+    existing_meta = table.schema.metadata or {}
+    new_meta = {**existing_meta, b"geo": json.dumps(geo_meta).encode("utf-8")}
+    table = table.replace_schema_metadata(new_meta)
+
+    pq.write_to_dataset(
+        table,
+        root_path=str(output_dir),
+        partition_cols=[partition_col],
+        compression=compression,
+        basename_template=f"part.{{i}}-{uuid4().hex}.parquet",
+        use_threads=True,
+    )
+
+    return int(len(pdf.index) > 0)
+
+
 def parent_partitioning(
     indexer: VectorIndexer,
     input_dir: Path,
@@ -157,6 +252,7 @@ def parent_partitioning(
     parent_res: int,
     id_field: str,
     compact: bool,
+    geo: str,
     **kwargs,
 ) -> None:
     partition_col = f"{indexer.dggs}_{parent_res:02}"
@@ -169,6 +265,7 @@ def parent_partitioning(
     with TqdmCallback(
         desc=f"Parent partitioning, writing {'compacted ' if compact else ''}output"
     ):
+
         if compact:
             # Apply the compaction function to each partition
             unique_parents = sorted(
@@ -190,23 +287,51 @@ def parent_partitioning(
                 )
             )
 
-        ddf.to_parquet(
-            output_dir,
-            overwrite=kwargs.get("overwrite", False),
-            engine=kwargs.get("engine", "pyarrow"),
-            partition_on=[partition_col],
-            compression=kwargs.get("compression", "ZSTD"),
-            # **kwargs
-        )
+        if geo == const.GeoOutputMode.NONE.value:
+            ddf.to_parquet(
+                output_dir,
+                overwrite=kwargs.get("overwrite", False),
+                engine=kwargs.get("engine", "pyarrow"),
+                partition_on=[partition_col],
+                write_index=True,
+                append=False,
+                compression=kwargs.get("compression", "ZSTD"),
+                # **kwargs
+            )
+        else:
+            if geo not in (
+                const.GeoOutputMode.POINT.value,
+                const.GeoOutputMode.POLYGON.value,
+            ):
+                raise ValueError(
+                    f"Unknown geo output mode '{geo}'. Expected one of {const.GEOM_TYPES}."
+                )
+
+            geom_fn = (
+                indexer.cell_to_point
+                if geo == const.GeoOutputMode.POINT.value
+                else indexer.cell_to_polygon
+            )
+
+            delayed_parts = ddf.to_delayed()
+            write_tasks = [
+                dask.delayed(write_partition_as_geoparquet)(
+                    part,
+                    geom_fn,
+                    output_dir,
+                    partition_col,
+                    dggs_col,
+                    kwargs.get("compression", "ZSTD"),
+                )
+                for part in delayed_parts
+            ]
+
+            with TqdmCallback(desc="Writing GeoParquet"):
+                dask.compute(*write_tasks)
+
+            LOGGER.debug("GeoParquet output writing complete")
 
     LOGGER.debug("Parent cell partitioning complete")
-
-    # Append a .parquet suffix
-    for f in os.listdir(output_dir):
-        os.rename(
-            os.path.join(output_dir, f),
-            os.path.join(output_dir, f.replace(f"{partition_col}=", "")),
-        )
 
     return
 
@@ -328,6 +453,7 @@ def index(
     con: SQLConnectionType = None,
     layer: str = None,
     geom_col: str = "geom",
+    geo: str = const.GeoOutputMode.NONE.value,
     overwrite: bool = False,
     compact: bool = True,
 ) -> Path:
@@ -479,6 +605,7 @@ def index(
                 parent_res,
                 id_field,
                 compact,
+                geo,
                 overwrite=overwrite,
                 compression=compression,
             )

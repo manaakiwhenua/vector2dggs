@@ -119,6 +119,13 @@ from vector2dggs import __version__
     nargs=1,
 )
 @click.option(
+    "--geo",
+    required=False,
+    default=const.DEFAULTS["geo"],
+    type=click.Choice(const.GEOM_TYPES),
+    help="Write output as a GeoParquet (v1.1.0) with either point or polygon geometry.",
+)
+@click.option(
     "--tempdir",
     default=const.DEFAULTS["tempdir"],
     type=click.Path(),
@@ -147,6 +154,7 @@ def h3(
     compression: str,
     layer: str,
     geom_col: str,
+    geo: str,
     tempdir: Union[str, Path],
     compact: bool,
     overwrite: bool,
@@ -161,6 +169,9 @@ def h3(
 
     common.check_resolutions(resolution, parent_res)
     common.check_compaction_requirements(compact, id_field)
+
+    spatial_sorting = const.SpatialSortingMethod(spatial_sorting).value
+    geo = const.GeoOutputMode(geo).value
 
     con, vector_input = common.db_conn_and_input_path(vector_input)
     output_directory = common.resolve_output_path(output_directory, overwrite)
@@ -186,6 +197,7 @@ def h3(
             con=con,
             layer=layer,
             geom_col=geom_col,
+            geo=geo,
             overwrite=overwrite,
             compact=compact,
         )
