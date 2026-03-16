@@ -309,7 +309,7 @@ files = [
 name = "contourpy"
 version = "1.3.3"
 description = "Python library for calculating contours of 2D quadrilateral grids"
-optional = false
+optional = true
 python-versions = ">=3.11"
 files = [
     {file = "contourpy-1.3.3-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:709a48ef9a690e1343202916450bc48b9e51c049b089c7f79a267b46cffcdaa1"},
@@ -476,7 +476,7 @@ test-randomorder = ["pytest-randomly"]
 name = "cycler"
 version = "0.12.1"
 description = "Composable style cycles"
-optional = false
+optional = true
 python-versions = ">=3.8"
 files = [
     {file = "cycler-0.12.1-py3-none-any.whl", hash = "sha256:85cef7cff222d8644161529808465972e51340599459b8ac3ccbac5a854e0d30"},
@@ -554,7 +554,7 @@ files = [
 name = "fonttools"
 version = "4.60.1"
 description = "Tools to manipulate font files"
-optional = false
+optional = true
 python-versions = ">=3.9"
 files = [
     {file = "fonttools-4.60.1-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:9a52f254ce051e196b8fe2af4634c2d2f02c981756c6464dc192f1b6050b4e28"},
@@ -776,7 +776,7 @@ test = ["objgraph", "psutil", "setuptools"]
 name = "h3"
 version = "4.3.1"
 description = "Uber's hierarchical hexagonal geospatial indexing system"
-optional = false
+optional = true
 python-versions = ">=3.8"
 files = [
     {file = "h3-4.3.1-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:ce6033bdee8dd0179a99f818d6bdce01bf63821fc0ecee9ce5d013ec54cb1000"},
@@ -838,7 +838,7 @@ test = ["numpy", "pytest", "pytest-cov", "ruff"]
 name = "h3pandas"
 version = "0.3.0"
 description = "Integration of H3 and GeoPandas"
-optional = false
+optional = true
 python-versions = ">=3.9"
 files = [
     {file = "h3pandas-0.3.0-py3-none-any.whl", hash = "sha256:4624eca4737cd06bde2685c24d14cbdc6d668f1e621b2eb94cf11dceb22cc7f6"},
@@ -1030,7 +1030,7 @@ type = ["pygobject-stubs", "pytest-mypy", "shtab", "types-pywin32"]
 name = "kiwisolver"
 version = "1.4.9"
 description = "A fast implementation of the Cassowary constraint solver"
-optional = false
+optional = true
 python-versions = ">=3.10"
 files = [
     {file = "kiwisolver-1.4.9-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:b4b4d74bda2b8ebf4da5bd42af11d02d04428b2c32846e4c2c93219df8a7987b"},
@@ -1174,7 +1174,7 @@ testing = ["coverage", "pytest", "pytest-cov", "pytest-regressions", "requests"]
 name = "matplotlib"
 version = "3.10.7"
 description = "Python plotting package"
-optional = false
+optional = true
 python-versions = ">=3.10"
 files = [
     {file = "matplotlib-3.10.7-cp310-cp310-macosx_10_12_x86_64.whl", hash = "sha256:7ac81eee3b7c266dd92cee1cd658407b16c57eed08c7421fa354ed68234de380"},
@@ -1858,7 +1858,7 @@ test = ["pytest", "pytest-cov"]
 name = "pyparsing"
 version = "3.2.5"
 description = "pyparsing - Classes and methods to define and execute parsing grammars"
-optional = false
+optional = true
 python-versions = ">=3.9"
 files = [
     {file = "pyparsing-3.2.5-py3-none-any.whl", hash = "sha256:e38a4f02064cf41fe6593d328d0512495ad1f3d8a91c4f73fc401b3079a59a5e"},
@@ -1973,7 +1973,7 @@ six = ">=1.5"
 name = "python-geohash"
 version = "0.8.5"
 description = "Fast, accurate python geohashing library"
-optional = false
+optional = true
 python-versions = "*"
 files = [
     {file = "python-geohash-0.8.5.tar.gz", hash = "sha256:05a21fcf4eda1a5eddbd291890ade23fc5ddaa6bb98f2ee23d2d384ed14f086d"},
@@ -2169,7 +2169,7 @@ idna2008 = ["idna"]
 name = "rhealpixdggs"
 version = "0.5.12"
 description = "An implementation of the rHEALPix discrete global grid system"
-optional = false
+optional = true
 python-versions = ">=3.11"
 files = [
     {file = "rhealpixdggs-0.5.12-py3-none-any.whl", hash = "sha256:0b27faafdce246ac05375c26cffbc9619d18885f46c86b219317d331a4075ece"},
@@ -2187,7 +2187,7 @@ shapely = ">=2.1"
 name = "rhppandas"
 version = "0.2.1"
 description = "Integration of rHEALPixDGGS and Pandas/GeoPandas"
-optional = false
+optional = true
 python-versions = ">=3.11"
 files = [
     {file = "rhppandas-0.2.1-py3-none-any.whl", hash = "sha256:69a8139b52391a65758ab6b1488d1430585441cbcc5c9db9d534515814f16755"},
@@ -2227,7 +2227,7 @@ jupyter = ["ipywidgets (>=7.5.1,<9)"]
 name = "rusty-polygon-geohasher"
 version = "0.2.3"
 description = ""
-optional = false
+optional = true
 python-versions = "*"
 files = [
     {file = "rusty_polygon_geohasher-0.2.3-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:f939e3571441c98fb282639cb62d6bebcdc282a7e43de36d3b90370b51363926"},
@@ -2249,7 +2249,7 @@ files = [
 name = "s2geometry"
 version = "0.9.0"
 description = "Computational geometry and spatial indexing on the sphere"
-optional = false
+optional = true
 python-versions = ">=3.4"
 files = [
     {file = "s2geometry-0.9.0-cp35-cp35m-manylinux2010_x86_64.whl", hash = "sha256:ba100731d1639dd8022e61a211bf200ce25044409f6db1dd93fd1ebaab22774b"},
@@ -2263,7 +2263,7 @@ files = [
 name = "scipy"
 version = "1.16.2"
 description = "Fundamental algorithms for scientific computing in Python"
-optional = false
+optional = true
 python-versions = ">=3.11"
 files = [
     {file = "scipy-1.16.2-cp311-cp311-macosx_10_14_x86_64.whl", hash = "sha256:6ab88ea43a57da1af33292ebd04b417e8e2eaf9d5aa05700be8d6e1b6501cd92"},
@@ -2646,7 +2646,14 @@ enabler = ["pytest-enabler (>=2.2)"]
 test = ["big-O", "jaraco.functools", "jaraco.itertools", "jaraco.test", "more_itertools", "pytest (>=6,!=8.1.*)", "pytest-ignore-flaky"]
 type = ["pytest-mypy"]
 
+[extras]
+all = ["h3pandas", "python-geohash", "rhealpixdggs", "rhppandas", "rusty-polygon-geohasher", "s2geometry"]
+geohash = ["python-geohash", "rusty-polygon-geohasher"]
+h3 = ["h3pandas"]
+rhp = ["rhealpixdggs", "rhppandas"]
+s2 = ["s2geometry"]
+
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "cab29f117bada6b8187d982015ed85435f9949332fe2119569ef1e19fd19fadc"
+content-hash = "6aa969a2659f6d04cc709f15b9f23fea49e126791dcda649baabfa053ecaf329"
