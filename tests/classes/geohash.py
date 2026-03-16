@@ -60,3 +60,75 @@ class TestGeohash(TestRunthrough):
             )
         except Exception:
             self.fail("geohash run through with reprojected CRS failed")
+
+    def test_geohash_geo_point(self):
+        try:
+            geohash(
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "-r",
+                    "6",
+                    "--geo",
+                    "point",
+                ],
+                standalone_mode=False,
+            )
+        except Exception:
+            self.fail("geohash run through with geo point failed")
+
+    def test_geohash_geo_point_compact(self):
+        try:
+            geohash(
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "-r",
+                    "6",
+                    "--geo",
+                    "point",
+                    "-co",
+                    "-id",
+                    "LCDB_UID",
+                    "-o",
+                ],
+                standalone_mode=False,
+            )
+        except Exception:
+            self.fail("geohash run through with geo point compact failed")
+
+    def test_geohash_geo_polygon(self):
+        try:
+            geohash(
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "-r",
+                    "6",
+                    "--geo",
+                    "polygon",
+                ],
+                standalone_mode=False,
+            )
+        except Exception:
+            self.fail("geohash run through with geo polygon failed")
+
+    def test_geohash_geo_polygon_compact(self):
+        try:
+            geohash(
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "-r",
+                    "6",
+                    "--geo",
+                    "polygon",
+                    "-co",
+                    "-id",
+                    "LCDB_UID",
+                    "-o",
+                ],
+                standalone_mode=False,
+            )
+        except Exception:
+            self.fail("geohash run through with geo polygon compact failed")

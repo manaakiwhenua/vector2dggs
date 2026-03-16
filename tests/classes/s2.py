@@ -85,3 +85,75 @@ class TestS2(TestRunthrough):
             )
         except Exception:
             self.fail("S2 run through without bisection failed")
+
+    def test_s2_geo_point(self):
+        try:
+            s2(
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "-r",
+                    "13",
+                    "--geo",
+                    "point",
+                ],
+                standalone_mode=False,
+            )
+        except Exception:
+            self.fail("S2 run through with geo point failed")
+
+    def test_s2_geo_point_compact(self):
+        try:
+            s2(
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "-r",
+                    "13",
+                    "--geo",
+                    "point",
+                    "-co",
+                    "-id",
+                    "LCDB_UID",
+                    "-o",
+                ],
+                standalone_mode=False,
+            )
+        except Exception:
+            self.fail("S2 run through with geo point compact failed")
+
+    def test_s2_geo_polygon(self):
+        try:
+            s2(
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "-r",
+                    "13",
+                    "--geo",
+                    "polygon",
+                ],
+                standalone_mode=False,
+            )
+        except Exception:
+            self.fail("S2 run through with geo polygon failed")
+
+    def test_s2_geo_polygon_compact(self):
+        try:
+            s2(
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "-r",
+                    "13",
+                    "--geo",
+                    "polygon",
+                    "-co",
+                    "-id",
+                    "LCDB_UID",
+                    "-o",
+                ],
+                standalone_mode=False,
+            )
+        except Exception:
+            self.fail("S2 run through with geo polygon compact failed")

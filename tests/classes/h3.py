@@ -85,3 +85,77 @@ class TestH3(TestRunthrough):
             )
         except Exception:
             self.fail("H3 run through without bisection failed")
+
+    def test_h3_geo_point(self):
+        try:
+            h3(
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "-r",
+                    "8",
+                    "--geo",
+                    "point",
+                    "-o",
+                ],
+                standalone_mode=False,
+            )
+        except Exception:
+            self.fail("H3 run through with --geo point failed")
+
+    def test_h3_geo_point_compact(self):
+        try:
+            h3(
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "-r",
+                    "8",
+                    "--geo",
+                    "point",
+                    "-co",
+                    "-id",
+                    "LCDB_UID",
+                    "-o",
+                ],
+                standalone_mode=False,
+            )
+        except Exception:
+            self.fail("H3 run through with --geo point -co failed")
+
+    def test_h3_geo_polygon(self):
+        try:
+            h3(
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "-r",
+                    "8",
+                    "--geo",
+                    "polygon",
+                    "-o",
+                ],
+                standalone_mode=False,
+            )
+        except Exception:
+            self.fail("H3 run through with --geo polygon failed")
+
+    def test_h3_geo_polygon_compact(self):
+        try:
+            h3(
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "-r",
+                    "8",
+                    "--geo",
+                    "polygon",
+                    "-co",
+                    "-id",
+                    "LCDB_UID",
+                    "-o",
+                ],
+                standalone_mode=False,
+            )
+        except Exception:
+            self.fail("H3 run through with --geo polygon -co failed")
