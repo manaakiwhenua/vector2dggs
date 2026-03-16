@@ -123,7 +123,8 @@ from vector2dggs import __version__
     required=False,
     default=const.DEFAULTS["geo"],
     type=click.Choice(const.GEOM_TYPES),
-    help="Write output as a GeoParquet (v1.1.0) with either point or polygon geometry.",
+    help="Select geometry encoding for the output: 'none' for regular Parquet (no GeoParquet metadata), or 'point'/'polygon' to write GeoParquet (v1.1.0) with the corresponding geometry type.",
+    nargs=1,
 )
 @click.option(
     "--tempdir",

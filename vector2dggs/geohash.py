@@ -117,7 +117,7 @@ from vector2dggs import __version__
     required=False,
     default=const.DEFAULTS["g"],
     type=str,
-    help="Column name to use when using a spatial database connection as input",
+    help="Select geometr encoding for the output: 'none' for regular Parquet (no GeoParquet metadata), or 'point'/'polygon' to write GeoParquet (v1.1.0) with the corresponding geometry type.",
     nargs=1,
 )
 @click.option(
@@ -173,6 +173,7 @@ def geohash(
     common.check_compaction_requirements(compact, id_field)
 
     spatial_sorting = const.SpatialSortingMethod(spatial_sorting).value
+    geo = const.GeoOutputMode(geo).value
 
     con, vector_input = common.db_conn_and_input_path(vector_input)
     output_directory = common.resolve_output_path(output_directory, overwrite)
