@@ -68,6 +68,16 @@ class TestRHP(TestRunthrough):
         except Exception:
             self.fail("rHP run through with reprojected CRS failed")
 
+    def test_rhp_compaction(self):
+        try:
+            rhp(
+                [TEST_FILE_PATH, str(TEST_OUTPUT_PATH), "-r", "8", "-co", "-id", "LCDB_UID"],
+                standalone_mode=False,
+            )
+
+        except Exception:
+            self.fail(f"rHP runthrough failed.")
+
     def test_rhp_geo_point(self):
         try:
             rhp(

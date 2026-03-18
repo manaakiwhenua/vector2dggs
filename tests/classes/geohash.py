@@ -61,6 +61,16 @@ class TestGeohash(TestRunthrough):
         except Exception:
             self.fail("geohash run through with reprojected CRS failed")
 
+    def test_geohash_compaction(self):
+        try:
+            geohash(
+                [TEST_FILE_PATH, str(TEST_OUTPUT_PATH), "-r", "6", "-co", "-id", "LCDB_UID"],
+                standalone_mode=False,
+            )
+
+        except Exception:
+            self.fail(f"Geohash runthrough failed.")
+
     def test_geohash_geo_point(self):
         try:
             geohash(

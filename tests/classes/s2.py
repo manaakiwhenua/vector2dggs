@@ -86,6 +86,16 @@ class TestS2(TestRunthrough):
         except Exception:
             self.fail("S2 run through without bisection failed")
 
+    def test_s2_compaction(self):
+        try:
+            s2(
+                [TEST_FILE_PATH, str(TEST_OUTPUT_PATH), "-r", "13", "-co", "-id", "LCDB_UID"],
+                standalone_mode=False,
+            )
+
+        except Exception:
+            self.fail(f"S2 runthrough failed.")
+
     def test_s2_geo_point(self):
         try:
             s2(

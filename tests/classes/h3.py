@@ -86,6 +86,16 @@ class TestH3(TestRunthrough):
         except Exception:
             self.fail("H3 run through without bisection failed")
 
+    def test_h3_compaction(self):
+        try:
+            h3(
+                [TEST_FILE_PATH, str(TEST_OUTPUT_PATH), "-r", "8", "-co", "-id", "LCDB_UID"],
+                standalone_mode=False,
+            )
+
+        except Exception:
+            self.fail(f"H3 runthrough failed.")
+
     def test_h3_geo_point(self):
         try:
             h3(
