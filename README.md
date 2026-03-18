@@ -216,11 +216,10 @@ Please run `black .` before committing.
 
 #### Tests
 
-Tests are included. To run them, set up a poetry environment, then follow these instructons:
+Tests are included. To run them, set up a poetry environment, then run:
 
 ```bash
-cd tests
-python ./test_vector2dggs.py
+python tests/test_vector2dggs.py
 ```
 
 Test data are included at `tests/data/`.

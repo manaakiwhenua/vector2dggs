@@ -4,7 +4,7 @@
 """
 
 from unittest import *
-from data.datapaths import *
+from ..data.datapaths import *
 
 
 class TestRunthrough(TestCase):

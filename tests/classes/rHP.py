@@ -1,5 +1,5 @@
-from classes.base import TestRunthrough
-from data.datapaths import *
+from .base import TestRunthrough
+from ..data.datapaths import *
 
 from vector2dggs.rHP import rhp
 
