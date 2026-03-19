@@ -71,7 +71,15 @@ class TestRHP(TestRunthrough):
     def test_rhp_compaction(self):
         try:
             rhp(
-                [TEST_FILE_PATH, str(TEST_OUTPUT_PATH), "-r", "8", "-co", "-id", "LCDB_UID"],
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "-r",
+                    "8",
+                    "-co",
+                    "-id",
+                    "LCDB_UID",
+                ],
                 standalone_mode=False,
             )
 

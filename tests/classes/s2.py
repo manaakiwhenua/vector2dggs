@@ -89,7 +89,15 @@ class TestS2(TestRunthrough):
     def test_s2_compaction(self):
         try:
             s2(
-                [TEST_FILE_PATH, str(TEST_OUTPUT_PATH), "-r", "13", "-co", "-id", "LCDB_UID"],
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "-r",
+                    "13",
+                    "-co",
+                    "-id",
+                    "LCDB_UID",
+                ],
                 standalone_mode=False,
             )
 
