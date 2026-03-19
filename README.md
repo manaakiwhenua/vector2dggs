@@ -38,23 +38,6 @@ A bare `pip install vector2dggs` **will not install any DGGS backends**.
 ## Usage
 
 ```bash
-vector2dggs --help
-
-Usage: vector2dggs [OPTIONS] COMMAND [ARGS]...
-
-Options:
-  --version  Show the version and exit.
-  --help     Show this message and exit.
-
-Commands:
-  geohash  Ingest a vector dataset and index it using the Geohash geocode...
-  h3       Ingest a vector dataset and index it to the H3 DGGS.
-  rhp      Ingest a vector dataset and index it to the rHEALPix DGGS.
-  s2       Ingest a vector dataset and index it to the S2 DGGS.
-```
-
-```bash
-vector2dggs h3 --help
 Usage: vector2dggs h3 [OPTIONS] VECTOR_INPUT OUTPUT_DIRECTORY
 
   Ingest a vector dataset and index it to the H3 DGGS.
@@ -113,6 +96,11 @@ Options:
   -g, --geom_col TEXT             Column name to use when using a spatial
                                   database connection as input  [default:
                                   geom]
+  --geo [none|point|polygon]      Select geometry encoding for the output:
+                                  'none' for regular Parquet (no GeoParquet
+                                  metadata), or 'point'/'polygon' to write
+                                  GeoParquet (v1.1.0) with the corresponding
+                                  geometry type.  [default: none]
   --tempdir PATH                  Temporary data is created during the
                                   execution of this program. This parameter
                                   allows you to control where this data will
@@ -126,63 +114,11 @@ Options:
 
 ## Visualising output
 
-Output is in the Apache Parquet format, a directory with one file per partition.
+Output is in the Apache Parquet format, a directory with one file per partition. With `--geo point` or `--geo polygon` output will be written as GeoParquet (v1.1.0) with the respective geometry types. GeoParquet can be visualised using desktop GIS tools.
 
-For a quick view of your output, you can read Apache Parquet with pandas, and then use tools like h3-pandas and geopandas to convert this into a GeoPackage or GeoParquet for visualisation in a desktop GIS, such as QGIS. The Apache Parquet output is indexed by an ID column (which you can specify), so it should be ready for two intended use-cases:
+The Apache Parquet output is indexed by an ID column (which you can specify), so it should be ready for two intended use-cases:
 - Joining attribute data from the original feature-level data onto computer DGGS cells.
-- Joining other data to this output on the DGGS cell ID. (The output has a column like `{dggs}_\d`, e.g. `h3_09` or `h3_12` according to the target resolution, zero-padded to account for the maximum resolution of the DGGS)
-
-Geoparquet output (hexagon boundaries):
-
-```python
->>> import pandas as pd
->>> import h3pandas
->>> g = pd.read_parquet('./output-data/nz-property-titles.12.parquet').h3.h3_to_geo_boundary()
->>> g
-                  title_no                                           geometry
-h3_12                                                                        
-8cbb53a734553ff  NA94D/635  POLYGON ((174.28483 -35.69315, 174.28482 -35.6...
-8cbb53a734467ff  NA94D/635  POLYGON ((174.28454 -35.69333, 174.28453 -35.6...
-8cbb53a734445ff  NA94D/635  POLYGON ((174.28416 -35.69368, 174.28415 -35.6...
-8cbb53a734551ff  NA94D/635  POLYGON ((174.28496 -35.69329, 174.28494 -35.6...
-8cbb53a734463ff  NA94D/635  POLYGON ((174.28433 -35.69335, 174.28432 -35.6...
-...                    ...                                                ...
-8cbb53a548b2dff  NA62D/324  POLYGON ((174.30249 -35.69369, 174.30248 -35.6...
-8cbb53a548b61ff  NA62D/324  POLYGON ((174.30232 -35.69402, 174.30231 -35.6...
-8cbb53a548b11ff  NA57C/785  POLYGON ((174.30140 -35.69348, 174.30139 -35.6...
-8cbb53a548b15ff  NA57C/785  POLYGON ((174.30161 -35.69346, 174.30160 -35.6...
-8cbb53a548b17ff  NA57C/785  POLYGON ((174.30149 -35.69332, 174.30147 -35.6...
-
-[52736 rows x 2 columns]
->>> g.to_parquet('./output-data/parcels.12.geo.parquet')
-```
-
-An example for S2 output (using `s2sphere`):
-
-
-```python
-import pandas as pd
-import geopandas as gpd
-import s2sphere
-from shapely.geometry import Polygon
-
-RES = 18
-df = pd.read_parquet(f'~/output-data/ponds-with-holes.s2.{RES}.pq')
-
-def s2id_to_polygon(s2_id_hex):
-    cell_id = s2sphere.CellId.from_token(s2_id_hex)
-    cell = s2sphere.Cell(cell_id)
-    vertices = []
-    for i in range(4):
-        vertex = cell.get_vertex(i)
-        lat_lng = s2sphere.LatLng.from_point(vertex)
-        vertices.append((lat_lng.lng().degrees, lat_lng.lat().degrees))  # (lon, lat)
-    return Polygon(vertices)
-
-df['geometry'] = df.index.to_series().apply(s2id_to_polygon)
-df = gpd.GeoDataFrame(df, geometry='geometry', crs='EPSG:4326')  # WGS84
-df.to_parquet(f'sample-{RES}.parquet')
-```
+- Joining other data to this output on the DGGS cell ID. (The output has a column like `{dggs}_\d`, e.g. `h3_09` or `h3_12` according to the target resolution, zero-padded to account for the maximum resolution of the DGGS).
 
 ## Compaction
 
@@ -246,13 +182,13 @@ vector2dggs h3 -v DEBUG -id ogc_fid -r 9 -p 5 -t 4 --overwrite -lyr topo50_lake 
   title={{vector2dggs}},
   author={Ardo, James and Law, Richard},
   url={https://github.com/manaakiwhenua/vector2dggs},
-  version={0.13.0},
+  version={0.13.1},
   date={2026-03-19}
 }
 ```
 
 APA/Harvard
 
-> Ardo, J., & Law, R. (2023). vector2dggs (0.13.0) [Computer software]. https://github.com/manaakiwhenua/vector2dggs
+> Ardo, J., & Law, R. (2023). vector2dggs (0.13.1) [Computer software]. https://github.com/manaakiwhenua/vector2dggs
 
 [![manaakiwhenua-standards](https://github.com/manaakiwhenua/vector2dggs/workflows/manaakiwhenua-standards/badge.svg)](https://github.com/manaakiwhenua/manaakiwhenua-standards)
