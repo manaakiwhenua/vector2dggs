@@ -177,13 +177,21 @@ def write_partition_as_geoparquet(
             f"Could not find partition column '{partition_col}' in partition write step"
         )
 
-    # Build shapely geometries for this dask partition
-    if dggs_col in partition_df.columns:
-        geoms = partition_df[dggs_col].map(geo_serialisation_method)
-    else:
-        geoms = pd.Series(
-            partition_df.index.map(geo_serialisation_method), index=partition_df.index
-        )
+    # Build shapely geometries for this dask partition.
+    # Drop rows with null DGGS cell IDs to avoid serialisation failures.
+    cell_ids = (
+        partition_df[dggs_col]
+        if dggs_col in partition_df.columns
+        else partition_df.index.to_series(index=partition_df.index)
+    )
+    valid_cell_mask = pd.notna(cell_ids)
+    if not bool(valid_cell_mask.any()):
+        return 0
+    if not bool(valid_cell_mask.all()):
+        partition_df = partition_df.loc[valid_cell_mask].copy()
+        cell_ids = cell_ids.loc[valid_cell_mask]
+
+    geoms = cell_ids.map(geo_serialisation_method)
 
     # Compute optional GeoParquet bbox / geometry_types metadata (vectorized)
     geom_arr = geoms.to_numpy()
