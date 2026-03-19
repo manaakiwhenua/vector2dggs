@@ -2,7 +2,6 @@
 
 @author: ndemaio
 """
-
 from geohash_polygon import polygon_to_geohashes  # rusty-polygon-geohasher
 from geohash import encode, decode, decode_exactly  # python-geohash
 
@@ -63,8 +62,9 @@ class GeohashVectorIndexer(VectorIndexer):
         """
         Implementation of abstract function.
         """
-
-        df[f"geohash_{parent_level:02}"] = df.index.to_series().str[:parent_level]
+        dggs_col = f"geohash_{parent_level:02}"
+        df[dggs_col] = df.index.to_series().astype(str).str[:parent_level]
+        df[dggs_col] = df[dggs_col].astype(str)
         return df
 
     def compaction(
@@ -93,6 +93,8 @@ class GeohashVectorIndexer(VectorIndexer):
         Not a part of the interface provided by VectorIndexer.
         """
         current_set = set(cells)
+        # Discard any null values
+        current_set = {c for c in current_set if pd.notna(c)}
         while True:
             parent_map = {}
             for gh in current_set:
