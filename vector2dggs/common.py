@@ -258,6 +258,76 @@ def write_partition_as_geoparquet(
     return int(len(pdf.index) > 0)
 
 
+def _merge_partition_files(partition_dir: Path, compression: str) -> None:
+    """
+    Merges all Parquet files within a single hive partition directory into one file.
+    Preserves and correctly aggregates GeoParquet 'geo' metadata (bbox, geometry_types)
+    if present. Peak memory is bounded to one parent cell's data at a time.
+    """
+    files = sorted(partition_dir.glob("*.parquet"))
+    if len(files) <= 1:
+        return
+
+    tables = [pq.read_table(f) for f in files]
+
+    # Aggregate 'geo' metadata across files if present (GeoParquet)
+    all_bboxes = []
+    all_geometry_types = set()
+    base_geo_meta = None
+    for t in tables:
+        raw = (t.schema.metadata or {}).get(b"geo")
+        if raw:
+            geo_info = json.loads(raw)
+            if base_geo_meta is None:
+                base_geo_meta = geo_info
+            col = geo_info.get("columns", {}).get("geometry", {})
+            if "bbox" in col:
+                all_bboxes.append(col["bbox"])
+            all_geometry_types.update(col.get("geometry_types", []))
+
+    # Build a unified schema: for each field, prefer large_string over string so
+    # that all partitions (which may have written either variant) can be cast cleanly.
+    unified_schema = tables[0].schema
+    for t in tables[1:]:
+        unified_schema = pa.unify_schemas(
+            [unified_schema, t.schema], promote_options="permissive"
+        )
+    # Normalise string / large_string mismatches to large_string
+    unified_fields = []
+    for field in unified_schema:
+        if pa.types.is_string(field.type):
+            unified_fields.append(field.with_type(pa.large_utf8()))
+        else:
+            unified_fields.append(field)
+    unified_schema = pa.schema(unified_fields, metadata=unified_schema.metadata)
+
+    tables = [t.cast(unified_schema) for t in tables]
+    table = pa.concat_tables(tables)
+
+    if base_geo_meta is not None:
+        col_meta = base_geo_meta["columns"]["geometry"].copy()
+        if all_bboxes:
+            col_meta["bbox"] = [
+                min(b[0] for b in all_bboxes),
+                min(b[1] for b in all_bboxes),
+                max(b[2] for b in all_bboxes),
+                max(b[3] for b in all_bboxes),
+            ]
+        if all_geometry_types:
+            col_meta["geometry_types"] = sorted(all_geometry_types)
+        base_geo_meta["columns"]["geometry"] = col_meta
+        new_meta = {
+            **(table.schema.metadata or {}),
+            b"geo": json.dumps(base_geo_meta).encode("utf-8"),
+        }
+        table = table.replace_schema_metadata(new_meta)
+
+    merged = partition_dir / f"part.0-{uuid4().hex}.parquet"
+    pq.write_table(table, merged, compression=compression)
+    for f in files:
+        f.unlink()
+
+
 def parent_partitioning(
     indexer: VectorIndexer,
     input_dir: Path,
@@ -281,16 +351,10 @@ def parent_partitioning(
     ):
 
         if compact:
-            # Apply the compaction function to each partition
-            unique_parents = sorted(
-                [v for v in ddf[partition_col].unique().compute() if pd.notna(v)]
-            )
-            divisions = unique_parents + [unique_parents[-1]]
+            # Compact by spatial partitions (not cell parent partitions; that repartition occurs at pq.write_to_dataset time)
             ddf = (
                 ddf.reset_index(drop=False)
                 .dropna(subset=[partition_col])
-                .set_index(partition_col)
-                .repartition(divisions=divisions)
                 .map_partitions(
                     indexer.compaction,
                     resolution,
@@ -343,7 +407,16 @@ def parent_partitioning(
             with TqdmCallback(desc="Writing GeoParquet"):
                 dask.compute(*write_tasks)
 
-            LOGGER.debug("GeoParquet output writing complete")
+        # Combine multiple parts per parent partition into one file per parent partition, to avoid too many small files and to correctly aggregate GeoParquet metadata; this is helpful for cloud object storage and spatial databases, which often perform better with fewer files
+        merge_tasks = [
+            dask.delayed(_merge_partition_files)(d, kwargs.get("compression", "ZSTD"))
+            for d in sorted(Path(output_dir).iterdir())
+            if d.is_dir()
+        ]
+        with TqdmCallback(desc="Merging to one file per parent cell"):
+            dask.compute(*merge_tasks)
+
+        LOGGER.debug("GeoParquet output writing complete")
 
     LOGGER.debug("Parent cell partitioning complete")
 
