@@ -4,11 +4,11 @@
 """
 
 from geohash_polygon import polygon_to_geohashes  # rusty-polygon-geohasher
-from geohash import encode, decode  # python-geohash
+from geohash import encode, decode, decode_exactly  # python-geohash
 
 import pandas as pd
 import geopandas as gpd
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point, Polygon, box
 
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 
@@ -63,8 +63,9 @@ class GeohashVectorIndexer(VectorIndexer):
         """
         Implementation of abstract function.
         """
-
-        df[f"geohash_{parent_level:02}"] = df.index.to_series().str[:parent_level]
+        dggs_col = f"geohash_{parent_level:02}"
+        df[dggs_col] = df.index.to_series().astype(str).str[:parent_level]
+        df[dggs_col] = df[dggs_col].astype(str)
         return df
 
     def compaction(
@@ -93,6 +94,8 @@ class GeohashVectorIndexer(VectorIndexer):
         Not a part of the interface provided by VectorIndexer.
         """
         current_set = set(cells)
+        # Discard any null values
+        current_set = {c for c in current_set if pd.notna(c)}
         while True:
             parent_map = {}
             for gh in current_set:
@@ -173,3 +176,18 @@ class GeohashVectorIndexer(VectorIndexer):
             if Point(*reversed(decode(h))).within(polygon)
         }  # Edge cells with a center within the polygon
         return edge | inner
+
+    @staticmethod
+    def cell_to_point(cell: str) -> Point:
+        lat, lon, _, _ = decode_exactly(cell)
+        return Point(lon, lat)
+
+    @staticmethod
+    def cell_to_polygon(cell: str) -> Polygon:
+        lat, lon, lat_err, lon_err = decode_exactly(cell)
+        return box(
+            lon - lon_err,
+            lat - lat_err,
+            lon + lon_err,
+            lat + lat_err,
+        )

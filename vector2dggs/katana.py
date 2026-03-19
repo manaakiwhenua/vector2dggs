@@ -40,6 +40,7 @@ def katana(
     `threshold`: maximum acceptable area of the bounding box for any output geometry.
     `count`: used to track recursion depth
     """
+
     if (geometry is None) or (geometry.is_empty):
         return []
     if isinstance(geometry, LinearRing):

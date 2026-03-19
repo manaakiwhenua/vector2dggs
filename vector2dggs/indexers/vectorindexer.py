@@ -8,6 +8,7 @@ from typing import Union, Callable, Iterable
 
 import pandas as pd
 import geopandas as gpd
+from shapely.geometry import Polygon, Point
 
 
 class VectorIndexer:
@@ -108,3 +109,11 @@ class VectorIndexer:
         compressable_df = compressable_df.set_index(dggs_col)
 
         return pd.concat([compressable_df, uncompressable_df])[col_order]
+
+    @staticmethod
+    def cell_to_point(cell: str) -> Point:
+        raise NotImplementedError()
+
+    @staticmethod
+    def cell_to_polygon(cell: str) -> Polygon:
+        raise NotImplementedError()

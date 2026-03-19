@@ -5,9 +5,9 @@
 
 import h3 as h3py
 import h3pandas  # Necessary import despite lack of explicit use
-
 import pandas as pd
 import geopandas as gpd
+from shapely.geometry import Point, Polygon
 
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 
@@ -78,3 +78,11 @@ class H3VectorIndexer(VectorIndexer):
             h3py.compact_cells,
             h3py.cell_to_center_child,
         )
+
+    @staticmethod
+    def cell_to_point(cell: str) -> Point:
+        return Point(h3py.cell_to_latlng(cell)[::-1])
+
+    @staticmethod
+    def cell_to_polygon(cell: str) -> Polygon:
+        return Polygon(tuple(coord[::-1] for coord in h3py.cell_to_boundary(cell)))

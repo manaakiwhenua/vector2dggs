@@ -1,4 +1,4 @@
-from classes.base import TestRunthrough
+from .base import TestRunthrough
 
 from shapely import wkt
 from shapely.geometry import GeometryCollection
