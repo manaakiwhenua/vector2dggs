@@ -16,7 +16,9 @@ class H3VectorIndexer(VectorIndexer):
         df: gpd.GeoDataFrame, resolution: int, cell_fn, geom_col: str
     ) -> pd.DataFrame:
         return (
-            df.assign(__cells__=df[geom_col].apply(lambda geom: cell_fn(geom, resolution)))
+            df.assign(
+                __cells__=df[geom_col].apply(lambda geom: cell_fn(geom, resolution))
+            )
             .drop(columns=[geom_col])
             .explode("__cells__")
             .dropna(subset=["__cells__"])
@@ -45,12 +47,16 @@ class H3VectorIndexer(VectorIndexer):
         df_polygon = df[df.geom_type == "Polygon"]
         if not df_polygon.empty:
             parts.append(
-                self._geo_to_cells(df_polygon, resolution, self._polyfill_polygon, geom_col)
+                self._geo_to_cells(
+                    df_polygon, resolution, self._polyfill_polygon, geom_col
+                )
             )
 
         df_linestring = df[df.geom_type == "LineString"]
         if not df_linestring.empty:
-            ls = self._geo_to_cells(df_linestring, resolution, self._linetrace, geom_col)
+            ls = self._geo_to_cells(
+                df_linestring, resolution, self._linetrace, geom_col
+            )
             parts.append(ls[~ls.index.duplicated(keep="first")])
 
         df_point = df[df.geom_type == "Point"]
