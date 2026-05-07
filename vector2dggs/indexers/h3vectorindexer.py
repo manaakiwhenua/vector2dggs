@@ -1,13 +1,7 @@
-"""
-
-@author: ndemaio
-"""
-
-import h3 as h3py
-import h3pandas  # Necessary import despite lack of explicit use
+import h3
 import pandas as pd
 import geopandas as gpd
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point, Polygon, mapping
 
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 
@@ -17,72 +11,88 @@ class H3VectorIndexer(VectorIndexer):
     Provides integration for Uber's H3 DGGS.
     """
 
+    @staticmethod
+    def _geo_to_cells(
+        df: gpd.GeoDataFrame, resolution: int, cell_fn, geom_col: str
+    ) -> pd.DataFrame:
+        return (
+            df.assign(
+                __cells__=df[geom_col].apply(lambda geom: cell_fn(geom, resolution))
+            )
+            .drop(columns=[geom_col])
+            .explode("__cells__")
+            .dropna(subset=["__cells__"])
+            .set_index("__cells__")
+            .rename_axis(None)
+        )
+
+    @staticmethod
+    def _polyfill_polygon(geom, resolution: int) -> list:
+        return h3.geo_to_cells(mapping(geom), resolution)
+
+    @staticmethod
+    def _linetrace(geom, resolution: int) -> list:
+        coords = list(geom.coords)
+        cells = set()
+        for i in range(len(coords) - 1):
+            start = h3.latlng_to_cell(coords[i][1], coords[i][0], resolution)
+            end = h3.latlng_to_cell(coords[i + 1][1], coords[i + 1][0], resolution)
+            cells.update(h3.grid_path_cells(start, end))
+        return list(cells)
+
     def polyfill(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
-        """
-        Implementation of abstract function.
-        """
+        geom_col = df.geometry.name
+        parts = []
 
         df_polygon = df[df.geom_type == "Polygon"]
         if not df_polygon.empty:
-            df_polygon = df_polygon.h3.polyfill_resample(
-                resolution, return_geometry=False
-            ).drop(columns=["index"])
+            parts.append(
+                self._geo_to_cells(
+                    df_polygon, resolution, self._polyfill_polygon, geom_col
+                )
+            )
 
         df_linestring = df[df.geom_type == "LineString"]
-        if len(df_linestring.index) > 0:
-            df_linestring = (
-                df_linestring.h3.linetrace(resolution)
-                .explode("h3_linetrace")
-                .set_index("h3_linetrace")
+        if not df_linestring.empty:
+            ls = self._geo_to_cells(
+                df_linestring, resolution, self._linetrace, geom_col
             )
-            df_linestring = df_linestring[~df_linestring.index.duplicated(keep="first")]
+            parts.append(ls[~ls.index.duplicated(keep="first")])
 
         df_point = df[df.geom_type == "Point"]
-        if len(df_point.index) > 0:
-            df_point = df_point.h3.geo_to_h3(resolution, set_index=True)
-
-        return pd.concat(
-            map(
-                lambda _df: pd.DataFrame(_df.drop(columns=[_df.geometry.name])),
-                [df_polygon, df_linestring, df_point],
+        if not df_point.empty:
+            parts.append(
+                self._geo_to_cells(
+                    df_point,
+                    resolution,
+                    lambda geom, res: [h3.latlng_to_cell(geom.y, geom.x, res)],
+                    geom_col,
+                )
             )
-        )
+
+        return pd.concat(parts) if parts else pd.DataFrame()
 
     def secondary_index(self, df: pd.DataFrame, parent_res: int) -> pd.DataFrame:
-        """
-        Implementation of abstract function.
-        """
+        df[f"h3_{parent_res:02}"] = df.index.map(
+            lambda cell: h3.cell_to_parent(cell, parent_res)
+        )
+        return df
 
-        return df.h3.h3_to_parent(parent_res)
-
-    def compaction(
-        self,
-        df: pd.DataFrame,
-        res: int,
-        col_order: list,
-        dggs_col: str,
-        id_field: str,
-    ) -> pd.DataFrame:
-        """
-        Compacts an H3 dataframe up to a given low resolution (parent_res),
-        from an existing maximum resolution (res).
-
-        Implementation of abstract function.
-        """
+    def compaction(self, df, res, col_order, dggs_col, id_field):
         return self.compaction_common(
             df,
             res,
             id_field,
             col_order,
             dggs_col,
-            h3py.compact_cells,
-            h3py.cell_to_center_child,
+            h3.compact_cells,
+            h3.cell_to_center_child,
         )
 
     @staticmethod
     def cell_to_point(cell: str) -> Point:
-        return Point(h3py.cell_to_latlng(cell)[::-1])
+        return Point(h3.cell_to_latlng(cell)[::-1])
 
     @staticmethod
     def cell_to_polygon(cell: str) -> Polygon:
-        return Polygon(tuple(coord[::-1] for coord in h3py.cell_to_boundary(cell)))
+        return Polygon(tuple(coord[::-1] for coord in h3.cell_to_boundary(cell)))

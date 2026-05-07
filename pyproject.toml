@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "vector2dggs"
-version = "0.13.2"
+version = "0.14.1"
 description = "CLI DGGS indexer for vector geospatial data"
 authors = ["James Ardo <ardoj@landcareresearch.co.nz>"]
 maintainers = ["Richard Law <lawr@landcareresearch.co.nz>"]
@@ -29,8 +29,8 @@ sqlalchemy = "^2.0.32"
 psycopg2 = "^2.9.9"
 shapely = "^2.1"
 numpy = "^2"
-pillow = "^12"
-h3pandas = { version = "^0.3", optional = true }
+pillow = "^12.2"
+h3 = { version = "^4.1", optional = true }
 rhppandas = { version = "^0.2.0", optional = true}
 rhealpixdggs = { version = "^0.5.12", optional = true}
 s2geometry = { version = "^0.9.0", optional = true}
@@ -40,8 +40,8 @@ urllib3 = "^2.6.3"
 cryptography = "^46.0.5"
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^7.2.2"
-twine ="*"
+pytest = "^9"
+twine ="^6"
 black = "^26.3.1"
 
 [tool.poetry.scripts]
@@ -55,9 +55,9 @@ build-backend = "poetry.core.masonry.api"
 line-length = 88
 
 [tool.poetry.extras]
-h3 = ["h3pandas"]
+h3 = ["h3"]
 rhp = ["rhppandas", "rhealpixdggs"]
 s2 = ["s2geometry"]
 geohash = ["rusty-polygon-geohasher", "python-geohash"]
 # Convenience extras
-all = ["h3pandas", "rhppandas", "rhealpixdggs", "s2geometry", "rusty-polygon-geohasher", "python-geohash"]
+all = ["h3", "rhppandas", "rhealpixdggs", "s2geometry", "rusty-polygon-geohasher", "python-geohash"]
