@@ -183,18 +183,6 @@ vector2dggs h3 -v DEBUG -id ogc_fid -r 9 -p 5 -t 4 --overwrite -lyr topo50_lake 
 
 ## Citation
 
-```bibtex
-@software{vector2dggs,
-  title={{vector2dggs}},
-  author={Ardo, James and Law, Richard},
-  url={https://github.com/manaakiwhenua/vector2dggs},
-  version={0.14.0},
-  date={2026-03-19}
-}
-```
-
-APA/Harvard
-
-> Ardo, J., & Law, R. (2023). vector2dggs (0.14.0) [Computer software]. https://github.com/manaakiwhenua/vector2dggs
+Citation metadata is maintained in [`CITATION.cff`](CITATION.cff). GitHub renders this as a **"Cite this repository"** button on the repository page (top-right of the About panel), which provides ready-to-copy BibTeX and APA formats.
 
 [![manaakiwhenua-standards](https://github.com/manaakiwhenua/vector2dggs/workflows/manaakiwhenua-standards/badge.svg)](https://github.com/manaakiwhenua/manaakiwhenua-standards)
