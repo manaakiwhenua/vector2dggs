@@ -12,7 +12,14 @@ class TestA5(TestRunthrough):
     def test_a5_run(self):
         try:
             a5(
-                [TEST_FILE_PATH, str(TEST_OUTPUT_PATH), "-r", "17"],
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
+                    "-r",
+                    "17",
+                ],
                 standalone_mode=False,
             )
 
@@ -22,11 +29,26 @@ class TestA5(TestRunthrough):
     def test_a5_run_overwrite(self):
         try:
             a5(
-                [TEST_FILE_PATH, str(TEST_OUTPUT_PATH), "-r", "17"],
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
+                    "-r",
+                    "17",
+                ],
                 standalone_mode=False,
             )
             a5(
-                [TEST_FILE_PATH, str(TEST_OUTPUT_PATH), "-r", "17", "-o"],
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
+                    "-r",
+                    "17",
+                    "-o",
+                ],
                 standalone_mode=False,
             )
 
@@ -39,6 +61,8 @@ class TestA5(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "17",
                     "-crs",
@@ -58,6 +82,8 @@ class TestA5(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "17",
                     "-crs",
@@ -76,6 +102,8 @@ class TestA5(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "17",
                     "-c",
@@ -92,6 +120,8 @@ class TestA5(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "17",
                     "-co",
@@ -110,6 +140,8 @@ class TestA5(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "17",
                     "--geo",
@@ -126,6 +158,8 @@ class TestA5(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "17",
                     "--geo",
@@ -146,6 +180,8 @@ class TestA5(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "17",
                     "--geo",
@@ -162,6 +198,8 @@ class TestA5(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "17",
                     "--geo",

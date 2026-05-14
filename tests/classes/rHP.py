@@ -12,7 +12,14 @@ class TestRHP(TestRunthrough):
     def test_rhp_run(self):
         try:
             rhp(
-                [TEST_FILE_PATH, str(TEST_OUTPUT_PATH), "-r", "8"],
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
+                    "-r",
+                    "8",
+                ],
                 standalone_mode=False,
             )
 
@@ -22,11 +29,26 @@ class TestRHP(TestRunthrough):
     def test_rhp_run_overwrite(self):
         try:
             rhp(
-                [TEST_FILE_PATH, str(TEST_OUTPUT_PATH), "-r", "8"],
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
+                    "-r",
+                    "8",
+                ],
                 standalone_mode=False,
             )
             rhp(
-                [TEST_FILE_PATH, str(TEST_OUTPUT_PATH), "-r", "8", "-o"],
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
+                    "-r",
+                    "8",
+                    "-o",
+                ],
                 standalone_mode=False,
             )
 
@@ -39,6 +61,8 @@ class TestRHP(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "8",
                     "-crs",
@@ -56,6 +80,8 @@ class TestRHP(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "8",
                     "-crs",
@@ -74,6 +100,8 @@ class TestRHP(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "8",
                     "-co",
@@ -92,6 +120,8 @@ class TestRHP(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "8",
                     "--geo",
@@ -108,6 +138,8 @@ class TestRHP(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "8",
                     "--geo",
@@ -128,6 +160,8 @@ class TestRHP(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "8",
                     "--geo",
@@ -144,6 +178,8 @@ class TestRHP(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "8",
                     "--geo",

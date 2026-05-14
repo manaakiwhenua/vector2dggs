@@ -12,7 +12,14 @@ class TestGeohash(TestRunthrough):
     def test_geohash_run(self):
         try:
             geohash(
-                [TEST_FILE_PATH, str(TEST_OUTPUT_PATH), "-r", "6"],
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
+                    "-r",
+                    "6",
+                ],
                 standalone_mode=False,
             )
 
@@ -22,11 +29,26 @@ class TestGeohash(TestRunthrough):
     def test_geohash_run_overwrite(self):
         try:
             geohash(
-                [TEST_FILE_PATH, str(TEST_OUTPUT_PATH), "-r", "6"],
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
+                    "-r",
+                    "6",
+                ],
                 standalone_mode=False,
             )
             geohash(
-                [TEST_FILE_PATH, str(TEST_OUTPUT_PATH), "-r", "6", "-o"],
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
+                    "-r",
+                    "6",
+                    "-o",
+                ],
                 standalone_mode=False,
             )
 
@@ -36,7 +58,16 @@ class TestGeohash(TestRunthrough):
     def test_geohash_cut_crs(self):
         try:
             geohash(
-                [TEST_FILE_PATH, str(TEST_OUTPUT_PATH), "-r", "6", "-crs", "3793"],
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
+                    "-r",
+                    "6",
+                    "-crs",
+                    "3793",
+                ],
                 standalone_mode=False,
             )
 
@@ -49,6 +80,8 @@ class TestGeohash(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "6",
                     "-crs",
@@ -67,6 +100,8 @@ class TestGeohash(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "6",
                     "-co",
@@ -85,6 +120,8 @@ class TestGeohash(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "6",
                     "--geo",
@@ -101,6 +138,8 @@ class TestGeohash(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "6",
                     "--geo",
@@ -121,6 +160,8 @@ class TestGeohash(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "6",
                     "--geo",
@@ -137,6 +178,8 @@ class TestGeohash(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "6",
                     "--geo",
