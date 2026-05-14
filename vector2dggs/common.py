@@ -142,7 +142,7 @@ def get_parent_res(dggs: str, parent_res: Union[None, str], resolution: int) -> 
 
     Used for intermediate re-partioning.
     """
-    if not dggs in const.DEFAULT_DGGS_PARENT_RES.keys():
+    if dggs not in const.DEFAULT_DGGS_PARENT_RES.keys():
         raise RuntimeError(
             "Unknown dggs {dggs}) -  must be one of [ {options} ]".format(
                 dggs=dggs, options=", ".join(const.DEFAULT_DGGS_PARENT_RES.keys())
@@ -163,7 +163,7 @@ def write_partition_as_geoparquet(
     dggs_col: str,
     compression: str,
 ) -> int:
-    if len(partition_df.index) == 0:
+    if partition_df.empty:
         return 0
 
     if (
@@ -428,8 +428,6 @@ def parent_partitioning(
 
     LOGGER.debug("Parent cell partitioning complete")
 
-    return
-
 
 def polyfill(
     indexer: VectorIndexer,
@@ -448,14 +446,14 @@ def polyfill(
     df = gpd.read_parquet(pq_in).reset_index()
     if spatial_sort_col != "none":
         df = df.drop(columns=[spatial_sort_col])
-    if len(df.index) == 0:
+    if df.empty:
         # Input is empty, nothing to convert
         return None
 
     # DGGS specific conversion
     df = indexer.polyfill(df, resolution)
 
-    if len(df.index) == 0:
+    if df.empty:
         # Conversion resulted in empty output (e.g. large cell, small feature)
         return None
 
@@ -481,10 +479,10 @@ def bisection_preparation(
     cut_crs: pyproj.CRS = None,
     cut_threshold: Union[None, float] = None,
 ) -> tuple[pd.DataFrame, pyproj.CRS, Union[None, float]]:
-    cut_threshold = float(cut_threshold) if cut_threshold != None else None
+    cut_threshold = float(cut_threshold) if cut_threshold is not None else None
 
     if cut_threshold and cut_crs:
-        if df.crs is None and len(df.index) == 0:
+        if df.crs is None and df.empty:
             # empty + naive: nothing to transform
             df = df.set_crs(cut_crs, allow_override=True)
         elif df.crs is None:
@@ -510,7 +508,7 @@ def bisection_preparation(
             f"Using CRS units for input polygon bisection: {cut_crs.axis_info[0].unit_name}"
         )
 
-    if cut_threshold == None:
+    if cut_threshold is None:
         unit_name = cut_crs.axis_info[0].unit_name
         cut_threshold_m2 = const.DEFAULT_AREA_THRESHOLD_M2(dggs, (int(parent_res)))
         if unit_name == "metre":
@@ -661,7 +659,7 @@ def index(
         with TqdmCallback(desc="Spatially partitioning"):
             ddf.to_parquet(tmpdir, overwrite=True)
 
-        filepaths = list(map(lambda f: f.absolute(), Path(tmpdir).glob("*")))
+        filepaths = [f.absolute() for f in Path(tmpdir).glob("*")]
 
         # Multithreaded DGGS indexing
         LOGGER.debug(
@@ -693,7 +691,7 @@ def index(
                         future.result()
                     except Exception as e:
                         LOGGER.error(f"Task failed with {e}")
-                        raise (e)
+                        raise e
 
             if not any(Path(tmpdir2).glob("*.parquet")):
                 LOGGER.warning(
