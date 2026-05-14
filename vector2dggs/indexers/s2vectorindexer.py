@@ -1,8 +1,3 @@
-"""
-
-@author: ndemaio
-"""
-
 from typing import Union
 from math import ceil
 
@@ -26,38 +21,40 @@ class S2VectorIndexer(VectorIndexer):
     """
 
     def polyfill(self, df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
-        """
-        Implementation of abstract function.
-        """
+        geom_col = df.geometry.name
+        parts = []
 
         df_polygon = df[df.geom_type == "Polygon"].copy()
-        if len(df_polygon.index) > 0:
-            df_polygon = (
+        if not df_polygon.empty:
+            result = (
                 self.polyfill_polygons(df_polygon, level)
                 .explode("s2index")
                 .set_index("s2index")
+                .drop(columns=[geom_col])
             )
+            parts.append(pd.DataFrame(result))
 
         df_linestring = df[df.geom_type == "LineString"].copy()
-        if len(df_linestring.index) > 0:
+        if not df_linestring.empty:
             df_linestring["s2index"] = df_linestring.geometry.apply(
                 lambda geom: self.cell_ids_from_linestring(geom, level)
             )
-            df_linestring = df_linestring.explode("s2index").set_index("s2index")
+            result = (
+                df_linestring.drop(columns=[geom_col])
+                .explode("s2index")
+                .set_index("s2index")
+            )
+            parts.append(pd.DataFrame(result))
 
         df_point = df[df.geom_type == "Point"].copy()
-        if len(df_point.index) > 0:
+        if not df_point.empty:
             df_point["s2index"] = df_point.geometry.apply(
                 lambda geom: self.cell_id_from_point(geom, level)
             )
-            df_point = df_point.set_index("s2index")
+            result = df_point.drop(columns=[geom_col]).set_index("s2index")
+            parts.append(pd.DataFrame(result))
 
-        return pd.concat(
-            map(
-                lambda _df: pd.DataFrame(_df.drop(columns=[_df.geometry.name])),
-                [df_polygon, df_linestring, df_point],
-            )
-        )
+        return pd.concat(parts) if parts else pd.DataFrame()
 
     def secondary_index(self, df: pd.DataFrame, parent_level: int) -> pd.DataFrame:
         """
