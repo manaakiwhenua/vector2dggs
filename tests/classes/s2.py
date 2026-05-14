@@ -10,206 +10,172 @@ class TestS2(TestRunthrough):
     """
 
     def test_s2_run(self):
-        try:
-            s2(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "13",
-                ],
-                standalone_mode=False,
-            )
-
-        except Exception:
-            self.fail(f"S2 runthrough failed.")
+        s2(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "13",
+            ],
+            standalone_mode=False,
+        )
 
     def test_s2_run_overwrite(self):
-        try:
-            s2(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "13",
-                ],
-                standalone_mode=False,
-            )
-            s2(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "13",
-                    "-o",
-                ],
-                standalone_mode=False,
-            )
-
-        except Exception:
-            self.fail(f"S2 runthrough with overwrite failed.")
+        s2(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "13",
+            ],
+            standalone_mode=False,
+        )
+        s2(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "13",
+                "-o",
+            ],
+            standalone_mode=False,
+        )
 
     def test_s2_cut_crs(self):
-        try:
-            s2(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "13",
-                    "-crs",
-                    "3793",
-                    "-c",
-                    "4000",
-                ],
-                standalone_mode=False,
-            )
-
-        except Exception:
-            self.fail("S2 run through using actual CRS failed")
+        s2(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "13",
+                "-crs",
+                "3793",
+                "-c",
+                "4000",
+            ],
+            standalone_mode=False,
+        )
 
     def test_s2_cut_crs_reproject(self):
-        try:
-            s2(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "13",
-                    "-crs",
-                    "4326",
-                    "-c",
-                    "0.005",
-                ],
-                standalone_mode=False,
-            )
-        except Exception:
-            self.fail("S2 run through with reprojected CRS failed")
+        s2(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "13",
+                "-crs",
+                "4326",
+                "-c",
+                "0.005",
+            ],
+            standalone_mode=False,
+        )
 
     def test_s2_no_bisection(self):
-        try:
-            s2(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "13",
-                    "-c",
-                    "0",
-                ],
-                standalone_mode=False,
-            )
-        except Exception:
-            self.fail("S2 run through without bisection failed")
+        s2(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "13",
+                "-c",
+                "0",
+            ],
+            standalone_mode=False,
+        )
 
     def test_s2_compaction(self):
-        try:
-            s2(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "13",
-                    "-co",
-                    "-id",
-                    "LCDB_UID",
-                ],
-                standalone_mode=False,
-            )
-
-        except Exception:
-            self.fail(f"S2 runthrough failed.")
+        s2(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "13",
+                "-co",
+                "-id",
+                "LCDB_UID",
+            ],
+            standalone_mode=False,
+        )
 
     def test_s2_geo_point(self):
-        try:
-            s2(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "13",
-                    "--geo",
-                    "point",
-                ],
-                standalone_mode=False,
-            )
-        except Exception:
-            self.fail("S2 run through with geo point failed")
+        s2(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "13",
+                "--geo",
+                "point",
+            ],
+            standalone_mode=False,
+        )
 
     def test_s2_geo_point_compact(self):
-        try:
-            s2(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "13",
-                    "--geo",
-                    "point",
-                    "-co",
-                    "-id",
-                    "LCDB_UID",
-                    "-o",
-                ],
-                standalone_mode=False,
-            )
-        except Exception:
-            self.fail("S2 run through with geo point compact failed")
+        s2(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "13",
+                "--geo",
+                "point",
+                "-co",
+                "-id",
+                "LCDB_UID",
+                "-o",
+            ],
+            standalone_mode=False,
+        )
 
     def test_s2_geo_polygon(self):
-        try:
-            s2(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "13",
-                    "--geo",
-                    "polygon",
-                ],
-                standalone_mode=False,
-            )
-        except Exception:
-            self.fail("S2 run through with geo polygon failed")
+        s2(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "13",
+                "--geo",
+                "polygon",
+            ],
+            standalone_mode=False,
+        )
 
     def test_s2_geo_polygon_compact(self):
-        try:
-            s2(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "13",
-                    "--geo",
-                    "polygon",
-                    "-co",
-                    "-id",
-                    "LCDB_UID",
-                    "-o",
-                ],
-                standalone_mode=False,
-            )
-        except Exception:
-            self.fail("S2 run through with geo polygon compact failed")
+        s2(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "13",
+                "--geo",
+                "polygon",
+                "-co",
+                "-id",
+                "LCDB_UID",
+                "-o",
+            ],
+            standalone_mode=False,
+        )

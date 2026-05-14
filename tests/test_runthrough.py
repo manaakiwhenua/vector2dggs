@@ -1,7 +1,3 @@
-"""
-@author: ndemaio
-"""
-
 from .classes.a5 import TestA5
 from .classes.h3 import TestH3
 from .classes.rHP import TestRHP

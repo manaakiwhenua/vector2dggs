@@ -10,186 +10,155 @@ class TestGeohash(TestRunthrough):
     """
 
     def test_geohash_run(self):
-        try:
-            geohash(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "6",
-                ],
-                standalone_mode=False,
-            )
-
-        except Exception:
-            self.fail(f"TestGeohash.test_geohash_run: Geohash runthrough failed.")
+        geohash(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "6",
+            ],
+            standalone_mode=False,
+        )
 
     def test_geohash_run_overwrite(self):
-        try:
-            geohash(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "6",
-                ],
-                standalone_mode=False,
-            )
-            geohash(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "6",
-                    "-o",
-                ],
-                standalone_mode=False,
-            )
-
-        except Exception:
-            self.fail(f"geohash runthrough with overwrite failed.")
+        geohash(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "6",
+            ],
+            standalone_mode=False,
+        )
+        geohash(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "6",
+                "-o",
+            ],
+            standalone_mode=False,
+        )
 
     def test_geohash_cut_crs(self):
-        try:
-            geohash(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "6",
-                    "-crs",
-                    "3793",
-                ],
-                standalone_mode=False,
-            )
-
-        except Exception:
-            self.fail("geohash run through using actual CRS failed")
+        geohash(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "6",
+                "-crs",
+                "3793",
+            ],
+            standalone_mode=False,
+        )
 
     def test_geohash_cut_crs_reproject(self):
-        try:
-            geohash(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "6",
-                    "-crs",
-                    "4326",
-                    "-c",
-                    "0.005",
-                ],
-                standalone_mode=False,
-            )
-        except Exception:
-            self.fail("geohash run through with reprojected CRS failed")
+        geohash(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "6",
+                "-crs",
+                "4326",
+                "-c",
+                "0.005",
+            ],
+            standalone_mode=False,
+        )
 
     def test_geohash_compaction(self):
-        try:
-            geohash(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "6",
-                    "-co",
-                    "-id",
-                    "LCDB_UID",
-                ],
-                standalone_mode=False,
-            )
-
-        except Exception:
-            self.fail(f"Geohash runthrough failed.")
+        geohash(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "6",
+                "-co",
+                "-id",
+                "LCDB_UID",
+            ],
+            standalone_mode=False,
+        )
 
     def test_geohash_geo_point(self):
-        try:
-            geohash(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "6",
-                    "--geo",
-                    "point",
-                ],
-                standalone_mode=False,
-            )
-        except Exception:
-            self.fail("geohash run through with geo point failed")
+        geohash(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "6",
+                "--geo",
+                "point",
+            ],
+            standalone_mode=False,
+        )
 
     def test_geohash_geo_point_compact(self):
-        try:
-            geohash(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "6",
-                    "--geo",
-                    "point",
-                    "-co",
-                    "-id",
-                    "LCDB_UID",
-                    "-o",
-                ],
-                standalone_mode=False,
-            )
-        except Exception:
-            self.fail("geohash run through with geo point compact failed")
+        geohash(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "6",
+                "--geo",
+                "point",
+                "-co",
+                "-id",
+                "LCDB_UID",
+                "-o",
+            ],
+            standalone_mode=False,
+        )
 
     def test_geohash_geo_polygon(self):
-        try:
-            geohash(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "6",
-                    "--geo",
-                    "polygon",
-                ],
-                standalone_mode=False,
-            )
-        except Exception:
-            self.fail("geohash run through with geo polygon failed")
+        geohash(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "6",
+                "--geo",
+                "polygon",
+            ],
+            standalone_mode=False,
+        )
 
     def test_geohash_geo_polygon_compact(self):
-        try:
-            geohash(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "6",
-                    "--geo",
-                    "polygon",
-                    "-co",
-                    "-id",
-                    "LCDB_UID",
-                    "-o",
-                ],
-                standalone_mode=False,
-            )
-        except Exception:
-            self.fail("geohash run through with geo polygon compact failed")
+        geohash(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "6",
+                "--geo",
+                "polygon",
+                "-co",
+                "-id",
+                "LCDB_UID",
+                "-o",
+            ],
+            standalone_mode=False,
+        )

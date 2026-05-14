@@ -10,208 +10,174 @@ class TestH3(TestRunthrough):
     """
 
     def test_h3_run(self):
-        try:
-            h3(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "8",
-                ],
-                standalone_mode=False,
-            )
-
-        except Exception:
-            self.fail(f"H3 runthrough failed.")
+        h3(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+            ],
+            standalone_mode=False,
+        )
 
     def test_h3_run_overwrite(self):
-        try:
-            h3(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "8",
-                ],
-                standalone_mode=False,
-            )
-            h3(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "8",
-                    "-o",
-                ],
-                standalone_mode=False,
-            )
-
-        except Exception:
-            self.fail(f"H3 runthrough with overwrite failed.")
+        h3(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+            ],
+            standalone_mode=False,
+        )
+        h3(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+                "-o",
+            ],
+            standalone_mode=False,
+        )
 
     def test_h3_cut_crs(self):
-        try:
-            h3(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "8",
-                    "-crs",
-                    "3793",
-                    "-c",
-                    "4000",
-                ],
-                standalone_mode=False,
-            )
-
-        except Exception:
-            self.fail("H3 run through using actual CRS failed")
+        h3(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+                "-crs",
+                "3793",
+                "-c",
+                "4000",
+            ],
+            standalone_mode=False,
+        )
 
     def test_h3_cut_crs_reproject(self):
-        try:
-            h3(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "8",
-                    "-crs",
-                    "4326",
-                    "-c",
-                    "0.005",
-                ],
-                standalone_mode=False,
-            )
-        except Exception:
-            self.fail("H3 run through with reprojected CRS failed")
+        h3(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+                "-crs",
+                "4326",
+                "-c",
+                "0.005",
+            ],
+            standalone_mode=False,
+        )
 
     def test_h3_no_bisection(self):
-        try:
-            h3(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "8",
-                    "-c",
-                    "0",
-                ],
-                standalone_mode=False,
-            )
-        except Exception:
-            self.fail("H3 run through without bisection failed")
+        h3(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+                "-c",
+                "0",
+            ],
+            standalone_mode=False,
+        )
 
     def test_h3_compaction(self):
-        try:
-            h3(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "8",
-                    "-co",
-                    "-id",
-                    "LCDB_UID",
-                ],
-                standalone_mode=False,
-            )
-
-        except Exception:
-            self.fail(f"H3 runthrough failed.")
+        h3(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+                "-co",
+                "-id",
+                "LCDB_UID",
+            ],
+            standalone_mode=False,
+        )
 
     def test_h3_geo_point(self):
-        try:
-            h3(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "8",
-                    "--geo",
-                    "point",
-                    "-o",
-                ],
-                standalone_mode=False,
-            )
-        except Exception:
-            self.fail("H3 run through with --geo point failed")
+        h3(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+                "--geo",
+                "point",
+                "-o",
+            ],
+            standalone_mode=False,
+        )
 
     def test_h3_geo_point_compact(self):
-        try:
-            h3(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "8",
-                    "--geo",
-                    "point",
-                    "-co",
-                    "-id",
-                    "LCDB_UID",
-                    "-o",
-                ],
-                standalone_mode=False,
-            )
-        except Exception:
-            self.fail("H3 run through with --geo point -co failed")
+        h3(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+                "--geo",
+                "point",
+                "-co",
+                "-id",
+                "LCDB_UID",
+                "-o",
+            ],
+            standalone_mode=False,
+        )
 
     def test_h3_geo_polygon(self):
-        try:
-            h3(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "8",
-                    "--geo",
-                    "polygon",
-                    "-o",
-                ],
-                standalone_mode=False,
-            )
-        except Exception:
-            self.fail("H3 run through with --geo polygon failed")
+        h3(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+                "--geo",
+                "polygon",
+                "-o",
+            ],
+            standalone_mode=False,
+        )
 
     def test_h3_geo_polygon_compact(self):
-        try:
-            h3(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "8",
-                    "--geo",
-                    "polygon",
-                    "-co",
-                    "-id",
-                    "LCDB_UID",
-                    "-o",
-                ],
-                standalone_mode=False,
-            )
-        except Exception:
-            self.fail("H3 run through with --geo polygon -co failed")
+        h3(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+                "--geo",
+                "polygon",
+                "-co",
+                "-id",
+                "LCDB_UID",
+                "-o",
+            ],
+            standalone_mode=False,
+        )
