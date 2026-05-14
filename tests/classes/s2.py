@@ -12,7 +12,14 @@ class TestS2(TestRunthrough):
     def test_s2_run(self):
         try:
             s2(
-                [TEST_FILE_PATH, str(TEST_OUTPUT_PATH), "-r", "13"],
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
+                    "-r",
+                    "13",
+                ],
                 standalone_mode=False,
             )
 
@@ -22,11 +29,26 @@ class TestS2(TestRunthrough):
     def test_s2_run_overwrite(self):
         try:
             s2(
-                [TEST_FILE_PATH, str(TEST_OUTPUT_PATH), "-r", "13"],
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
+                    "-r",
+                    "13",
+                ],
                 standalone_mode=False,
             )
             s2(
-                [TEST_FILE_PATH, str(TEST_OUTPUT_PATH), "-r", "13", "-o"],
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
+                    "-r",
+                    "13",
+                    "-o",
+                ],
                 standalone_mode=False,
             )
 
@@ -39,6 +61,8 @@ class TestS2(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "13",
                     "-crs",
@@ -58,6 +82,8 @@ class TestS2(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "13",
                     "-crs",
@@ -76,6 +102,8 @@ class TestS2(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "13",
                     "-c",
@@ -92,6 +120,8 @@ class TestS2(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "13",
                     "-co",
@@ -110,6 +140,8 @@ class TestS2(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "13",
                     "--geo",
@@ -126,6 +158,8 @@ class TestS2(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "13",
                     "--geo",
@@ -146,6 +180,8 @@ class TestS2(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "13",
                     "--geo",
@@ -162,6 +198,8 @@ class TestS2(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "13",
                     "--geo",

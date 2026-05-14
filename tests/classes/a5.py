@@ -1,89 +1,91 @@
 from .base import TestRunthrough
 from ..data.datapaths import *
 
-from vector2dggs.rHP import rhp
+from vector2dggs.a5 import a5
 
 
-class TestRHP(TestRunthrough):
+class TestA5(TestRunthrough):
     """
-    Sends the test data file through rHP indexing using default parameters.
+    Sends the test data file through A5 indexing using default parameters.
     """
 
-    def test_rhp_run(self):
+    def test_a5_run(self):
         try:
-            rhp(
+            a5(
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
                     "--layer",
                     TEST_LAYER_NAME,
                     "-r",
-                    "8",
+                    "17",
                 ],
                 standalone_mode=False,
             )
 
         except Exception:
-            self.fail(f"rHP runthrough failed.")
+            self.fail(f"A5 runthrough failed.")
 
-    def test_rhp_run_overwrite(self):
+    def test_a5_run_overwrite(self):
         try:
-            rhp(
+            a5(
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
                     "--layer",
                     TEST_LAYER_NAME,
                     "-r",
-                    "8",
+                    "17",
                 ],
                 standalone_mode=False,
             )
-            rhp(
+            a5(
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
                     "--layer",
                     TEST_LAYER_NAME,
                     "-r",
-                    "8",
+                    "17",
                     "-o",
                 ],
                 standalone_mode=False,
             )
 
         except Exception:
-            self.fail(f"rHP runthrough with overwrite failed.")
+            self.fail(f"A5 runthrough with overwrite failed.")
 
-    def test_rhp_cut_crs(self):
+    def test_a5_cut_crs(self):
         try:
-            rhp(
+            a5(
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
                     "--layer",
                     TEST_LAYER_NAME,
                     "-r",
-                    "8",
+                    "17",
                     "-crs",
                     "3793",
+                    "-c",
+                    "4000",
                 ],
                 standalone_mode=False,
             )
 
         except Exception:
-            self.fail("rHP run through using actual CRS failed")
+            self.fail("A5 run through using actual CRS failed")
 
-    def test_rhp_cut_crs_reproject(self):
+    def test_a5_cut_crs_reproject(self):
         try:
-            rhp(
+            a5(
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
                     "--layer",
                     TEST_LAYER_NAME,
                     "-r",
-                    "8",
+                    "17",
                     "-crs",
                     "4326",
                     "-c",
@@ -92,18 +94,36 @@ class TestRHP(TestRunthrough):
                 standalone_mode=False,
             )
         except Exception:
-            self.fail("rHP run through with reprojected CRS failed")
+            self.fail("A5 run through with reprojected CRS failed")
 
-    def test_rhp_compaction(self):
+    def test_a5_no_bisection(self):
         try:
-            rhp(
+            a5(
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
                     "--layer",
                     TEST_LAYER_NAME,
                     "-r",
-                    "8",
+                    "17",
+                    "-c",
+                    "0",
+                ],
+                standalone_mode=False,
+            )
+        except Exception:
+            self.fail("A5 run through without bisection failed")
+
+    def test_a5_compaction(self):
+        try:
+            a5(
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
+                    "-r",
+                    "17",
                     "-co",
                     "-id",
                     "LCDB_UID",
@@ -112,36 +132,36 @@ class TestRHP(TestRunthrough):
             )
 
         except Exception:
-            self.fail(f"rHP runthrough failed.")
+            self.fail(f"A5 runthrough with compaction failed.")
 
-    def test_rhp_geo_point(self):
+    def test_a5_geo_point(self):
         try:
-            rhp(
+            a5(
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
                     "--layer",
                     TEST_LAYER_NAME,
                     "-r",
-                    "8",
+                    "17",
                     "--geo",
                     "point",
                 ],
                 standalone_mode=False,
             )
         except Exception:
-            self.fail("rHP run through with geo point failed")
+            self.fail("A5 run through with --geo point failed")
 
-    def test_rhp_geo_point_compact(self):
+    def test_a5_geo_point_compact(self):
         try:
-            rhp(
+            a5(
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
                     "--layer",
                     TEST_LAYER_NAME,
                     "-r",
-                    "8",
+                    "17",
                     "--geo",
                     "point",
                     "-co",
@@ -152,36 +172,36 @@ class TestRHP(TestRunthrough):
                 standalone_mode=False,
             )
         except Exception:
-            self.fail("rHP run through with geo point compact failed")
+            self.fail("A5 run through with --geo point -co failed")
 
-    def test_rhp_geo_polygon(self):
+    def test_a5_geo_polygon(self):
         try:
-            rhp(
+            a5(
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
                     "--layer",
                     TEST_LAYER_NAME,
                     "-r",
-                    "8",
+                    "17",
                     "--geo",
                     "polygon",
                 ],
                 standalone_mode=False,
             )
         except Exception:
-            self.fail("rHP run through with geo polygon failed")
+            self.fail("A5 run through with --geo polygon failed")
 
-    def test_rhp_geo_polygon_compact(self):
+    def test_a5_geo_polygon_compact(self):
         try:
-            rhp(
+            a5(
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
                     "--layer",
                     TEST_LAYER_NAME,
                     "-r",
-                    "8",
+                    "17",
                     "--geo",
                     "polygon",
                     "-co",
@@ -192,4 +212,4 @@ class TestRHP(TestRunthrough):
                 standalone_mode=False,
             )
         except Exception:
-            self.fail("rHP run through with geo polygon compact failed")
+            self.fail("A5 run through with --geo polygon -co failed")

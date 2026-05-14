@@ -12,7 +12,14 @@ class TestH3(TestRunthrough):
     def test_h3_run(self):
         try:
             h3(
-                [TEST_FILE_PATH, str(TEST_OUTPUT_PATH), "-r", "8"],
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
+                    "-r",
+                    "8",
+                ],
                 standalone_mode=False,
             )
 
@@ -22,11 +29,26 @@ class TestH3(TestRunthrough):
     def test_h3_run_overwrite(self):
         try:
             h3(
-                [TEST_FILE_PATH, str(TEST_OUTPUT_PATH), "-r", "8"],
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
+                    "-r",
+                    "8",
+                ],
                 standalone_mode=False,
             )
             h3(
-                [TEST_FILE_PATH, str(TEST_OUTPUT_PATH), "-r", "8", "-o"],
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
+                    "-r",
+                    "8",
+                    "-o",
+                ],
                 standalone_mode=False,
             )
 
@@ -39,6 +61,8 @@ class TestH3(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "8",
                     "-crs",
@@ -58,6 +82,8 @@ class TestH3(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "8",
                     "-crs",
@@ -76,6 +102,8 @@ class TestH3(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "8",
                     "-c",
@@ -92,6 +120,8 @@ class TestH3(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "8",
                     "-co",
@@ -110,6 +140,8 @@ class TestH3(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "8",
                     "--geo",
@@ -127,6 +159,8 @@ class TestH3(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "8",
                     "--geo",
@@ -147,6 +181,8 @@ class TestH3(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "8",
                     "--geo",
@@ -164,6 +200,8 @@ class TestH3(TestRunthrough):
                 [
                     TEST_FILE_PATH,
                     str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
                     "-r",
                     "8",
                     "--geo",

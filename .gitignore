@@ -3,3 +3,4 @@ dist
 conda*
 .conda*
 .spyproject/
+.vscode/
