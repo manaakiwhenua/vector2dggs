@@ -79,6 +79,21 @@ class TestGeohash(TestRunthrough):
             standalone_mode=False,
         )
 
+    def test_geohash_no_bisection(self):
+        geohash(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "6",
+                "-c",
+                "0",
+            ],
+            standalone_mode=False,
+        )
+
     def test_geohash_compaction(self):
         geohash(
             [

@@ -79,6 +79,21 @@ class TestRHP(TestRunthrough):
             standalone_mode=False,
         )
 
+    def test_rhp_no_bisection(self):
+        rhp(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+                "-c",
+                "0",
+            ],
+            standalone_mode=False,
+        )
+
     def test_rhp_compaction(self):
         rhp(
             [

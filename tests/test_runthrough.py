@@ -4,3 +4,6 @@ from .classes.rHP import TestRHP
 from .classes.s2 import TestS2
 from .classes.geohash import TestGeohash
 from .classes.katana import TestKatana
+from .classes.geometry_types import TestGeometryTypes
+from .classes.output_validation import TestOutputValidation
+from .classes.errors import TestErrors, TestOverwriteRequired
