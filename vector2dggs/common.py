@@ -562,7 +562,9 @@ def index(
         # Database connection
         with con.connect() as connection:
             parts = layer.rsplit(".", 1)
-            schema, tbl_name = (parts[0], parts[1]) if len(parts) == 2 else (None, parts[0])
+            schema, tbl_name = (
+                (parts[0], parts[1]) if len(parts) == 2 else (None, parts[0])
+            )
             tbl = sqlalchemy.table(tbl_name, schema=schema)
 
             if keep_attributes:
@@ -574,9 +576,9 @@ def index(
             else:
                 stmt = sqlalchemy.select(sqlalchemy.column(geom_col)).select_from(tbl)
 
-            df = gpd.read_postgis(
-                stmt, connection, geom_col=geom_col
-            ).rename_geometry("geometry")
+            df = gpd.read_postgis(stmt, connection, geom_col=geom_col).rename_geometry(
+                "geometry"
+            )
     else:
         # Read file
         df = gpd.read_file(input_file, layer=layer)
@@ -692,6 +694,13 @@ def index(
                     except Exception as e:
                         LOGGER.error(f"Task failed with {e}")
                         raise (e)
+
+            if not any(Path(tmpdir2).glob("*.parquet")):
+                LOGGER.warning(
+                    "No features were indexed (resolution %s may be too coarse for the input). Nothing to write; exiting.",
+                    resolution,
+                )
+                return output_directory
 
             parent_partitioning(
                 indexer,

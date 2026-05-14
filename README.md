@@ -11,6 +11,7 @@ Currently this tool supports the following DGGSs:
 - [H3](https://h3geo.org/)
 - [rHEALPix](https://datastore.landcareresearch.co.nz/dataset/rhealpix-discrete-global-grid-system)
 - [S2](https://s2geometry.io/)
+- [A5](https://a5geo.org/)
 
 ... and the following geocode systems:
 
@@ -162,6 +163,12 @@ Or without activating the shell:
 
 ```bash
 poetry run python tests/test_vector2dggs.py
+```
+
+To test a specific DGGS:
+
+```bash
+python -m pytest tests/test_runthrough.py -k "a5" -v
 ```
 
 Test data are included at `tests/data/`.

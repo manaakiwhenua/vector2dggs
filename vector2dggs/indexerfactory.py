@@ -16,6 +16,7 @@ INDEXER_LOOKUP: Dict[str, Tuple[str, str, str]] = {
         "geohash",
     ),
     "s2": ("vector2dggs.indexers.s2vectorindexer", "S2VectorIndexer", "s2"),
+    "a5": ("vector2dggs.indexers.a5vectorindexer", "A5VectorIndexer", "a5"),
 }
 
 
