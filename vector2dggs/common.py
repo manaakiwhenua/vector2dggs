@@ -625,24 +625,20 @@ def index(
         .explode(index_parts=False)  # Explode multipolygons to polygons
     ).reset_index()
 
-    drop_conditions = [
-        {
-            "index": lambda frame: frame[
-                (frame.geometry.is_empty | frame.geometry.isna())
-            ],
-            "message": "Considering empty or null geometries",
-        },
-        {
-            "index": lambda frame: frame[
-                (frame.geometry.geom_type != "Polygon")
-                & (frame.geometry.geom_type != "LineString")
-                & (frame.geometry.geom_type != "Point")
-            ],
-            "message": "Considering unsupported geometries",
-        },
-    ]
-    for condition in drop_conditions:
-        df = drop_condition(df, condition["index"](df).index, condition["message"])
+    df = drop_condition(
+        df,
+        df[df.geometry.is_empty | df.geometry.isna()].index,
+        "Considering empty or null geometries",
+    )
+    df = drop_condition(
+        df,
+        df[
+            (df.geometry.geom_type != "Polygon")
+            & (df.geometry.geom_type != "LineString")
+            & (df.geometry.geom_type != "Point")
+        ].index,
+        "Considering unsupported geometries",
+    )
 
     ddf = dgpd.from_geopandas(df, chunksize=max(1, chunksize), sort=True)
 
