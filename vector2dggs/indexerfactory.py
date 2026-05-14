@@ -32,7 +32,7 @@ def indexer_instance(dggs: str) -> vectorindexer.VectorIndexer:
         module = import_module(module_name)
     except ModuleNotFoundError as e:
         raise ImportError(
-            f"Mising dependency '{e.name}' for backend '{dggs}'.\n"
+            f"Missing dependency '{e.name}' for backend '{dggs}'.\n"
             f"Install optional dependencies: pip install 'vector2dggs[{extra}]' "
             f"(or 'vector2dggs[all]')."
         ) from e
