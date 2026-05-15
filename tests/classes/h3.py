@@ -181,3 +181,169 @@ class TestH3(TestRunthrough):
             ],
             standalone_mode=False,
         )
+
+    def test_h3_linestring_run(self):
+        h3(
+            [
+                TEST_LINESTRING_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LINESTRING_LAYER_NAME,
+                "-r",
+                "10",
+                "-c",
+                "0",
+            ],
+            standalone_mode=False,
+        )
+
+    def test_h3_linestring_keep_attrs(self):
+        h3(
+            [
+                TEST_LINESTRING_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LINESTRING_LAYER_NAME,
+                "-r",
+                "10",
+                "-c",
+                "0",
+                "-k",
+            ],
+            standalone_mode=False,
+        )
+
+    def test_h3_linestring_compaction(self):
+        h3(
+            [
+                TEST_LINESTRING_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LINESTRING_LAYER_NAME,
+                "-r",
+                "10",
+                "-c",
+                "0",
+                "-co",
+                "-id",
+                "t50_fid",
+            ],
+            standalone_mode=False,
+        )
+
+    def test_h3_linestring_geo_point(self):
+        h3(
+            [
+                TEST_LINESTRING_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LINESTRING_LAYER_NAME,
+                "-r",
+                "10",
+                "-c",
+                "0",
+                "--geo",
+                "point",
+            ],
+            standalone_mode=False,
+        )
+
+    def test_h3_linestring_geo_polygon(self):
+        h3(
+            [
+                TEST_LINESTRING_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LINESTRING_LAYER_NAME,
+                "-r",
+                "10",
+                "-c",
+                "0",
+                "--geo",
+                "polygon",
+            ],
+            standalone_mode=False,
+        )
+
+    def test_h3_point_run(self):
+        h3(
+            [
+                TEST_POINT_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_POINT_LAYER_NAME,
+                "-r",
+                "10",
+                "-c",
+                "0",
+            ],
+            standalone_mode=False,
+        )
+
+    def test_h3_point_keep_attrs(self):
+        h3(
+            [
+                TEST_POINT_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_POINT_LAYER_NAME,
+                "-r",
+                "10",
+                "-c",
+                "0",
+                "-k",
+            ],
+            standalone_mode=False,
+        )
+
+    def test_h3_point_compaction(self):
+        h3(
+            [
+                TEST_POINT_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_POINT_LAYER_NAME,
+                "-r",
+                "10",
+                "-c",
+                "0",
+                "-co",
+                "-id",
+                "t50_fid",
+            ],
+            standalone_mode=False,
+        )
+
+    def test_h3_point_geo_point(self):
+        h3(
+            [
+                TEST_POINT_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_POINT_LAYER_NAME,
+                "-r",
+                "10",
+                "-c",
+                "0",
+                "--geo",
+                "point",
+            ],
+            standalone_mode=False,
+        )
+
+    def test_h3_point_geo_polygon(self):
+        h3(
+            [
+                TEST_POINT_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_POINT_LAYER_NAME,
+                "-r",
+                "10",
+                "-c",
+                "0",
+                "--geo",
+                "polygon",
+            ],
+            standalone_mode=False,
+        )
