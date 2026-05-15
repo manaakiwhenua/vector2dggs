@@ -6,6 +6,7 @@ import geopandas as gpd
 from shapely.geometry import Point, Polygon, box
 
 from vector2dggs.indexers.vectorindexer import VectorIndexer
+from vector2dggs.indexers.geohash import traversal as geohash_traversal
 
 
 class GeohashVectorIndexer(VectorIndexer):
@@ -38,8 +39,25 @@ class GeohashVectorIndexer(VectorIndexer):
             )
             parts.append(pd.DataFrame(result))
 
-        # TODO linestring support
-        # e.g. JS implementation https://github.com/alrico88/geohashes-along and https://github.com/alrico88/geohashes-between/blob/master/src/index.ts
+        df_linestring = df[df.geom_type == "LineString"].copy()
+        if not df_linestring.empty:
+            result = (
+                df_linestring.assign(
+                    **{
+                        gh_col: df_linestring.geometry.apply(
+                            lambda geom: geohash_traversal.linetrace_linewise(
+                                geom, level
+                            )
+                        )
+                    }
+                )
+                .drop(columns=[geom_col])
+                .explode(gh_col, ignore_index=True)
+                .dropna(subset=[gh_col])
+                .set_index(gh_col)
+            )
+            result = result[~result.index.duplicated(keep="first")]
+            parts.append(pd.DataFrame(result))
 
         df_point = df[df.geom_type == "Point"].copy()
         if not df_point.empty:

@@ -177,3 +177,169 @@ class TestRHP(TestRunthrough):
             ],
             standalone_mode=False,
         )
+
+    def test_rhp_linestring_run(self):
+        rhp(
+            [
+                TEST_LINESTRING_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LINESTRING_LAYER_NAME,
+                "-r",
+                "8",
+                "-c",
+                "0",
+            ],
+            standalone_mode=False,
+        )
+
+    def test_rhp_linestring_keep_attrs(self):
+        rhp(
+            [
+                TEST_LINESTRING_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LINESTRING_LAYER_NAME,
+                "-r",
+                "8",
+                "-c",
+                "0",
+                "-k",
+            ],
+            standalone_mode=False,
+        )
+
+    def test_rhp_linestring_compaction(self):
+        rhp(
+            [
+                TEST_LINESTRING_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LINESTRING_LAYER_NAME,
+                "-r",
+                "8",
+                "-c",
+                "0",
+                "-co",
+                "-id",
+                "t50_fid",
+            ],
+            standalone_mode=False,
+        )
+
+    def test_rhp_linestring_geo_point(self):
+        rhp(
+            [
+                TEST_LINESTRING_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LINESTRING_LAYER_NAME,
+                "-r",
+                "8",
+                "-c",
+                "0",
+                "--geo",
+                "point",
+            ],
+            standalone_mode=False,
+        )
+
+    def test_rhp_linestring_geo_polygon(self):
+        rhp(
+            [
+                TEST_LINESTRING_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LINESTRING_LAYER_NAME,
+                "-r",
+                "8",
+                "-c",
+                "0",
+                "--geo",
+                "polygon",
+            ],
+            standalone_mode=False,
+        )
+
+    def test_rhp_point_run(self):
+        rhp(
+            [
+                TEST_POINT_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_POINT_LAYER_NAME,
+                "-r",
+                "8",
+                "-c",
+                "0",
+            ],
+            standalone_mode=False,
+        )
+
+    def test_rhp_point_keep_attrs(self):
+        rhp(
+            [
+                TEST_POINT_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_POINT_LAYER_NAME,
+                "-r",
+                "8",
+                "-c",
+                "0",
+                "-k",
+            ],
+            standalone_mode=False,
+        )
+
+    def test_rhp_point_compaction(self):
+        rhp(
+            [
+                TEST_POINT_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_POINT_LAYER_NAME,
+                "-r",
+                "8",
+                "-c",
+                "0",
+                "-co",
+                "-id",
+                "t50_fid",
+            ],
+            standalone_mode=False,
+        )
+
+    def test_rhp_point_geo_point(self):
+        rhp(
+            [
+                TEST_POINT_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_POINT_LAYER_NAME,
+                "-r",
+                "8",
+                "-c",
+                "0",
+                "--geo",
+                "point",
+            ],
+            standalone_mode=False,
+        )
+
+    def test_rhp_point_geo_polygon(self):
+        rhp(
+            [
+                TEST_POINT_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_POINT_LAYER_NAME,
+                "-r",
+                "8",
+                "-c",
+                "0",
+                "--geo",
+                "polygon",
+            ],
+            standalone_mode=False,
+        )
