@@ -17,6 +17,7 @@ import dask_geopandas as dgpd
 import numpy as np
 import shapely
 import pyarrow as pa
+import pyarrow.dataset as pa_ds
 import pyarrow.parquet as pq
 
 from typing import Union, Iterable  # , Callable
@@ -254,10 +255,16 @@ def write_partition_as_geoparquet(
     new_meta = {**existing_meta, b"geo": json.dumps(geo_meta).encode("utf-8")}
     table = table.replace_schema_metadata(new_meta)
 
+    # Explicitly type the partition column as string so that Hive directory values
+    # like "204" (valid geohash) or "9983180000000000" (A5 cell ID) are not
+    # inferred as integers by PyArrow readers.
+    partitioning = pa_ds.partitioning(
+        pa.schema([(partition_col, pa.string())]), flavor="hive"
+    )
     pq.write_to_dataset(
         table,
         root_path=str(output_dir),
-        partition_cols=[partition_col],
+        partitioning=partitioning,
         compression=compression,
         basename_template=f"part.{{i}}-{uuid4().hex}.parquet",
         use_threads=True,
@@ -374,6 +381,9 @@ def _parent_partitioning(
             )
 
         if geo == const.GeoOutputMode.NONE.value:
+            # Ensure the partition column is string-typed so that Hive directory
+            # values like "204" (geohash) are not inferred as integers by readers.
+            ddf[partition_col] = ddf[partition_col].astype(str)
             ddf.to_parquet(
                 output_dir,
                 overwrite=kwargs.get("overwrite", False),
