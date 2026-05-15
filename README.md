@@ -53,7 +53,7 @@ Options:
   -r, --resolution [0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15]
                                   H3 resolution to index  [required]
   -pr, --parent_res [0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15]
-                                  H3 Parent resolution for the output
+                                  H3 parent resolution for the output
                                   partition. Defaults to resolution - 6
   -id, --id_field TEXT            Field to use as an ID; defaults to a
                                   constructed single 0...n index on the
@@ -63,11 +63,11 @@ Options:
                                   cell ID and the ID given by the -id field
                                   (or the default index ID).
   -ch, --chunksize INTEGER        The number of rows per index partition to
-                                  use when spatially partioning. Adjusting
+                                  use when spatially partitioning. Adjusting
                                   this number will trade off memory use and
                                   time.  [default: 50; required]
   -s, --spatial_sorting [hilbert|morton|geohash|none]
-                                  Spatial sorting method when perfoming
+                                  Spatial sorting method when performing
                                   spatial partitioning.  [default: none]
   -crs, --cut_crs INTEGER         Set the coordinate reference system (CRS)
                                   used for cutting large geometries (see
@@ -76,13 +76,13 @@ Options:
   -c, --cut_threshold FLOAT       Cutting up large geometries into smaller
                                   geometries based on a target area. Units are
                                   assumed to match the input CRS units unless
-                                  the `--cut_crs` is also given, in which case
+                                  `--cut_crs` is also given, in which case
                                   units match the units of the supplied CRS.
                                   If left unspecified, the threshold will be
                                   the maximum area of a cell at the parent
                                   resolution, in square metres or feet
                                   according to the CRS. A threshold of 0 will
-                                  skip bissection entirely (effectively
+                                  skip bisection entirely (effectively
                                   ignoring --cut_crs).
   -t, --threads INTEGER           Amount of threads used for operation
                                   [default: NUM_CPUS - 1]
@@ -111,6 +111,7 @@ Options:
   -o, --overwrite
   --version                       Show the version and exit.
   --help                          Show this message and exit.
+
 ```
 
 ## Visualising output

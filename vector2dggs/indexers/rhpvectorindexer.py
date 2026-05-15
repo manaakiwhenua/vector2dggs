@@ -1,8 +1,3 @@
-"""
-
-@author: ndemaio
-"""
-
 from rhealpixdggs.conversion import compress_order_cells
 from rhealpixdggs.rhp_wrappers import (
     rhp_to_center_child,
@@ -27,35 +22,33 @@ class RHPVectorIndexer(VectorIndexer):
     """
 
     def polyfill(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
-        """
-        Implementation of abstract function.
-        """
+        geom_col = df.geometry.name
+        parts = []
 
         df_polygon = df[df.geom_type == "Polygon"]
-        if len(df_polygon.index) > 0:
-            df_polygon = df_polygon.rhp.polyfill_resample(
+        if not df_polygon.empty:
+            result = df_polygon.rhp.polyfill_resample(
                 resolution, return_geometry=False, compress=False
-            ).drop(columns=["index"])
+            ).drop(columns=["index", geom_col])
+            parts.append(pd.DataFrame(result))
 
         df_linestring = df[df.geom_type == "LineString"]
-        if len(df_linestring.index) > 0:
-            df_linestring = (
+        if not df_linestring.empty:
+            result = (
                 df_linestring.rhp.linetrace(resolution)
                 .explode(COLUMNS["linetrace"])
                 .set_index(COLUMNS["linetrace"])
+                .drop(columns=[geom_col])
             )
-            df_linestring = df_linestring[~df_linestring.index.duplicated(keep="first")]
+            result = result[~result.index.duplicated(keep="first")]
+            parts.append(pd.DataFrame(result))
 
         df_point = df[df.geom_type == "Point"]
-        if len(df_point.index) > 0:
-            df_point = df_point.rhp.geo_to_rhp(resolution, set_index=True)
+        if not df_point.empty:
+            result = df_point.rhp.geo_to_rhp(resolution, set_index=True)
+            parts.append(pd.DataFrame(result.drop(columns=[geom_col])))
 
-        return pd.concat(
-            map(
-                lambda _df: pd.DataFrame(_df.drop(columns=[_df.geometry.name])),
-                [df_polygon, df_linestring, df_point],
-            )
-        )
+        return pd.concat(parts) if parts else pd.DataFrame()
 
     def secondary_index(self, df: pd.DataFrame, parent_res: int) -> pd.DataFrame:
         """

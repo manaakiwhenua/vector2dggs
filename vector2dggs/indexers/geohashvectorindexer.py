@@ -1,8 +1,3 @@
-"""
-
-@author: ndemaio
-"""
-
 from geohash_polygon import polygon_to_geohashes  # rusty-polygon-geohasher
 from geohash import encode, decode, decode_exactly  # python-geohash
 
@@ -23,14 +18,13 @@ class GeohashVectorIndexer(VectorIndexer):
         self.GEOHASH_BASE32_SET = set("0123456789bcdefghjkmnpqrstuvwxyz")
 
     def polyfill(self, df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
-        """
-        Implementation of abstract function.
-        """
-
+        geom_col = df.geometry.name
         gh_col = "geohash"
+        parts = []
+
         df_polygon = df[df.geom_type == "Polygon"].copy()
         if not df_polygon.empty:
-            df_polygon = (
+            result = (
                 df_polygon.assign(
                     **{
                         gh_col: df_polygon.geometry.apply(
@@ -38,26 +32,31 @@ class GeohashVectorIndexer(VectorIndexer):
                         )
                     }
                 )
+                .drop(columns=[geom_col])
                 .explode(gh_col, ignore_index=True)
                 .set_index(gh_col)
             )
+            parts.append(pd.DataFrame(result))
 
         # TODO linestring support
-        # e.g. JS implementation https://github.com/alrico88/geohashes-along
+        # e.g. JS implementation https://github.com/alrico88/geohashes-along and https://github.com/alrico88/geohashes-between/blob/master/src/index.ts
 
         df_point = df[df.geom_type == "Point"].copy()
-        if len(df_point.index) > 0:
-            df_point[gh_col] = df_point.geometry.apply(
-                lambda geom: encode(geom.y, geom.x, precision=level)
+        if not df_point.empty:
+            result = (
+                df_point.assign(
+                    **{
+                        gh_col: df_point.geometry.apply(
+                            lambda geom: encode(geom.y, geom.x, precision=level)
+                        )
+                    }
+                )
+                .drop(columns=[geom_col])
+                .set_index(gh_col)
             )
-            df_point = df_point.set_index(gh_col)
+            parts.append(pd.DataFrame(result))
 
-        return pd.concat(
-            map(
-                lambda _df: pd.DataFrame(_df.drop(columns=[_df.geometry.name])),
-                [df_polygon, df_point],
-            )
-        )
+        return pd.concat(parts) if parts else pd.DataFrame()
 
     def secondary_index(self, df: pd.DataFrame, parent_level: int) -> pd.DataFrame:
         """

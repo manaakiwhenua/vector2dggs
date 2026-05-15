@@ -1,8 +1,4 @@
-"""
-
-@author: ndemaio
-"""
-
+from abc import ABC, abstractmethod
 from uuid import uuid4
 from typing import Union, Callable, Iterable
 
@@ -11,32 +7,21 @@ import geopandas as gpd
 from shapely.geometry import Polygon, Point
 
 
-class VectorIndexer:
+class VectorIndexer(ABC):
     """
-    Provides an abstract base class and interface for all indexers integrating
-    a specific DGGS. It should never be instantiated directly because some
-    methods raise a NotImplementedError by design. Those methods should be
-    implemented by the child classes deriving from this interface instead.
+    Abstract base class and interface for all DGGS indexers.
     """
 
     def __init__(self, dggs: str):
-        """
-        Value used across all child classes
-        """
         self.dggs = dggs
 
-    def polyfill(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
-        """
-        Needs to be implemented by child class
-        """
-        raise NotImplementedError()
+    @abstractmethod
+    def polyfill(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame: ...
 
-    def secondary_index(self, df: pd.DataFrame, parent_res: int) -> pd.DataFrame:
-        """
-        Needs to be implemented by child class
-        """
-        raise NotImplementedError()
+    @abstractmethod
+    def secondary_index(self, df: pd.DataFrame, parent_res: int) -> pd.DataFrame: ...
 
+    @abstractmethod
     def compaction(
         self,
         df: pd.DataFrame,
@@ -44,11 +29,30 @@ class VectorIndexer:
         col_order: list,
         dggs_col: str,
         id_field: str,
+    ) -> pd.DataFrame: ...
+
+    @staticmethod
+    @abstractmethod
+    def cell_to_point(cell: str) -> Point: ...
+
+    @staticmethod
+    @abstractmethod
+    def cell_to_polygon(cell: str) -> Polygon: ...
+
+    @staticmethod
+    def _geo_to_cells(
+        df: gpd.GeoDataFrame, resolution: int, cell_fn, geom_col: str
     ) -> pd.DataFrame:
-        """
-        Needs to be implemented by child class
-        """
-        raise NotImplementedError()
+        return (
+            df.assign(
+                __cells__=df[geom_col].apply(lambda geom: cell_fn(geom, resolution))
+            )
+            .drop(columns=[geom_col])
+            .explode("__cells__")
+            .dropna(subset=["__cells__"])
+            .set_index("__cells__")
+            .rename_axis(None)
+        )
 
     def compaction_common(
         self,
@@ -82,14 +86,12 @@ class VectorIndexer:
         }
 
         # Get rows that cannot be compressed
-        mask = pd.Series([False] * len(df), index=df.index)  # Init bool mask
+        mask = pd.Series([False] * len(df), index=df.index)
         for key, value_set in uncompressable.items():
             mask |= (df[id_field] == key) & (df[dggs_col].isin(value_set))
         uncompressable_df = df[mask].set_index(dggs_col)
 
-        # Get rows that can be compressed
-        # Convert each compressed (coarser resolution) cell into a cell at
-        #   the original resolution (usu using centre child as reference)
+        # Get rows that can be compressed; replace fine cell with its compacted parent
         compression_mapping = {
             (id, cell_to_child_func(cell, res)): cell
             for id, cells in compressable.items()
@@ -98,22 +100,16 @@ class VectorIndexer:
         }
         mask = pd.Series([False] * len(df), index=df.index)
         composite_key = f"composite_key_{uuid4()}"
-        # Update mask for compressible rows and prepare for replacement
-        get_composite_key = lambda row: (row[id_field], row[dggs_col])
+
+        def get_composite_key(row):
+            return (row[id_field], row[dggs_col])
+
         df[composite_key] = df.apply(get_composite_key, axis=1)
         mask |= df[composite_key].isin(compression_mapping)
         compressable_df = df[mask].copy()
         compressable_df[dggs_col] = compressable_df[composite_key].map(
             compression_mapping
-        )  # Replace DGGS cell ID with compressed representation
+        )
         compressable_df = compressable_df.set_index(dggs_col)
 
         return pd.concat([compressable_df, uncompressable_df])[col_order]
-
-    @staticmethod
-    def cell_to_point(cell: str) -> Point:
-        raise NotImplementedError()
-
-    @staticmethod
-    def cell_to_polygon(cell: str) -> Polygon:
-        raise NotImplementedError()

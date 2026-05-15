@@ -142,7 +142,7 @@ def get_parent_res(dggs: str, parent_res: Union[None, str], resolution: int) -> 
 
     Used for intermediate re-partioning.
     """
-    if not dggs in const.DEFAULT_DGGS_PARENT_RES.keys():
+    if dggs not in const.DEFAULT_DGGS_PARENT_RES.keys():
         raise RuntimeError(
             "Unknown dggs {dggs}) -  must be one of [ {options} ]".format(
                 dggs=dggs, options=", ".join(const.DEFAULT_DGGS_PARENT_RES.keys())
@@ -163,7 +163,7 @@ def write_partition_as_geoparquet(
     dggs_col: str,
     compression: str,
 ) -> int:
-    if len(partition_df.index) == 0:
+    if partition_df.empty:
         return 0
 
     if (
@@ -336,7 +336,7 @@ def _merge_partition_files(partition_dir: Path, compression: str) -> None:
         f.unlink()
 
 
-def parent_partitioning(
+def _parent_partitioning(
     indexer: VectorIndexer,
     input_dir: Path,
     output_dir: Path,
@@ -428,10 +428,8 @@ def parent_partitioning(
 
     LOGGER.debug("Parent cell partitioning complete")
 
-    return
 
-
-def polyfill(
+def _polyfill(
     indexer: VectorIndexer,
     pq_in: Path,
     spatial_sort_col: str,
@@ -448,14 +446,14 @@ def polyfill(
     df = gpd.read_parquet(pq_in).reset_index()
     if spatial_sort_col != "none":
         df = df.drop(columns=[spatial_sort_col])
-    if len(df.index) == 0:
+    if df.empty:
         # Input is empty, nothing to convert
         return None
 
     # DGGS specific conversion
     df = indexer.polyfill(df, resolution)
 
-    if len(df.index) == 0:
+    if df.empty:
         # Conversion resulted in empty output (e.g. large cell, small feature)
         return None
 
@@ -470,8 +468,8 @@ def polyfill(
     return None
 
 
-def polyfill_star(args) -> None:
-    return polyfill(*args)
+def _polyfill_star(args) -> None:
+    return _polyfill(*args)
 
 
 def bisection_preparation(
@@ -481,10 +479,10 @@ def bisection_preparation(
     cut_crs: pyproj.CRS = None,
     cut_threshold: Union[None, float] = None,
 ) -> tuple[pd.DataFrame, pyproj.CRS, Union[None, float]]:
-    cut_threshold = float(cut_threshold) if cut_threshold != None else None
+    cut_threshold = float(cut_threshold) if cut_threshold is not None else None
 
     if cut_threshold and cut_crs:
-        if df.crs is None and len(df.index) == 0:
+        if df.crs is None and df.empty:
             # empty + naive: nothing to transform
             df = df.set_crs(cut_crs, allow_override=True)
         elif df.crs is None:
@@ -510,7 +508,7 @@ def bisection_preparation(
             f"Using CRS units for input polygon bisection: {cut_crs.axis_info[0].unit_name}"
         )
 
-    if cut_threshold == None:
+    if cut_threshold is None:
         unit_name = cut_crs.axis_info[0].unit_name
         cut_threshold_m2 = const.DEFAULT_AREA_THRESHOLD_M2(dggs, (int(parent_res)))
         if unit_name == "metre":
@@ -529,6 +527,131 @@ def bisection_preparation(
 
 def bisect_geometry(geometry, cut_threshold):
     return GeometryCollection(katana.katana(geometry, cut_threshold))
+
+
+def _read_input(
+    input_file: Union[Path, str],
+    layer: str,
+    con: SQLConnectionType,
+    keep_attributes: bool,
+    id_field: str,
+    geom_col: str,
+) -> gpd.GeoDataFrame:
+    if layer and con:
+        with con.connect() as connection:
+            parts = layer.rsplit(".", 1)
+            schema, tbl_name = (
+                (parts[0], parts[1]) if len(parts) == 2 else (None, parts[0])
+            )
+            tbl = sqlalchemy.table(tbl_name, schema=schema)
+            if keep_attributes:
+                stmt = tbl.select()
+            elif id_field and not keep_attributes:
+                stmt = sqlalchemy.select(
+                    sqlalchemy.column(id_field), sqlalchemy.column(geom_col)
+                ).select_from(tbl)
+            else:
+                stmt = sqlalchemy.select(sqlalchemy.column(geom_col)).select_from(tbl)
+            return gpd.read_postgis(
+                stmt, connection, geom_col=geom_col
+            ).rename_geometry("geometry")
+    return gpd.read_file(input_file, layer=layer)
+
+
+def _prepare_dataframe(
+    df: gpd.GeoDataFrame,
+    id_field: str,
+    keep_attributes: bool,
+) -> gpd.GeoDataFrame:
+    if id_field:
+        df = df.set_index(id_field)
+    else:
+        df = df.reset_index()
+        df = df.rename(columns={"index": "fid"}).set_index("fid")
+    if not keep_attributes:
+        df = df.loc[:, ["geometry"]]
+    return df
+
+
+def _run_bisection(
+    df: gpd.GeoDataFrame,
+    cut_threshold: Union[None, float],
+    processes: int,
+) -> gpd.GeoDataFrame:
+    LOGGER.debug("Bisecting large geometries")
+    if cut_threshold is not None and cut_threshold > 0:
+        with ThreadPoolExecutor(max_workers=max(1, processes)) as executor:
+            futures = []
+            for idx, row in df.iterrows():
+                futures.append(
+                    (idx, executor.submit(bisect_geometry, row.geometry, cut_threshold))
+                )
+            with tqdm(total=len(futures), desc="Bisection") as pbar:
+                for idx, future in futures:
+                    df.at[idx, "geometry"] = future.result()
+                    pbar.update(1)
+    else:
+        LOGGER.debug("No bisection applied to input.")
+    return df
+
+
+def _clean_geometries(df: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    LOGGER.debug("Exploding geometry collections and multipolygons")
+    df = (
+        df.to_crs(4326)
+        .explode(index_parts=False)  # Explode from GeometryCollection
+        .explode(index_parts=False)  # Explode multipolygons to polygons
+    ).reset_index()
+    df = drop_condition(
+        df,
+        df[df.geometry.is_empty | df.geometry.isna()].index,
+        "Considering empty or null geometries",
+    )
+    df = drop_condition(
+        df,
+        df[
+            (df.geometry.geom_type != "Polygon")
+            & (df.geometry.geom_type != "LineString")
+            & (df.geometry.geom_type != "Point")
+        ].index,
+        "Considering unsupported geometries",
+    )
+    return df
+
+
+def _run_dggs_indexing(
+    indexer: VectorIndexer,
+    filepaths: list,
+    spatial_sort_col: str,
+    resolution: int,
+    parent_res: int,
+    output_dir: str,
+    compression: str,
+    processes: int,
+) -> None:
+    LOGGER.debug("DGGS indexing by spatial partitions with resolution: %d", resolution)
+    args = [
+        (
+            indexer,
+            filepath,
+            spatial_sort_col,
+            resolution,
+            parent_res,
+            output_dir,
+            compression,
+        )
+        for filepath in filepaths
+    ]
+    with ProcessPoolExecutor(max_workers=processes) as executor:
+        futures = {executor.submit(_polyfill_star, arg): arg for arg in args}
+        for future in tqdm(
+            as_completed(futures), total=len(futures), desc="DGGS indexing"
+        ):
+            try:
+                future.result()
+            except Exception as e:
+                LOGGER.error(f"Task failed with {e}")
+                raise e
 
 
 def index(
@@ -558,32 +681,8 @@ def index(
     indexer = idxfactory.indexer_instance(dggs)
     parent_res = get_parent_res(dggs, parent_res, resolution)
 
-    if layer and con:
-        # Database connection
-        with con.connect() as connection:
-            parts = layer.rsplit(".", 1)
-            schema, tbl_name = (
-                (parts[0], parts[1]) if len(parts) == 2 else (None, parts[0])
-            )
-            tbl = sqlalchemy.table(tbl_name, schema=schema)
-
-            if keep_attributes:
-                stmt = tbl.select()
-            elif id_field and not keep_attributes:
-                stmt = sqlalchemy.select(
-                    sqlalchemy.column(id_field), sqlalchemy.column(geom_col)
-                ).select_from(tbl)
-            else:
-                stmt = sqlalchemy.select(sqlalchemy.column(geom_col)).select_from(tbl)
-
-            df = gpd.read_postgis(stmt, connection, geom_col=geom_col).rename_geometry(
-                "geometry"
-            )
-    else:
-        # Read file
-        df = gpd.read_file(input_file, layer=layer)
-
-    if df is None or len(df.index) == 0:
+    df = _read_input(input_file, layer, con, keep_attributes, id_field, geom_col)
+    if df is None or df.empty:
         LOGGER.warning(
             "Input contained 0 features (layer=%s). Nothing to index; exiting.",
             layer if layer else "<default>",
@@ -593,108 +692,36 @@ def index(
     df, cut_crs, cut_threshold = bisection_preparation(
         df, dggs, parent_res, cut_crs, cut_threshold
     )
-
-    if id_field:
-        df = df.set_index(id_field)
-    else:
-        df = df.reset_index()
-        df = df.rename(columns={"index": "fid"}).set_index("fid")
-
-    if not keep_attributes:
-        # Remove all attributes except the geometry
-        df = df.loc[:, ["geometry"]]
-
-    LOGGER.debug("Bisecting large geometries")
-
-    if cut_threshold is not None and cut_threshold > 0:
-        with ThreadPoolExecutor(max_workers=max(1, processes)) as executor:
-            futures = []
-            for index, row in df.iterrows():
-                future = executor.submit(bisect_geometry, row.geometry, cut_threshold)
-                futures.append((index, future))
-
-            with tqdm(total=len(futures), desc="Bisection") as pbar:
-                for index, future in futures:
-                    df.at[index, "geometry"] = future.result()
-                    pbar.update(1)
-    else:
-        LOGGER.debug("No bisection applied to input.")
-
-    LOGGER.debug("Exploding geometry collections and multipolygons")
-    df = (
-        df.to_crs(4326)
-        .explode(index_parts=False)  # Explode from GeometryCollection
-        .explode(index_parts=False)  # Explode multipolygons to polygons
-    ).reset_index()
-
-    drop_conditions = [
-        {
-            "index": lambda frame: frame[
-                (frame.geometry.is_empty | frame.geometry.isna())
-            ],
-            "message": "Considering empty or null geometries",
-        },
-        {
-            "index": lambda frame: frame[
-                (frame.geometry.geom_type != "Polygon")
-                & (frame.geometry.geom_type != "LineString")
-                & (frame.geometry.geom_type != "Point")
-            ],
-            "message": "Considering unsupported geometries",
-        },
-    ]
-    for condition in drop_conditions:
-        df = drop_condition(df, condition["index"](df).index, condition["message"])
+    df = _prepare_dataframe(df, id_field, keep_attributes)
+    df = _run_bisection(df, cut_threshold, processes)
+    df = _clean_geometries(df)
 
     ddf = dgpd.from_geopandas(df, chunksize=max(1, chunksize), sort=True)
-
     if spatial_sorting != "none":
         LOGGER.debug("Spatially sorting and partitioning (%s)", spatial_sorting)
         ddf = ddf.spatial_shuffle(by=spatial_sorting)
     spatial_sort_col = (
         spatial_sorting
-        if (spatial_sorting == "geohash" or spatial_sorting == "none")
+        if spatial_sorting in ("geohash", "none")
         else f"{spatial_sorting}_distance"
     )
 
     with tempfile.TemporaryDirectory(suffix=".parquet") as tmpdir:
         with TqdmCallback(desc="Spatially partitioning"):
             ddf.to_parquet(tmpdir, overwrite=True)
+        filepaths = [f.absolute() for f in Path(tmpdir).glob("*")]
 
-        filepaths = list(map(lambda f: f.absolute(), Path(tmpdir).glob("*")))
-
-        # Multithreaded DGGS indexing
-        LOGGER.debug(
-            "DGGS indexing by spatial partitions with resolution: %d",
-            resolution,
-        )
         with tempfile.TemporaryDirectory(suffix=".parquet") as tmpdir2:
-
-            args = [
-                (
-                    indexer,
-                    filepath,
-                    spatial_sort_col,
-                    resolution,
-                    parent_res,
-                    tmpdir2,
-                    compression,
-                )
-                for filepath in filepaths
-            ]
-
-            with ProcessPoolExecutor(max_workers=processes) as executor:
-                futures = {executor.submit(polyfill_star, arg): arg for arg in args}
-
-                for future in tqdm(
-                    as_completed(futures), total=len(futures), desc="DGGS indexing"
-                ):
-                    try:
-                        future.result()
-                    except Exception as e:
-                        LOGGER.error(f"Task failed with {e}")
-                        raise (e)
-
+            _run_dggs_indexing(
+                indexer,
+                filepaths,
+                spatial_sort_col,
+                resolution,
+                parent_res,
+                tmpdir2,
+                compression,
+                processes,
+            )
             if not any(Path(tmpdir2).glob("*.parquet")):
                 LOGGER.warning(
                     "No features were indexed (resolution %s may be too coarse for the input). Nothing to write; exiting.",
@@ -702,7 +729,7 @@ def index(
                 )
                 return output_directory
 
-            parent_partitioning(
+            _parent_partitioning(
                 indexer,
                 Path(tmpdir2),
                 output_directory,

@@ -29,9 +29,6 @@ class TestKatana(TestRunthrough):
 
     def test_katana(self):
         area_threshold = 0.05
-        try:
-            for geom in [polygon_a, polygon_b, polygon_c, polygon_d]:
-                collection = katana(geom, area_threshold)
-                # print(GeometryCollection(collection))
-        except Exception:
-            self.fail(f"Bisection runthrough failed.")
+        for geom in [polygon_a, polygon_b, polygon_c, polygon_d]:
+            collection = katana(geom, area_threshold)
+            # print(GeometryCollection(collection))

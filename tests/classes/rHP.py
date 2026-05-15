@@ -10,186 +10,170 @@ class TestRHP(TestRunthrough):
     """
 
     def test_rhp_run(self):
-        try:
-            rhp(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "8",
-                ],
-                standalone_mode=False,
-            )
-
-        except Exception:
-            self.fail(f"rHP runthrough failed.")
+        rhp(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+            ],
+            standalone_mode=False,
+        )
 
     def test_rhp_run_overwrite(self):
-        try:
-            rhp(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "8",
-                ],
-                standalone_mode=False,
-            )
-            rhp(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "8",
-                    "-o",
-                ],
-                standalone_mode=False,
-            )
-
-        except Exception:
-            self.fail(f"rHP runthrough with overwrite failed.")
+        rhp(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+            ],
+            standalone_mode=False,
+        )
+        rhp(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+                "-o",
+            ],
+            standalone_mode=False,
+        )
 
     def test_rhp_cut_crs(self):
-        try:
-            rhp(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "8",
-                    "-crs",
-                    "3793",
-                ],
-                standalone_mode=False,
-            )
-
-        except Exception:
-            self.fail("rHP run through using actual CRS failed")
+        rhp(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+                "-crs",
+                "3793",
+            ],
+            standalone_mode=False,
+        )
 
     def test_rhp_cut_crs_reproject(self):
-        try:
-            rhp(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "8",
-                    "-crs",
-                    "4326",
-                    "-c",
-                    "0.005",
-                ],
-                standalone_mode=False,
-            )
-        except Exception:
-            self.fail("rHP run through with reprojected CRS failed")
+        rhp(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+                "-crs",
+                "4326",
+                "-c",
+                "0.005",
+            ],
+            standalone_mode=False,
+        )
+
+    def test_rhp_no_bisection(self):
+        rhp(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+                "-c",
+                "0",
+            ],
+            standalone_mode=False,
+        )
 
     def test_rhp_compaction(self):
-        try:
-            rhp(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "8",
-                    "-co",
-                    "-id",
-                    "LCDB_UID",
-                ],
-                standalone_mode=False,
-            )
-
-        except Exception:
-            self.fail(f"rHP runthrough failed.")
+        rhp(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+                "-co",
+                "-id",
+                "LCDB_UID",
+            ],
+            standalone_mode=False,
+        )
 
     def test_rhp_geo_point(self):
-        try:
-            rhp(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "8",
-                    "--geo",
-                    "point",
-                ],
-                standalone_mode=False,
-            )
-        except Exception:
-            self.fail("rHP run through with geo point failed")
+        rhp(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+                "--geo",
+                "point",
+            ],
+            standalone_mode=False,
+        )
 
     def test_rhp_geo_point_compact(self):
-        try:
-            rhp(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "8",
-                    "--geo",
-                    "point",
-                    "-co",
-                    "-id",
-                    "LCDB_UID",
-                    "-o",
-                ],
-                standalone_mode=False,
-            )
-        except Exception:
-            self.fail("rHP run through with geo point compact failed")
+        rhp(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+                "--geo",
+                "point",
+                "-co",
+                "-id",
+                "LCDB_UID",
+                "-o",
+            ],
+            standalone_mode=False,
+        )
 
     def test_rhp_geo_polygon(self):
-        try:
-            rhp(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "8",
-                    "--geo",
-                    "polygon",
-                ],
-                standalone_mode=False,
-            )
-        except Exception:
-            self.fail("rHP run through with geo polygon failed")
+        rhp(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+                "--geo",
+                "polygon",
+            ],
+            standalone_mode=False,
+        )
 
     def test_rhp_geo_polygon_compact(self):
-        try:
-            rhp(
-                [
-                    TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "8",
-                    "--geo",
-                    "polygon",
-                    "-co",
-                    "-id",
-                    "LCDB_UID",
-                    "-o",
-                ],
-                standalone_mode=False,
-            )
-        except Exception:
-            self.fail("rHP run through with geo polygon compact failed")
+        rhp(
+            [
+                TEST_FILE_PATH,
+                str(TEST_OUTPUT_PATH),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+                "--geo",
+                "polygon",
+                "-co",
+                "-id",
+                "LCDB_UID",
+                "-o",
+            ],
+            standalone_mode=False,
+        )

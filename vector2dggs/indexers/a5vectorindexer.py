@@ -12,21 +12,6 @@ class A5VectorIndexer(VectorIndexer):
     """
 
     @staticmethod
-    def _geo_to_cells(
-        df: gpd.GeoDataFrame, resolution: int, cell_fn, geom_col: str
-    ) -> pd.DataFrame:
-        return (
-            df.assign(
-                __cells__=df[geom_col].apply(lambda geom: cell_fn(geom, resolution))
-            )
-            .drop(columns=[geom_col])
-            .explode("__cells__")
-            .dropna(subset=["__cells__"])
-            .set_index("__cells__")
-            .rename_axis(None)
-        )
-
-    @staticmethod
     def _polyfill_polygon(geom, resolution: int) -> list:
         cells = set(
             a5.uncompact(
