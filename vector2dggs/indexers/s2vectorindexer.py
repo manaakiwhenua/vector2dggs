@@ -76,6 +76,7 @@ class S2VectorIndexer(VectorIndexer):
         col_order: list,
         dggs_col: str,
         id_field: str,
+        parent_res: int,
     ) -> pd.DataFrame:
         """
         Compacts an S2 dataframe up to a given low resolution (parent_res),
@@ -91,6 +92,9 @@ class S2VectorIndexer(VectorIndexer):
             dggs_col,
             self.compact_tokens,
             self.token_to_child_token,
+            parent_res,
+            self.get_resolution,
+            self.children_at_res,
         )
 
     def polyfill_polygons(self, df: gpd.GeoDataFrame, level: int) -> gpd.GeoDataFrame:
@@ -243,6 +247,34 @@ class S2VectorIndexer(VectorIndexer):
         )  # Vector of sorted, non-overlapping S2CellId
         cell_union.NormalizeS2CellUnion()  # Mutates; 'normalize' == 'compact'
         return {c.ToToken() for c in cell_union.cell_ids()}
+
+    @staticmethod
+    def get_resolution(token: str) -> int:
+        """
+        Returns the level of a cell (represented as a string token).
+
+        Not a part of the interface provided by VectorIndexer.
+        """
+        return S2.S2CellId.FromToken(token, len(token)).level()
+
+    @staticmethod
+    def children_at_res(token: str, target_level: int) -> list[str]:
+        """
+        Return all descendants of a cell (represented as a string token) at
+        target_level.
+
+        Not a part of the interface provided by VectorIndexer.
+        """
+        cell: S2.S2CellId = S2.S2CellId.FromToken(token, len(token))
+        if target_level <= cell.level():
+            return [token]
+        end = cell.child_end(target_level)
+        tokens = []
+        cur = cell.child_begin(target_level)
+        while cur != end:
+            tokens.append(cur.ToToken())
+            cur = cur.next()
+        return tokens
 
     def token_to_child_token(self, token: str, level: int) -> str:
         """

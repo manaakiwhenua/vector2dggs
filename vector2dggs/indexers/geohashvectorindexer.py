@@ -1,3 +1,5 @@
+from itertools import product
+
 from geohash_polygon import polygon_to_geohashes  # rusty-polygon-geohasher
 from geohash import encode, decode, decode_exactly  # python-geohash
 
@@ -14,9 +16,7 @@ class GeohashVectorIndexer(VectorIndexer):
     Provides integration for the Geohash geocode system.
     """
 
-    def __init__(self, dggs):
-        super().__init__(dggs=dggs)
-        self.GEOHASH_BASE32_SET = set("0123456789bcdefghjkmnpqrstuvwxyz")
+    GEOHASH_BASE32_SET = set("0123456789bcdefghjkmnpqrstuvwxyz")
 
     def polyfill(self, df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
         geom_col = df.geometry.name
@@ -92,6 +92,7 @@ class GeohashVectorIndexer(VectorIndexer):
         col_order: list,
         dggs_col: str,
         id_field: str,
+        parent_res: int,
     ) -> pd.DataFrame:
         """
         Compacts a geohash dataframe up to a given low resolution (parent_res),
@@ -100,7 +101,16 @@ class GeohashVectorIndexer(VectorIndexer):
         Implementation of abstract function.
         """
         return self.compaction_common(
-            df, res, id_field, col_order, dggs_col, self.compact, self.get_child_geohash
+            df,
+            res,
+            id_field,
+            col_order,
+            dggs_col,
+            self.compact,
+            self.get_child_geohash,
+            parent_res,
+            self.get_resolution,
+            self.children_at_res,
         )
 
     def compact(self, cells: set[str]) -> set[str]:
@@ -133,6 +143,30 @@ class GeohashVectorIndexer(VectorIndexer):
             current_set = next_set
 
         return current_set
+
+    @staticmethod
+    def get_resolution(cell: str) -> int:
+        """
+        Returns the resolution (length) of a geohash.
+
+        Not a part of the interface provided by VectorIndexer.
+        """
+        return len(cell)
+
+    @staticmethod
+    def children_at_res(geohash: str, target_res: int) -> list[str]:
+        """
+        Return all descendants of geohash at length target_res.
+
+        Not a part of the interface provided by VectorIndexer.
+        """
+        if target_res <= len(geohash):
+            return [geohash]
+        chars = sorted(GeohashVectorIndexer.GEOHASH_BASE32_SET)
+        return [
+            geohash + "".join(suffix)
+            for suffix in product(chars, repeat=target_res - len(geohash))
+        ]
 
     def get_child_geohash(self, geohash: str, desired_length: int, child: str = "0"):
         """

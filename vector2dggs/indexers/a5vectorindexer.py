@@ -75,7 +75,7 @@ class A5VectorIndexer(VectorIndexer):
         )
         return df
 
-    def compaction(self, df, res, col_order, dggs_col, id_field):
+    def compaction(self, df, res, col_order, dggs_col, id_field, parent_res):
         def _compact_hex(cells):
             return [
                 a5.u64_to_hex(c) for c in a5.compact([a5.hex_to_u64(c) for c in cells])
@@ -85,8 +85,39 @@ class A5VectorIndexer(VectorIndexer):
             return a5.u64_to_hex(a5.cell_to_children(a5.hex_to_u64(cell), res)[0])
 
         return self.compaction_common(
-            df, res, id_field, col_order, dggs_col, _compact_hex, _child_hex
+            df,
+            res,
+            id_field,
+            col_order,
+            dggs_col,
+            _compact_hex,
+            _child_hex,
+            parent_res,
+            self.get_resolution,
+            self.children_at_res,
         )
+
+    @staticmethod
+    def get_resolution(cell: str) -> int:
+        """
+        Returns the resolution of a cell (represented as a hex string).
+
+        Not a part of the interface provided by VectorIndexer.
+        """
+        return a5.get_resolution(a5.hex_to_u64(cell))
+
+    @staticmethod
+    def children_at_res(cell: str, target_res: int) -> list[str]:
+        """
+        Return all descendants of a cell (represented as a hex string) at
+        target_res.
+
+        Not a part of the interface provided by VectorIndexer.
+        """
+        u64 = a5.hex_to_u64(cell)
+        if a5.get_resolution(u64) >= target_res:
+            return [cell]
+        return [a5.u64_to_hex(c) for c in a5.cell_to_children(u64, target_res)]
 
     @staticmethod
     def cell_to_point(cell: str) -> Point:

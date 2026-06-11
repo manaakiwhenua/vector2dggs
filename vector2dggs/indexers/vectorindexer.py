@@ -29,6 +29,7 @@ class VectorIndexer(ABC):
         col_order: list,
         dggs_col: str,
         id_field: str,
+        parent_res: int,
     ) -> pd.DataFrame: ...
 
     @staticmethod
@@ -38,6 +39,16 @@ class VectorIndexer(ABC):
     @staticmethod
     @abstractmethod
     def cell_to_polygon(cell: str) -> Polygon: ...
+
+    @staticmethod
+    @abstractmethod
+    def get_resolution(cell: Union[str, int]) -> int: ...
+
+    @staticmethod
+    @abstractmethod
+    def children_at_res(
+        cell: Union[str, int], target_res: int
+    ) -> Iterable[Union[str, int]]: ...
 
     @staticmethod
     def _geo_to_cells(
@@ -54,6 +65,27 @@ class VectorIndexer(ABC):
             .rename_axis(None)
         )
 
+    @staticmethod
+    def _enforce_resolution_floor(
+        cells: Iterable[Union[str, int]],
+        parent_res: int,
+        get_resolution_func: Callable[[Union[str, int]], int],
+        children_at_res_func: Callable[
+            [Union[str, int], int], Iterable[Union[str, int]]
+        ],
+    ) -> set[Union[str, int]]:
+        """
+        Break up any cell coarser than parent_res into its children at
+        parent_res, so that no cell in the result is coarser than parent_res.
+        """
+        result = set()
+        for cell in cells:
+            if get_resolution_func(cell) < parent_res:
+                result.update(children_at_res_func(cell, parent_res))
+            else:
+                result.add(cell)
+        return result
+
     def compaction_common(
         self,
         df: pd.DataFrame,
@@ -63,9 +95,18 @@ class VectorIndexer(ABC):
         dggs_col: str,
         compact_func: Callable[[Iterable[Union[str, int]]], Iterable[Union[str, int]]],
         cell_to_child_func: Callable[[Union[str, int], int], Union[str, int]],
+        parent_res: int,
+        get_resolution_func: Callable[[Union[str, int]], int],
+        children_at_res_func: Callable[
+            [Union[str, int], int], Iterable[Union[str, int]]
+        ],
     ):
         """
         Compacts a dataframe up to a given low resolution (parent_res), from an existing maximum resolution (res).
+
+        Any cell coarser than parent_res produced by compact_func is broken
+        back up into its children at parent_res, so the result never contains
+        a cell coarser than parent_res.
         """
         df = df.reset_index(drop=False)
 
@@ -74,6 +115,13 @@ class VectorIndexer(ABC):
         )
         feature_cell_compact = {
             id: set(compact_func(cells)) for id, cells in feature_cell_groups.items()
+        }
+
+        feature_cell_compact = {
+            id: self._enforce_resolution_floor(
+                cells, parent_res, get_resolution_func, children_at_res_func
+            )
+            for id, cells in feature_cell_compact.items()
         }
 
         uncompressable = {

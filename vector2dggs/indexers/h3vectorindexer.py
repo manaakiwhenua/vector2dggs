@@ -63,7 +63,7 @@ class H3VectorIndexer(VectorIndexer):
         )
         return df
 
-    def compaction(self, df, res, col_order, dggs_col, id_field):
+    def compaction(self, df, res, col_order, dggs_col, id_field, parent_res):
         return self.compaction_common(
             df,
             res,
@@ -72,7 +72,28 @@ class H3VectorIndexer(VectorIndexer):
             dggs_col,
             h3.compact_cells,
             h3.cell_to_center_child,
+            parent_res,
+            self.get_resolution,
+            self.children_at_res,
         )
+
+    @staticmethod
+    def get_resolution(cell: str) -> int:
+        """
+        Returns the resolution of a cell.
+
+        Not a part of the interface provided by VectorIndexer.
+        """
+        return h3.get_resolution(cell)
+
+    @staticmethod
+    def children_at_res(cell: str, target_res: int) -> list[str]:
+        """
+        Return all descendants of cell at resolution target_res.
+
+        Not a part of the interface provided by VectorIndexer.
+        """
+        return h3.cell_to_children(cell, target_res)
 
     @staticmethod
     def cell_to_point(cell: str) -> Point:
