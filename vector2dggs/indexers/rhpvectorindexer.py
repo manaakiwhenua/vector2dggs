@@ -1,5 +1,8 @@
+from itertools import product
+
 from rhealpixdggs.conversion import compress_order_cells
 from rhealpixdggs.rhp_wrappers import (
+    rhp_get_resolution,
     rhp_to_center_child,
     rhp_to_geo,
     rhp_to_geo_boundary,
@@ -64,6 +67,7 @@ class RHPVectorIndexer(VectorIndexer):
         col_order: list,
         dggs_col: str,
         id_field: str,
+        parent_res: int,
     ) -> pd.DataFrame:
         """
         Compacts an rHP dataframe up to a given low resolution (parent_res),
@@ -79,6 +83,9 @@ class RHPVectorIndexer(VectorIndexer):
             dggs_col,
             self.compact_cells,
             rhp_to_center_child,
+            parent_res,
+            self.get_resolution,
+            self.children_at_res,
         )
 
     def compact_cells(self, cells: set[str]) -> set[str]:
@@ -96,6 +103,31 @@ class RHPVectorIndexer(VectorIndexer):
                 break
             previous_result = current_result
         return previous_result
+
+    @staticmethod
+    def get_resolution(cell: str) -> int:
+        """
+        Returns the resolution of a cell.
+
+        Not a part of the interface provided by VectorIndexer.
+        """
+        return rhp_get_resolution(cell)
+
+    @staticmethod
+    def children_at_res(cell: str, target_res: int) -> list[str]:
+        """
+        Return all descendants of cell at resolution target_res.
+
+        Not a part of the interface provided by VectorIndexer.
+        """
+        current_res = rhp_get_resolution(cell)
+        if target_res <= current_res:
+            return [cell]
+        digits = "012345678"
+        return [
+            cell + "".join(suffix)
+            for suffix in product(digits, repeat=target_res - current_res)
+        ]
 
     @staticmethod
     def cell_to_point(cell: str) -> Point:

@@ -7,3 +7,10 @@ from .classes.katana import TestKatana
 from .classes.geometry_types import TestGeometryTypes
 from .classes.output_validation import TestOutputValidation
 from .classes.errors import TestErrors, TestOverwriteRequired
+from .classes.compaction import (
+    TestH3CompactionBounds,
+    TestGeohashCompactionBounds,
+    TestRHPCompactionBounds,
+    TestS2CompactionBounds,
+    TestA5CompactionBounds,
+)

@@ -376,6 +376,7 @@ def _parent_partitioning(
                     meta.columns.to_list(),  # Column order to be returned
                     dggs_col,
                     id_field,
+                    parent_res,
                     meta=meta,
                 )
             )

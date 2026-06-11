@@ -137,7 +137,7 @@ In brief, to get started:
     - If you're on Windows, `pip install gdal` may be necessary before running the subsequent commands.
     - On Linux, install GDAL 3.8+ according to your platform-specific instructions, including development headers, i.e. `libgdal-dev`.
 - Create and populate the virtual environment with `poetry install`. This will install necessary dependencies.
-  - If the installation of `s2geometry` fails, you may require SWIG to build it. (A command like `conda install swig` or `sudo dnf install swig` depending on your platform).
+  - If the installation of `s2geometry` fails, you may require SWIG to build it. (A command like `conda install -c conda-forge swig` or `sudo dnf install swig` depending on your platform).
 - Subsequently, activate the virtual environment with `eval "$(poetry env activate)"`.
 
 If you run `poetry install -E all --with dev` and activate the environment with `eval "$(poetry env activate)"`, the CLI tool will be aliased so you can simply use `vector2dggs` rather than `poetry run vector2dggs`.
