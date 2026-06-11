@@ -9,6 +9,6 @@ authors:
     given-names: Richard
 repository-code: https://github.com/manaakiwhenua/vector2dggs
 url: https://github.com/manaakiwhenua/vector2dggs
-version: "0.15.0"
-date-released: "2026-05-14"
+version: "0.16.0"
+date-released: "2026-06-11"
 license: LGPL-3.0-or-later
