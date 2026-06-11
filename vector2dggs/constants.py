@@ -9,6 +9,10 @@ MIN_S2, MAX_S2 = 0, 30
 MIN_GEOHASH, MAX_GEOHASH = 1, 12
 MIN_A5, MAX_A5 = 0, 30
 
+# Assumed file descriptor soft limit (RLIMIT_NOFILE) on platforms where it
+# cannot be queried (e.g. Windows, where the `resource` module is unavailable).
+FALLBACK_RLIMIT_NOFILE = 1024
+
 
 @unique
 class SpatialSortingMethod(StrEnum):
