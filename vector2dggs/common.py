@@ -9,6 +9,11 @@ import shutil
 import pyproj
 from uuid import uuid4
 
+try:
+    import resource
+except ImportError:  # resource is POSIX-only
+    resource = None
+
 import pandas as pd
 import geopandas as gpd
 import dask
@@ -156,6 +161,29 @@ def get_parent_res(dggs: str, parent_res: Union[None, str], resolution: int) -> 
     )
 
 
+def _max_open_files_per_task() -> int:
+    """
+    Bound how many files pq.write_to_dataset may leave open within a single
+    write task.
+
+    pyarrow's default (max_open_files=900) is on its own often almost the entire
+    process's file descriptor limit. Since dask runs multiple of these write
+    tasks concurrently (one per spatial partition, each independently
+    allowed to open up to that many files), the process can exceed its file
+    descriptor limit with "Too many open files" - especially with finer
+    parent_res values, which produce many more distinct output partitions
+    per task. Divide the soft limit across the concurrent tasks, leaving
+    headroom for other open files (input reads, etc.).
+    """
+    soft_limit = (
+        resource.getrlimit(resource.RLIMIT_NOFILE)[0]
+        if resource is not None
+        else const.FALLBACK_RLIMIT_NOFILE
+    )
+    concurrency = max(1, os.cpu_count() or 1)
+    return max(8, soft_limit // (2 * concurrency))
+
+
 def write_partition_as_geoparquet(
     partition_df: pd.DataFrame,
     geo_serialisation_method,
@@ -268,6 +296,7 @@ def write_partition_as_geoparquet(
         compression=compression,
         basename_template=f"part.{{i}}-{uuid4().hex}.parquet",
         use_threads=True,
+        max_open_files=_max_open_files_per_task(),
     )
 
     return int(len(pdf.index) > 0)
