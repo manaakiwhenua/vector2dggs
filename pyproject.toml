@@ -16,14 +16,14 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.11"
-gdal = ">3.8,<3.11.4"
+gdal = ">=3.13.1"
 geopandas = "^1.1.2"
 dask-geopandas = "^0.5"
 dask = "^2025.1"
 click = "^8.1.7"
 tqdm = "^4.67"
 click-log = "^0.4.0"
-pyarrow = "^20.0"
+pyarrow = "^23.0.1"
 pyproj = "^3.7"
 sqlalchemy = "^2.0.32"
 psycopg2 = "^2.9.9"
@@ -37,8 +37,8 @@ s2geometry = { version = "^0.9.0", optional = true}
 rusty-polygon-geohasher = { version = "^0.2.3", optional = true}
 python-geohash = { version = "^0.8.5", optional = true}
 pya5 = { version = "^0.9.0", optional = true }
-urllib3 = "^2.6.3"
-cryptography = "^46.0.5"
+urllib3 = "^2.7.0"
+cryptography = "^48.0.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9"
