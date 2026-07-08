@@ -22,7 +22,6 @@ import math
 from geohash import decode, decode_exactly, encode, neighbors
 from shapely.geometry import LineString, box
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -57,8 +56,7 @@ def sample_segment(
         return [seg_start, seg_end]
     n = max(1, int(math.ceil(length / interval_deg)))
     return [
-        (seg_start[0] + dx * i / n, seg_start[1] + dy * i / n)
-        for i in range(n + 1)
+        (seg_start[0] + dx * i / n, seg_start[1] + dy * i / n) for i in range(n + 1)
     ]
 
 
@@ -88,8 +86,7 @@ def path_cells_greedy(start: str, end: str) -> set[str]:
             break
         current = min(
             neighbors(current),
-            key=lambda h: (decode(h)[0] - end_lat) ** 2
-            + (decode(h)[1] - end_lng) ** 2,
+            key=lambda h: (decode(h)[0] - end_lat) ** 2 + (decode(h)[1] - end_lng) ** 2,
         )
         cells.add(current)
     return cells
