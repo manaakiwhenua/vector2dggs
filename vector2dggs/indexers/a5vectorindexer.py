@@ -13,17 +13,15 @@ class A5VectorIndexer(VectorIndexer):
 
     @staticmethod
     def _polyfill_polygon(geom, resolution: int) -> list:
+        interiors = [i.coords for i in geom.interiors]
         cells = set(
             a5.uncompact(
-                a5.polygon_to_cells(list(geom.exterior.coords), resolution), resolution
+                a5.polygon_to_cells(
+                    [geom.exterior.coords, *interiors], resolution
+                ),
+                resolution,
             )
         )
-        for interior in geom.interiors:
-            cells -= set(
-                a5.uncompact(
-                    a5.polygon_to_cells(list(interior.coords), resolution), resolution
-                )
-            )
         return [a5.u64_to_hex(c) for c in cells]
 
     @staticmethod
