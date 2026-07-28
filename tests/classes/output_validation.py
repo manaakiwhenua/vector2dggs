@@ -83,3 +83,14 @@ class TestOutputValidation(TestRunthrough):
         table = pq.read_table(self._parquet_files()[0])
         self.assertIn("Name_2018", table.schema.names)
         self.assertIn("LCDB_UID", table.schema.names)
+
+    def test_zero_threads_does_not_crash(self):
+        """--threads 0 (e.g. from a single-core cpu_count()-1 default) must not
+        crash ProcessPoolExecutor; it should be floored to at least 1 worker."""
+        self._run_h3(("-t", "0"))
+        self._parquet_files()
+
+    def test_negative_threads_does_not_crash(self):
+        """A negative --threads value should likewise be floored to 1 worker."""
+        self._run_h3(("-t", "-1"))
+        self._parquet_files()
