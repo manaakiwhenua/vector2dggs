@@ -190,7 +190,7 @@ DEFAULTS = {
     "s": SpatialSortingMethod.NONE.value,
     "crs": None,
     "c": None,
-    "t": (multiprocessing.cpu_count() - 1),
+    "t": max(1, multiprocessing.cpu_count() - 1),
     "cp": "snappy",
     "lyr": None,
     "g": "geom",

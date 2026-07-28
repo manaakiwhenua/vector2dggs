@@ -682,7 +682,7 @@ def _run_dggs_indexing(
         )
         for filepath in filepaths
     ]
-    with ProcessPoolExecutor(max_workers=processes) as executor:
+    with ProcessPoolExecutor(max_workers=max(1, processes)) as executor:
         futures = {executor.submit(_polyfill_star, arg): arg for arg in args}
         for future in tqdm(
             as_completed(futures), total=len(futures), desc="DGGS indexing"
