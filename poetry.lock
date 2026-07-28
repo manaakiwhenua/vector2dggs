@@ -2397,18 +2397,17 @@ files = [
 
 [[package]]
 name = "s2geometry"
-version = "0.9.0"
+version = "0.14.0"
 description = "Computational geometry and spatial indexing on the sphere"
 optional = true
-python-versions = ">=3.4"
+python-versions = ">=3.10"
 groups = ["main"]
 markers = "extra == \"s2\" or extra == \"all\""
 files = [
-    {file = "s2geometry-0.9.0-cp35-cp35m-manylinux2010_x86_64.whl", hash = "sha256:ba100731d1639dd8022e61a211bf200ce25044409f6db1dd93fd1ebaab22774b"},
-    {file = "s2geometry-0.9.0-cp36-cp36m-manylinux2010_x86_64.whl", hash = "sha256:fd99d1d6ef8c96a0238c32a7aae06a20c8b6dedc1eeeb33636719f68ec968ee1"},
-    {file = "s2geometry-0.9.0-cp37-cp37m-manylinux2010_x86_64.whl", hash = "sha256:a8001325310f214bbdee380b9695978b2e3b56e0c5e9fc7889a36b53ad877537"},
-    {file = "s2geometry-0.9.0-cp38-cp38-manylinux2010_x86_64.whl", hash = "sha256:59dc034a8e83d4312cd436c594ae45f2c04bc8ae075973df41cf3a3ef2989676"},
-    {file = "s2geometry-0.9.0.tar.gz", hash = "sha256:ae395d8966e2865c4df93ab9e1b712f00b18308d064f64a01bf67fdaf9491e28"},
+    {file = "s2geometry-0.14.0-cp310-abi3-macosx_10_13_x86_64.whl", hash = "sha256:4d676bdafb34b6b224da5af534e8cefe751e6e2d33b2684ebaffbe82e655717a"},
+    {file = "s2geometry-0.14.0-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:28a884595c971760f94af51560533b136fb7b6827fff3952e6151b8bb102f9d3"},
+    {file = "s2geometry-0.14.0-cp310-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:d7797370df5446002629c5014ec525f8f50ce27f039a71dbf6e957ded539bb13"},
+    {file = "s2geometry-0.14.0-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:082141d54b23d7f5faa199db5e87fe3513a4c93ab5f50429894f23de3f705dde"},
 ]
 
 [[package]]
@@ -2885,4 +2884,4 @@ s2 = ["s2geometry"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "b91b97ec1d4074b3221bbe0af33fd2be45221f5073536b684cddd69d14cf3cd7"
+content-hash = "485c4d081c80a473109498891996d80edb16e9b58c9f280f852829b662f8a4ed"

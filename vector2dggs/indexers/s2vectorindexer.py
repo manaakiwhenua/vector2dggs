@@ -4,7 +4,7 @@ from math import ceil
 import pandas as pd
 import geopandas as gpd
 
-from s2geometry import pywraps2 as S2
+import s2geometry as S2
 from shapely import force_2d
 from shapely.geometry import box, Polygon, LineString, Point
 from shapely.ops import transform
@@ -213,7 +213,8 @@ class S2VectorIndexer(VectorIndexer):
         """
 
         latlngs = [S2.S2LatLng.FromDegrees(lat, lon) for lon, lat in linestring.coords]
-        polyline = S2.S2Polyline(latlngs)
+        polyline = S2.S2Polyline()
+        polyline.InitFromS2LatLngs(latlngs)
 
         coverer = S2.S2RegionCoverer()
         max_cells = self.max_cells_for_geom(linestring, level)
@@ -239,9 +240,7 @@ class S2VectorIndexer(VectorIndexer):
 
         Not a part of the interface provided by VectorIndexer.
         """
-        cell_ids: list[S2.S2CellId] = [
-            S2.S2CellId.FromToken(token, len(token)) for token in tokens
-        ]
+        cell_ids: list[S2.S2CellId] = [S2.S2CellId.FromToken(token) for token in tokens]
         cell_union: S2.S2CellUnion = S2.S2CellUnion(
             cell_ids
         )  # Vector of sorted, non-overlapping S2CellId
@@ -255,7 +254,7 @@ class S2VectorIndexer(VectorIndexer):
 
         Not a part of the interface provided by VectorIndexer.
         """
-        return S2.S2CellId.FromToken(token, len(token)).level()
+        return S2.S2CellId.FromToken(token).level()
 
     @staticmethod
     def children_at_res(token: str, target_level: int) -> list[str]:
@@ -265,7 +264,7 @@ class S2VectorIndexer(VectorIndexer):
 
         Not a part of the interface provided by VectorIndexer.
         """
-        cell: S2.S2CellId = S2.S2CellId.FromToken(token, len(token))
+        cell: S2.S2CellId = S2.S2CellId.FromToken(token)
         if target_level <= cell.level():
             return [token]
         end = cell.child_end(target_level)
@@ -283,7 +282,7 @@ class S2VectorIndexer(VectorIndexer):
 
         Not a part of the interface provided by VectorIndexer.
         """
-        cell: S2.S2CellId = S2.S2CellId.FromToken(token, len(token))
+        cell: S2.S2CellId = S2.S2CellId.FromToken(token)
         if level <= cell.level():
             raise ValueError(
                 "Level must be greater than the current level of the cell."
@@ -293,13 +292,13 @@ class S2VectorIndexer(VectorIndexer):
 
     @staticmethod
     def cell_to_point(cell: str) -> Point:
-        cell_id = S2.S2CellId.FromToken(cell, len(cell))
+        cell_id = S2.S2CellId.FromToken(cell)
         latlng = cell_id.ToLatLng()
         return Point(latlng.lng().degrees(), latlng.lat().degrees())
 
     @staticmethod
     def cell_to_polygon(cell: str) -> Polygon:
-        s2_cell = S2.S2Cell(S2.S2CellId.FromToken(cell, len(cell)))
+        s2_cell = S2.S2Cell(S2.S2CellId.FromToken(cell))
         return Polygon(
             tuple(
                 (
