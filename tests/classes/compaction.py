@@ -5,7 +5,7 @@ import a5
 import h3
 import pandas as pd
 from rhealpixdggs.rhp_wrappers import rhp_get_resolution
-from s2geometry import pywraps2 as S2
+import s2geometry as S2
 
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 from vector2dggs.indexers.h3vectorindexer import H3VectorIndexer
@@ -137,9 +137,7 @@ class TestRHPCompactionBounds(TestCase):
         self.res = self.parent_res + 1
         self.indexer = RHPVectorIndexer(dggs="rhp")
         digits = "012345678"
-        self.cells = {
-            self.ancestor + a + b for a, b in product(digits, repeat=2)
-        }
+        self.cells = {self.ancestor + a + b for a, b in product(digits, repeat=2)}
 
     def test_unbounded_compaction_would_exceed_parent_res(self):
         # Demonstrates the underlying behaviour that necessitates the floor:
@@ -164,9 +162,7 @@ class TestRHPCompactionBounds(TestCase):
         )
 
         digits = "012345678"
-        self.assertTrue(
-            all(rhp_get_resolution(c) >= self.parent_res for c in result)
-        )
+        self.assertTrue(all(rhp_get_resolution(c) >= self.parent_res for c in result))
         self.assertEqual(result, {self.ancestor + d for d in digits})
 
     def test_compaction_respects_parent_res(self):
@@ -219,7 +215,7 @@ class TestS2CompactionBounds(TestCase):
 
     @staticmethod
     def _get_resolution(token):
-        return S2.S2CellId.FromToken(token, len(token)).level()
+        return S2.S2CellId.FromToken(token).level()
 
     def test_unbounded_compaction_would_exceed_parent_res(self):
         # Demonstrates the underlying behaviour that necessitates the floor:
@@ -245,9 +241,7 @@ class TestS2CompactionBounds(TestCase):
             self.indexer.children_at_res,
         )
 
-        self.assertTrue(
-            all(self._get_resolution(c) >= self.parent_res for c in result)
-        )
+        self.assertTrue(all(self._get_resolution(c) >= self.parent_res for c in result))
         self.assertEqual(result, self._descendants(self.ancestor_id, self.parent_res))
 
     def test_compaction_respects_parent_res(self):
@@ -293,13 +287,10 @@ class TestA5CompactionBounds(TestCase):
         # a5.compact has no resolution floor and will compact past
         # parent_res whenever the cells fully cover a coarser ancestor.
         unbounded = {
-            a5.u64_to_hex(c)
-            for c in a5.compact([a5.hex_to_u64(c) for c in self.cells])
+            a5.u64_to_hex(c) for c in a5.compact([a5.hex_to_u64(c) for c in self.cells])
         }
         self.assertEqual(unbounded, {self.ancestor})
-        self.assertLess(
-            A5VectorIndexer.get_resolution(self.ancestor), self.parent_res
-        )
+        self.assertLess(A5VectorIndexer.get_resolution(self.ancestor), self.parent_res)
 
     def test_children_at_res(self):
         result = self.indexer.children_at_res(self.ancestor, self.parent_res)
@@ -325,7 +316,10 @@ class TestA5CompactionBounds(TestCase):
         self.assertTrue(
             all(A5VectorIndexer.get_resolution(c) >= self.parent_res for c in result)
         )
-        self.assertEqual(set(result), set(self.indexer.children_at_res(self.ancestor, self.parent_res)))
+        self.assertEqual(
+            set(result),
+            set(self.indexer.children_at_res(self.ancestor, self.parent_res)),
+        )
 
     def test_compaction_respects_parent_res(self):
         dggs_col = f"a5_{self.res:02}"
