@@ -150,7 +150,7 @@ class S2VectorIndexer(VectorIndexer):
                     if self.cell_center_is_inside_polygon(cell, s2polygon)
                 }
             else:
-                set(covering)
+                covering = set(covering)
 
             return covering
 
