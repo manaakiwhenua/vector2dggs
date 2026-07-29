@@ -1,6 +1,6 @@
 import a5
-import pandas as pd
 import geopandas as gpd
+import pandas as pd
 from shapely.geometry import Point, Polygon
 
 from vector2dggs.indexers.vectorindexer import VectorIndexer
@@ -16,9 +16,7 @@ class A5VectorIndexer(VectorIndexer):
         interiors = [i.coords for i in geom.interiors]
         cells = set(
             a5.uncompact(
-                a5.polygon_to_cells(
-                    [geom.exterior.coords, *interiors], resolution
-                ),
+                a5.polygon_to_cells([geom.exterior.coords, *interiors], resolution),
                 resolution,
             )
         )

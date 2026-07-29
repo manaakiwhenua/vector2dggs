@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
+from typing import Callable, Iterable
 from uuid import uuid4
-from typing import Union, Callable, Iterable
 
-import pandas as pd
 import geopandas as gpd
-from shapely.geometry import Polygon, Point
+import pandas as pd
+from shapely.geometry import Point, Polygon
 
 
 class VectorIndexer(ABC):
@@ -42,13 +42,11 @@ class VectorIndexer(ABC):
 
     @staticmethod
     @abstractmethod
-    def get_resolution(cell: Union[str, int]) -> int: ...
+    def get_resolution(cell: str) -> int: ...
 
     @staticmethod
     @abstractmethod
-    def children_at_res(
-        cell: Union[str, int], target_res: int
-    ) -> Iterable[Union[str, int]]: ...
+    def children_at_res(cell: str, target_res: int) -> Iterable[str]: ...
 
     @staticmethod
     def _geo_to_cells(
@@ -67,18 +65,16 @@ class VectorIndexer(ABC):
 
     @staticmethod
     def _enforce_resolution_floor(
-        cells: Iterable[Union[str, int]],
+        cells: Iterable[str],
         parent_res: int,
-        get_resolution_func: Callable[[Union[str, int]], int],
-        children_at_res_func: Callable[
-            [Union[str, int], int], Iterable[Union[str, int]]
-        ],
-    ) -> set[Union[str, int]]:
+        get_resolution_func: Callable[[str], int],
+        children_at_res_func: Callable[[str, int], Iterable[str]],
+    ) -> set[str]:
         """
         Break up any cell coarser than parent_res into its children at
         parent_res, so that no cell in the result is coarser than parent_res.
         """
-        result = set()
+        result: set[str] = set()
         for cell in cells:
             if get_resolution_func(cell) < parent_res:
                 result.update(children_at_res_func(cell, parent_res))
@@ -93,13 +89,11 @@ class VectorIndexer(ABC):
         id_field: str,
         col_order: list[str],
         dggs_col: str,
-        compact_func: Callable[[Iterable[Union[str, int]]], Iterable[Union[str, int]]],
-        cell_to_child_func: Callable[[Union[str, int], int], Union[str, int]],
+        compact_func: Callable[[Iterable[str]], Iterable[str]],
+        cell_to_child_func: Callable[[str, int], str],
         parent_res: int,
-        get_resolution_func: Callable[[Union[str, int]], int],
-        children_at_res_func: Callable[
-            [Union[str, int], int], Iterable[Union[str, int]]
-        ],
+        get_resolution_func: Callable[[str], int],
+        children_at_res_func: Callable[[str, int], Iterable[str]],
     ):
         """
         Compacts a dataframe up to a given low resolution (parent_res), from an existing maximum resolution (res).

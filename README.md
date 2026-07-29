@@ -145,11 +145,11 @@ For partial backend support you can consider `poetry install --with dev -E h3 -E
 
 Alternatively, it is also possible to install using pip with `pip install -e .`, and bypass Poetry.
 
-#### Code formatting
+#### Code formatting, linting and type checking
 
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-Please run `black .` before committing.
+Please run `black .`, `ruff check .` and `mypy vector2dggs/` before committing. All three are enforced in CI.
 
 #### Tests
 

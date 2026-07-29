@@ -1,7 +1,15 @@
-from .base import TestRunthrough
-from ..data.datapaths import *
-
 from vector2dggs.rHP import rhp
+
+from ..data.datapaths import (
+    TEST_FILE_PATH,
+    TEST_LAYER_NAME,
+    TEST_LINESTRING_FILE_PATH,
+    TEST_LINESTRING_LAYER_NAME,
+    TEST_OUTPUT_PATH,
+    TEST_POINT_FILE_PATH,
+    TEST_POINT_LAYER_NAME,
+)
+from .base import TestRunthrough
 
 
 class TestRHP(TestRunthrough):

@@ -1,17 +1,15 @@
-from typing import Union
 from math import ceil
+from typing import Iterable, Union
 
-import pandas as pd
 import geopandas as gpd
-
+import pandas as pd
 import s2geometry as S2
-from shapely import force_2d
-from shapely.geometry import box, Polygon, LineString, Point
-from shapely.ops import transform
 from pyproj import CRS, Transformer
+from shapely import force_2d
+from shapely.geometry import LineString, Point, Polygon, box
+from shapely.ops import transform
 
 import vector2dggs.constants as const
-
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 
 
@@ -139,18 +137,19 @@ class S2VectorIndexer(VectorIndexer):
             coverer.set_min_level(level)
             coverer.set_max_level(level)
 
-            covering: list[S2.S2CellId] = coverer.GetCovering(s2polygon)
+            raw_covering: Iterable[S2.S2CellId] = coverer.GetCovering(s2polygon)
+            covering: set[S2.S2CellId]
 
             if centroid_inside:
                 # Coverings are "intersects" modality, polyfill is "centre inside" modality
                 # ergo, filter out covering cells that are not inside the polygon
                 covering = {
                     cell
-                    for cell in covering
+                    for cell in raw_covering
                     if self.cell_center_is_inside_polygon(cell, s2polygon)
                 }
             else:
-                covering = set(covering)
+                covering = set(raw_covering)
 
             return covering
 
@@ -233,7 +232,7 @@ class S2VectorIndexer(VectorIndexer):
         latlng = S2.S2LatLng.FromDegrees(geom.y, geom.x)
         return S2.S2CellId(latlng).parent(level)
 
-    def compact_tokens(self, tokens: set[str]) -> set[str]:
+    def compact_tokens(self, tokens: Iterable[str]) -> set[str]:
         """
         Compact a set of S2 DGGS cells.
         Cells must be at the same resolution.

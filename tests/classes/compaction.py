@@ -4,15 +4,15 @@ from unittest import TestCase
 import a5
 import h3
 import pandas as pd
-from rhealpixdggs.rhp_wrappers import rhp_get_resolution
 import s2geometry as S2
+from rhealpixdggs.rhp_wrappers import rhp_get_resolution
 
-from vector2dggs.indexers.vectorindexer import VectorIndexer
-from vector2dggs.indexers.h3vectorindexer import H3VectorIndexer
+from vector2dggs.indexers.a5vectorindexer import A5VectorIndexer
 from vector2dggs.indexers.geohashvectorindexer import GeohashVectorIndexer
+from vector2dggs.indexers.h3vectorindexer import H3VectorIndexer
 from vector2dggs.indexers.rhpvectorindexer import RHPVectorIndexer
 from vector2dggs.indexers.s2vectorindexer import S2VectorIndexer
-from vector2dggs.indexers.a5vectorindexer import A5VectorIndexer
+from vector2dggs.indexers.vectorindexer import VectorIndexer
 
 
 class TestH3CompactionBounds(TestCase):

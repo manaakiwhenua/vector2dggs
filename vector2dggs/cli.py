@@ -2,10 +2,10 @@ import click
 
 from vector2dggs import __version__
 from vector2dggs.a5 import a5
+from vector2dggs.geohash import geohash
 from vector2dggs.h3 import h3
 from vector2dggs.rHP import rhp
 from vector2dggs.s2 import s2
-from vector2dggs.geohash import geohash
 
 
 @click.group()

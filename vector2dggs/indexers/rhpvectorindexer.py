@@ -1,19 +1,18 @@
 from itertools import product
+from typing import Iterable
 
+import geopandas as gpd
+import pandas as pd
+import rhppandas as rhppandas  # registers the .rhp accessor used below
 from rhealpixdggs.conversion import compress_order_cells
+from rhealpixdggs.dggs import WGS84_003
 from rhealpixdggs.rhp_wrappers import (
     rhp_get_resolution,
     rhp_to_center_child,
     rhp_to_geo,
     rhp_to_geo_boundary,
 )
-from rhealpixdggs.dggs import WGS84_003
 from rhppandas.util.const import COLUMNS
-
-import rhppandas  # Necessary import despite lack of explicit use
-
-import pandas as pd
-import geopandas as gpd
 from shapely.geometry import Point, Polygon
 
 from vector2dggs.indexers.vectorindexer import VectorIndexer
@@ -88,7 +87,7 @@ class RHPVectorIndexer(VectorIndexer):
             self.children_at_res,
         )
 
-    def compact_cells(self, cells: set[str]) -> set[str]:
+    def compact_cells(self, cells: Iterable[str]) -> set[str]:
         """
         Compact a set of rHEALPix DGGS cells.
         Cells must be at the same resolution.

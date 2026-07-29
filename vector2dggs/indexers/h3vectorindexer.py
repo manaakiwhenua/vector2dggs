@@ -1,6 +1,6 @@
+import geopandas as gpd
 import h3
 import pandas as pd
-import geopandas as gpd
 from shapely.geometry import Point, Polygon, mapping
 
 from vector2dggs.indexers.vectorindexer import VectorIndexer

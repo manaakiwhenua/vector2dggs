@@ -1,6 +1,6 @@
 import multiprocessing
-import warnings
 import tempfile
+import warnings
 from enum import StrEnum, unique
 
 MIN_H3, MAX_H3 = 0, 15
@@ -179,9 +179,10 @@ DGGS_CELL_AREA_M2_BY_RES = {
     "a5": lambda res: A5_CELL_AREA_M2_BY_LEVEL[res],
 }
 
-DEFAULT_AREA_THRESHOLD_M2 = lambda dggs, parent_res: DGGS_CELL_AREA_M2_BY_RES[dggs](
-    parent_res
-)
+
+def DEFAULT_AREA_THRESHOLD_M2(dggs, parent_res):
+    return DGGS_CELL_AREA_M2_BY_RES[dggs](parent_res)
+
 
 DEFAULTS = {
     "id": None,

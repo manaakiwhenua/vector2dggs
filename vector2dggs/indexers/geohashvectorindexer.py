@@ -1,14 +1,14 @@
 from itertools import product
+from typing import Iterable
 
-from geohash_polygon import polygon_to_geohashes  # rusty-polygon-geohasher
-from geohash import encode, decode, decode_exactly  # python-geohash
-
-import pandas as pd
 import geopandas as gpd
+import pandas as pd
+from geohash import decode, decode_exactly, encode  # python-geohash
+from geohash_polygon import polygon_to_geohashes  # rusty-polygon-geohasher
 from shapely.geometry import Point, Polygon, box
 
-from vector2dggs.indexers.vectorindexer import VectorIndexer
 from vector2dggs.indexers.geohash import traversal as geohash_traversal
+from vector2dggs.indexers.vectorindexer import VectorIndexer
 
 
 class GeohashVectorIndexer(VectorIndexer):
@@ -113,7 +113,7 @@ class GeohashVectorIndexer(VectorIndexer):
             self.children_at_res,
         )
 
-    def compact(self, cells: set[str]) -> set[str]:
+    def compact(self, cells: Iterable[str]) -> set[str]:
         """
         Compact a set of geohash cells.
         Cells must be at the same resolution.
@@ -124,7 +124,7 @@ class GeohashVectorIndexer(VectorIndexer):
         # Discard any null values
         current_set = {c for c in current_set if pd.notna(c)}
         while True:
-            parent_map = {}
+            parent_map: dict[str, set[str]] = {}
             for gh in current_set:
                 parent = gh[:-1]
                 if parent not in parent_map:

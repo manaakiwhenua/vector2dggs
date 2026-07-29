@@ -1,16 +1,17 @@
-from .classes.a5 import TestA5
-from .classes.h3 import TestH3
-from .classes.rHP import TestRHP
-from .classes.s2 import TestS2
-from .classes.geohash import TestGeohash
-from .classes.katana import TestKatana
-from .classes.geometry_types import TestGeometryTypes
-from .classes.output_validation import TestOutputValidation
-from .classes.errors import TestErrors, TestOverwriteRequired
+from .classes.a5 import TestA5 as TestA5
+from .classes.compaction import TestA5CompactionBounds as TestA5CompactionBounds
 from .classes.compaction import (
-    TestH3CompactionBounds,
-    TestGeohashCompactionBounds,
-    TestRHPCompactionBounds,
-    TestS2CompactionBounds,
-    TestA5CompactionBounds,
+    TestGeohashCompactionBounds as TestGeohashCompactionBounds,
 )
+from .classes.compaction import TestH3CompactionBounds as TestH3CompactionBounds
+from .classes.compaction import TestRHPCompactionBounds as TestRHPCompactionBounds
+from .classes.compaction import TestS2CompactionBounds as TestS2CompactionBounds
+from .classes.errors import TestErrors as TestErrors
+from .classes.errors import TestOverwriteRequired as TestOverwriteRequired
+from .classes.geohash import TestGeohash as TestGeohash
+from .classes.geometry_types import TestGeometryTypes as TestGeometryTypes
+from .classes.h3 import TestH3 as TestH3
+from .classes.katana import TestKatana as TestKatana
+from .classes.output_validation import TestOutputValidation as TestOutputValidation
+from .classes.rHP import TestRHP as TestRHP
+from .classes.s2 import TestS2 as TestS2

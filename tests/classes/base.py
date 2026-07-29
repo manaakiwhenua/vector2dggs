@@ -1,5 +1,6 @@
-from unittest import *
-from ..data.datapaths import *
+from unittest import TestCase
+
+from ..data.datapaths import TEST_OUTPUT_PATH
 
 
 class TestRunthrough(TestCase):

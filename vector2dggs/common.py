@@ -1,46 +1,47 @@
-import os
 import errno
 import json
 import logging
-import tempfile
-import click
-import click_log
-import sqlalchemy
+import os
 import shutil
-import pyproj
+import tempfile
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from pathlib import Path, PurePath
+from types import ModuleType
+from typing import Optional, Union  # , Callable
+from urllib.parse import urlparse
 from uuid import uuid4
 
+import click
+import click_log
+import dask
+import dask.dataframe as dd
+import dask_geopandas as dgpd
+import geopandas as gpd
+import numpy as np
+import pandas as pd
+import pyarrow as pa
+import pyarrow.dataset as pa_ds
+import pyarrow.parquet as pq
+import pyproj
+import shapely
+import sqlalchemy
+from shapely.geometry import GeometryCollection
+from tqdm import tqdm
+from tqdm.dask import TqdmCallback
+
+import vector2dggs.constants as const
+import vector2dggs.indexerfactory as idxfactory
+from vector2dggs.indexers.vectorindexer import VectorIndexer
+
+from . import katana
+
+resource: Optional[ModuleType]
 try:
     import resource
 except ImportError:  # resource is POSIX-only
     resource = None
 
-import pandas as pd
-import geopandas as gpd
-import dask
-import dask.dataframe as dd
-import dask_geopandas as dgpd
-import numpy as np
-import shapely
-import pyarrow as pa
-import pyarrow.dataset as pa_ds
-import pyarrow.parquet as pq
-
-from typing import Union, Iterable  # , Callable
-from pathlib import Path, PurePath
-from urllib.parse import urlparse
-from tqdm import tqdm
-from tqdm.dask import TqdmCallback
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
-from shapely.geometry import GeometryCollection
-
-import vector2dggs.constants as const
-import vector2dggs.indexerfactory as idxfactory
-
-from . import katana
-from vector2dggs.indexers.vectorindexer import VectorIndexer
-
-SQLConnectionType = Union[sqlalchemy.engine.Connection, sqlalchemy.engine.Engine]
+SQLConnectionType = sqlalchemy.engine.Engine
 
 
 LOGGER = logging.getLogger(__name__)
@@ -58,7 +59,9 @@ class IdFieldError(ValueError):
     pass
 
 
-def check_resolutions(resolution: int, parent_res: int) -> None:
+def check_resolutions(
+    resolution: Union[str, int], parent_res: Union[None, str, int]
+) -> None:
     if parent_res is not None and not int(parent_res) < int(resolution):
         raise ParentResolutionException(
             "Parent resolution ({pr}) must be less than target resolution ({r})".format(
@@ -92,13 +95,13 @@ def validate_compression(ctx, param, value: str) -> str:
 
 def db_conn_and_input_path(
     vector_input: Union[str, Path],
-) -> tuple[SQLConnectionType, Union[str, Path]]:
-    con: sqlalchemy.engine.Connection = None
-    scheme: str = urlparse(vector_input).scheme
+) -> tuple[Optional[SQLConnectionType], Union[str, Path]]:
+    con: Optional[SQLConnectionType] = None
+    scheme: str = urlparse(str(vector_input)).scheme
 
     if bool(scheme) and scheme != "file":
         # Assume database connection
-        con = sqlalchemy.create_engine(vector_input)
+        con = sqlalchemy.create_engine(str(vector_input))
 
     elif not Path(vector_input).exists():
         if not scheme:
@@ -157,7 +160,9 @@ def drop_condition(
     return df
 
 
-def get_parent_res(dggs: str, parent_res: Union[None, str], resolution: int) -> int:
+def get_parent_res(
+    dggs: str, parent_res: Union[None, str, int], resolution: int
+) -> int:
     """
     Uses a parent resolution,
     OR,
@@ -392,10 +397,10 @@ def _merge_partition_files(partition_dir: Path, compression: str) -> None:
 def _parent_partitioning(
     indexer: VectorIndexer,
     input_dir: Path,
-    output_dir: Path,
+    output_dir: Union[Path, str],
     resolution: int,
     parent_res: int,
-    id_field: str,
+    id_field: Optional[str],
     compact: bool,
     geo: str,
     **kwargs,
@@ -533,7 +538,7 @@ def bisection_preparation(
     df: pd.DataFrame,
     dggs: str,
     parent_res: int,
-    cut_crs: pyproj.CRS = None,
+    cut_crs: Optional[pyproj.CRS] = None,
     cut_threshold: Union[None, float] = None,
 ) -> tuple[pd.DataFrame, pyproj.CRS, Union[None, float]]:
     cut_threshold = float(cut_threshold) if cut_threshold is not None else None
@@ -588,10 +593,10 @@ def bisect_geometry(geometry, cut_threshold):
 
 def _read_input(
     input_file: Union[Path, str],
-    layer: str,
-    con: SQLConnectionType,
+    layer: Optional[str],
+    con: Optional[SQLConnectionType],
     keep_attributes: bool,
-    id_field: str,
+    id_field: Optional[str],
     geom_col: str,
 ) -> gpd.GeoDataFrame:
     if layer and con:
@@ -617,7 +622,7 @@ def _read_input(
 
 def _prepare_dataframe(
     df: gpd.GeoDataFrame,
-    id_field: str,
+    id_field: Optional[str],
     keep_attributes: bool,
 ) -> gpd.GeoDataFrame:
     if id_field:
@@ -716,22 +721,22 @@ def index(
     input_file: Union[Path, str],
     output_directory: Union[Path, str],
     resolution: int,
-    parent_res: Union[None, int],
+    parent_res: Union[None, str, int],
     keep_attributes: bool,
     chunksize: int,
     spatial_sorting: str,
     cut_threshold: Union[None, float],
     processes: int,
     compression: str = "snappy",
-    id_field: str = None,
-    cut_crs: pyproj.CRS = None,
-    con: SQLConnectionType = None,
-    layer: str = None,
+    id_field: Optional[str] = None,
+    cut_crs: Optional[pyproj.CRS] = None,
+    con: Optional[SQLConnectionType] = None,
+    layer: Optional[str] = None,
     geom_col: str = "geom",
     geo: str = const.GeoOutputMode.NONE.value,
     overwrite: bool = False,
     compact: bool = True,
-) -> Path:
+) -> Union[Path, str]:
     """
     Performs multi-threaded DGGS indexing on geometries (including multipart and collections).
     """
