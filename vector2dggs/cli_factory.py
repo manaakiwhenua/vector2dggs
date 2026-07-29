@@ -60,7 +60,7 @@ def make_dggs_command(
         "-ch",
         "--chunksize",
         required=True,
-        type=int,
+        type=click.IntRange(min=1),
         default=const.DEFAULTS["ch"],
         help="The number of rows per index partition to use when spatially partitioning. Adjusting this number will trade off memory use and time.",
         nargs=1,
@@ -95,7 +95,7 @@ def make_dggs_command(
         "--threads",
         required=False,
         default=const.DEFAULTS["t"],
-        type=int,
+        type=click.IntRange(min=1),
         help="Amount of threads used for operation",
         nargs=1,
     )
@@ -105,6 +105,7 @@ def make_dggs_command(
         required=False,
         default=const.DEFAULTS["cp"],
         type=str,
+        callback=common.validate_compression,
         help="Compression method to use for the output Parquet files. Options include 'snappy', 'gzip', 'brotli', 'lz4', 'zstd', etc. Use 'none' for no compression.",
         nargs=1,
     )
