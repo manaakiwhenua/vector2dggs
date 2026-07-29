@@ -28,13 +28,15 @@ class TestPostGIS(TestRunthrough):
         try:
             from testcontainers.community.postgres import PostgresContainer
         except Exception as e:
-            raise unittest.SkipTest(f"testcontainers not available: {e}")
+            raise unittest.SkipTest(f"testcontainers not available: {e}") from e
 
         try:
             cls.pg = PostgresContainer("postgis/postgis:16-3.4")
             cls.pg.start()
         except Exception as e:
-            raise unittest.SkipTest(f"Docker unavailable, skipping PostGIS tests: {e}")
+            raise unittest.SkipTest(
+                f"Docker unavailable, skipping PostGIS tests: {e}"
+            ) from e
 
         cls.connection_url = cls.pg.get_connection_url()
         engine = sqlalchemy.create_engine(cls.connection_url)

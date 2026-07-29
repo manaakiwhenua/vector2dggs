@@ -89,7 +89,7 @@ def validate_compression(ctx, param, value: str) -> str:
     except Exception as e:
         raise click.BadParameter(
             f"'{value}' is not a supported Parquet compression codec: {e}"
-        )
+        ) from e
     return value
 
 

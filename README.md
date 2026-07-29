@@ -153,7 +153,9 @@ Please run `black .`, `ruff check .` and `mypy vector2dggs/` before committing. 
 
 #### Tests
 
-Tests are included. To run them, activate the Poetry environment first (`eval "$(poetry env activate)"`), then run:
+Tests are included. Some tests (covering the PostgreSQL/PostGIS input path) spin up a throwaway PostGIS container via Docker; they'll be skipped automatically if Docker isn't available, rather than failing the run.
+
+To run them, activate the Poetry environment first (`eval "$(poetry env activate)"`), then run:
 
 ```bash
 python tests/test_vector2dggs.py
