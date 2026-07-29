@@ -23,6 +23,8 @@ class RHPVectorIndexer(VectorIndexer):
     Provides integration for MWLR's rHEALPix DGGS.
     """
 
+    GEODESIC_POLYFILL = False
+
     def polyfill(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
         geom_col = df.geometry.name
         parts = []

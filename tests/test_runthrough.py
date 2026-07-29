@@ -1,4 +1,5 @@
 from .classes.a5 import TestA5 as TestA5
+from .classes.antimeridian import TestAntimeridian as TestAntimeridian
 from .classes.compaction import TestA5CompactionBounds as TestA5CompactionBounds
 from .classes.compaction import (
     TestGeohashCompactionBounds as TestGeohashCompactionBounds,

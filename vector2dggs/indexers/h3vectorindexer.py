@@ -11,6 +11,8 @@ class H3VectorIndexer(VectorIndexer):
     Provides integration for Uber's H3 DGGS.
     """
 
+    GEODESIC_POLYFILL = True
+
     @staticmethod
     def _polyfill_polygon(geom, resolution: int) -> list:
         return h3.geo_to_cells(mapping(geom), resolution)

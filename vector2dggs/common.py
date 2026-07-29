@@ -11,6 +11,7 @@ from typing import Optional, Union  # , Callable
 from urllib.parse import urlparse
 from uuid import uuid4
 
+import antimeridian
 import click
 import click_log
 import dask
@@ -661,12 +662,57 @@ def _run_bisection(
     return df
 
 
-def _clean_geometries(df: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def _crosses_antimeridian(geom) -> bool:
+    """
+    Heuristically detect whether a geometry's naive bounding box suggests it
+    spans the antimeridian: a geometry that genuinely crosses it produces an
+    implausibly wide (> 180 degree) longitude span, since its vertices sit
+    close to -180 and +180 rather than wrapping through the boundary.
+    """
+    if geom is None or geom.is_empty:
+        return False
+    minx, _, maxx, _ = geom.bounds
+    return (maxx - minx) > 180
+
+
+def _fix_antimeridian_crossing(geom):
+    """
+    Split a geometry that spans the antimeridian into the equivalent
+    correctly-wound multi-part geometry. Geometries that don't actually
+    cross the antimeridian are returned unchanged.
+    """
+    if geom is None or geom.is_empty:
+        return geom
+    if geom.geom_type == "GeometryCollection":
+        return GeometryCollection([_fix_antimeridian_crossing(g) for g in geom.geoms])
+    if not _crosses_antimeridian(geom):
+        return geom
+    if geom.geom_type == "Polygon":
+        return antimeridian.fix_polygon(geom)
+    elif geom.geom_type == "MultiPolygon":
+        return antimeridian.fix_multi_polygon(geom)
+    elif geom.geom_type == "LineString":
+        return antimeridian.fix_line_string(geom, great_circle=True)
+    elif geom.geom_type == "MultiLineString":
+        return antimeridian.fix_multi_line_string(geom, great_circle=True)
+    return geom
+
+
+def _clean_geometries(df: gpd.GeoDataFrame, indexer: VectorIndexer) -> gpd.GeoDataFrame:
     LOGGER.debug("Exploding geometry collections and multipolygons")
+    # Only correct antimeridian-crossing artifacts when reprojecting from a
+    # projected (unambiguous) source CRS, and only for backends whose
+    # polyfill isn't already geodesic (see VectorIndexer.GEODESIC_POLYFILL).
+    # Already-geographic input is left untouched rather than reinterpreted.
+    was_projected = df.crs is not None and not df.crs.is_geographic
+    df = df.to_crs(4326)
+    if was_projected and not indexer.GEODESIC_POLYFILL:
+        LOGGER.debug("Correcting antimeridian-crossing geometries")
+        df["geometry"] = df.geometry.apply(_fix_antimeridian_crossing)
     df = (
-        df.to_crs(4326)
-        .explode(index_parts=False)  # Explode from GeometryCollection
-        .explode(index_parts=False)  # Explode multipolygons to polygons
+        df.explode(index_parts=False).explode(  # Explode from GeometryCollection
+            index_parts=False
+        )  # Explode multipolygons to polygons
     ).reset_index()
     df = drop_condition(
         df,
@@ -760,7 +806,7 @@ def index(
     )
     df = _prepare_dataframe(df, id_field, keep_attributes)
     df = _run_bisection(df, cut_threshold, processes)
-    df = _clean_geometries(df)
+    df = _clean_geometries(df, indexer)
 
     ddf = dgpd.from_geopandas(df, chunksize=max(1, chunksize), sort=True)
     if spatial_sorting != "none":
