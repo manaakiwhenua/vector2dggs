@@ -15,7 +15,7 @@ Currently this tool supports the following DGGSs:
 
 ... and the following geocode systems:
 
-- [Geohash](https://en.wikipedia.org/wiki/Geohash) (points, polygons)
+- [Geohash](https://en.wikipedia.org/wiki/Geohash)
 
 Contributions (especially for other DGGSs), suggestions, bug reports and strongly worded letters are all welcome.
 
@@ -62,10 +62,10 @@ Options:
                                   to create an output that only includes H3
                                   cell ID and the ID given by the -id field
                                   (or the default index ID).
-  -ch, --chunksize INTEGER        The number of rows per index partition to
+  -ch, --chunksize INTEGER RANGE  The number of rows per index partition to
                                   use when spatially partitioning. Adjusting
                                   this number will trade off memory use and
-                                  time.  [default: 50; required]
+                                  time.  [default: 50; x>=1; required]
   -s, --spatial_sorting [hilbert|morton|geohash|none]
                                   Spatial sorting method when performing
                                   spatial partitioning.  [default: none]
@@ -84,8 +84,8 @@ Options:
                                   according to the CRS. A threshold of 0 will
                                   skip bisection entirely (effectively
                                   ignoring --cut_crs).
-  -t, --threads INTEGER           Amount of threads used for operation
-                                  [default: NUM_CPUS - 1]
+  -t, --threads INTEGER RANGE     Amount of threads used for operation
+                                  [default: NUM_CPUS - 1; x>=1]
   -cp, --compression TEXT         Compression method to use for the output
                                   Parquet files. Options include 'snappy',
                                   'gzip', 'brotli', 'lz4', 'zstd', etc. Use
@@ -187,7 +187,7 @@ vector2dggs h3 -v DEBUG -id title_no -r 12 -o ~/Downloads/nz-property-titles.gpk
 With a PostgreSQL/PostGIS connection:
 
 ```bash
-vector2dggs h3 -v DEBUG -id ogc_fid -r 9 -p 5 -t 4 --overwrite -lyr topo50_lake postgresql://user:password@host:port/db ./topo50_lake.parquet
+vector2dggs h3 -v DEBUG -id ogc_fid -r 9 -pr 5 -t 4 --overwrite -lyr topo50_lake postgresql://user:password@host:port/db ./topo50_lake.parquet
 ```
 
 ## Citation
