@@ -20,63 +20,56 @@ class GeohashVectorIndexer(VectorIndexer):
 
     GEOHASH_BASE32_SET = set("0123456789bcdefghjkmnpqrstuvwxyz")
 
-    def polyfill(self, df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
+    def _polyfill_polygons(self, df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
         geom_col = df.geometry.name
         gh_col = "geohash"
-        parts = []
-
-        df_polygon = df[df.geom_type == "Polygon"].copy()
-        if not df_polygon.empty:
-            result = (
-                df_polygon.assign(
-                    **{
-                        gh_col: df_polygon.geometry.apply(
-                            lambda geom: self._polygon_to_geohashes(geom, level)
-                        )
-                    }
-                )
-                .drop(columns=[geom_col])
-                .explode(gh_col, ignore_index=True)
-                .set_index(gh_col)
+        result = (
+            df.assign(
+                **{
+                    gh_col: df.geometry.apply(
+                        lambda geom: self._polygon_to_geohashes(geom, level)
+                    )
+                }
             )
-            parts.append(pd.DataFrame(result))
+            .drop(columns=[geom_col])
+            .explode(gh_col, ignore_index=True)
+            .set_index(gh_col)
+        )
+        return pd.DataFrame(result)
 
-        df_linestring = df[df.geom_type == "LineString"].copy()
-        if not df_linestring.empty:
-            result = (
-                df_linestring.assign(
-                    **{
-                        gh_col: df_linestring.geometry.apply(
-                            lambda geom: geohash_traversal.linetrace_linewise(
-                                geom, level
-                            )
-                        )
-                    }
-                )
-                .drop(columns=[geom_col])
-                .explode(gh_col, ignore_index=True)
-                .dropna(subset=[gh_col])
-                .set_index(gh_col)
+    def _polyfill_linestrings(self, df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
+        geom_col = df.geometry.name
+        gh_col = "geohash"
+        result = (
+            df.assign(
+                **{
+                    gh_col: df.geometry.apply(
+                        lambda geom: geohash_traversal.linetrace_linewise(geom, level)
+                    )
+                }
             )
-            result = result[~result.index.duplicated(keep="first")]
-            parts.append(pd.DataFrame(result))
+            .drop(columns=[geom_col])
+            .explode(gh_col, ignore_index=True)
+            .dropna(subset=[gh_col])
+            .set_index(gh_col)
+        )
+        return pd.DataFrame(result[~result.index.duplicated(keep="first")])
 
-        df_point = df[df.geom_type == "Point"].copy()
-        if not df_point.empty:
-            result = (
-                df_point.assign(
-                    **{
-                        gh_col: df_point.geometry.apply(
-                            lambda geom: encode(geom.y, geom.x, precision=level)
-                        )
-                    }
-                )
-                .drop(columns=[geom_col])
-                .set_index(gh_col)
+    def _polyfill_points(self, df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
+        geom_col = df.geometry.name
+        gh_col = "geohash"
+        result = (
+            df.assign(
+                **{
+                    gh_col: df.geometry.apply(
+                        lambda geom: encode(geom.y, geom.x, precision=level)
+                    )
+                }
             )
-            parts.append(pd.DataFrame(result))
-
-        return pd.concat(parts) if parts else pd.DataFrame()
+            .drop(columns=[geom_col])
+            .set_index(gh_col)
+        )
+        return pd.DataFrame(result)
 
     def secondary_index(self, df: pd.DataFrame, parent_level: int) -> pd.DataFrame:
         """

@@ -25,34 +25,29 @@ class RHPVectorIndexer(VectorIndexer):
 
     GEODESIC_POLYFILL = False
 
-    def polyfill(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
+    def _polyfill_polygons(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
         geom_col = df.geometry.name
-        parts = []
+        result = df.rhp.polyfill_resample(
+            resolution, return_geometry=False, compress=False
+        ).drop(columns=["index", geom_col])
+        return pd.DataFrame(result)
 
-        df_polygon = df[df.geom_type == "Polygon"]
-        if not df_polygon.empty:
-            result = df_polygon.rhp.polyfill_resample(
-                resolution, return_geometry=False, compress=False
-            ).drop(columns=["index", geom_col])
-            parts.append(pd.DataFrame(result))
+    def _polyfill_linestrings(
+        self, df: gpd.GeoDataFrame, resolution: int
+    ) -> pd.DataFrame:
+        geom_col = df.geometry.name
+        result = (
+            df.rhp.linetrace(resolution)
+            .explode(COLUMNS["linetrace"])
+            .set_index(COLUMNS["linetrace"])
+            .drop(columns=[geom_col])
+        )
+        return pd.DataFrame(result[~result.index.duplicated(keep="first")])
 
-        df_linestring = df[df.geom_type == "LineString"]
-        if not df_linestring.empty:
-            result = (
-                df_linestring.rhp.linetrace(resolution)
-                .explode(COLUMNS["linetrace"])
-                .set_index(COLUMNS["linetrace"])
-                .drop(columns=[geom_col])
-            )
-            result = result[~result.index.duplicated(keep="first")]
-            parts.append(pd.DataFrame(result))
-
-        df_point = df[df.geom_type == "Point"]
-        if not df_point.empty:
-            result = df_point.rhp.geo_to_rhp(resolution, set_index=True)
-            parts.append(pd.DataFrame(result.drop(columns=[geom_col])))
-
-        return pd.concat(parts) if parts else pd.DataFrame()
+    def _polyfill_points(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
+        geom_col = df.geometry.name
+        result = df.rhp.geo_to_rhp(resolution, set_index=True)
+        return pd.DataFrame(result.drop(columns=[geom_col]))
 
     def secondary_index(self, df: pd.DataFrame, parent_res: int) -> pd.DataFrame:
         """
