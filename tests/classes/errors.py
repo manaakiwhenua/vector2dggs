@@ -1,3 +1,4 @@
+import click
 from unittest import TestCase
 
 from vector2dggs import common
@@ -13,6 +14,54 @@ class TestErrors(TestCase):
     Error-path unit tests that raise before touching the filesystem,
     so no output cleanup is needed.
     """
+
+    def test_invalid_compression_raises(self):
+        with self.assertRaises(click.BadParameter):
+            h3(
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
+                    "-r",
+                    "8",
+                    "-cp",
+                    "bogus",
+                ],
+                standalone_mode=False,
+            )
+
+    def test_zero_threads_raises(self):
+        with self.assertRaises(click.BadParameter):
+            h3(
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
+                    "-r",
+                    "8",
+                    "-t",
+                    "0",
+                ],
+                standalone_mode=False,
+            )
+
+    def test_negative_chunksize_raises(self):
+        with self.assertRaises(click.BadParameter):
+            h3(
+                [
+                    TEST_FILE_PATH,
+                    str(TEST_OUTPUT_PATH),
+                    "--layer",
+                    TEST_LAYER_NAME,
+                    "-r",
+                    "8",
+                    "-ch",
+                    "-5",
+                ],
+                standalone_mode=False,
+            )
 
     def test_parent_res_not_less_than_resolution_raises(self):
         with self.assertRaises(common.ParentResolutionException):

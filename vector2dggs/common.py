@@ -3,6 +3,7 @@ import errno
 import json
 import logging
 import tempfile
+import click
 import click_log
 import sqlalchemy
 import shutil
@@ -71,6 +72,22 @@ def check_compaction_requirements(compact: bool, id_field: Union[str, None]) -> 
         raise IdFieldError(
             "An id_field is required for compaction, in order to handle the potential for overlapping features"
         )
+
+
+def validate_compression(ctx, param, value: str) -> str:
+    """
+    Click callback that fails fast on an unsupported Parquet compression
+    codec, by asking pyarrow directly (an in-memory, zero-row write) rather
+    than maintaining a hardcoded codec list that could drift from what the
+    installed pyarrow actually supports.
+    """
+    try:
+        pq.write_table(pa.table({"_": [0]}), pa.BufferOutputStream(), compression=value)
+    except Exception as e:
+        raise click.BadParameter(
+            f"'{value}' is not a supported Parquet compression codec: {e}"
+        )
+    return value
 
 
 def db_conn_and_input_path(
