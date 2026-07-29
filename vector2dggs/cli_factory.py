@@ -1,6 +1,5 @@
 import tempfile
 from pathlib import Path
-from typing import Optional, Union
 
 import click
 import click_log
@@ -150,8 +149,8 @@ def make_dggs_command(
     @click.option("-o", "--overwrite", is_flag=True)
     @click.version_option(version=__version__)
     def command(
-        vector_input: Union[str, Path],
-        output_directory: Union[str, Path],
+        vector_input: str | Path,
+        output_directory: str | Path,
         resolution: str,
         parent_res: str,
         id_field: str,
@@ -165,7 +164,7 @@ def make_dggs_command(
         layer: str,
         geom_col: str,
         geo: str,
-        tempdir: Union[str, Path],
+        tempdir: str | Path,
         compact: bool,
         overwrite: bool,
     ):
@@ -180,7 +179,7 @@ def make_dggs_command(
         con, vector_input = common.db_conn_and_input_path(vector_input)
         output_directory = common.resolve_output_path(output_directory, overwrite)
 
-        cut_crs_obj: Optional[pyproj.CRS] = None
+        cut_crs_obj: pyproj.CRS | None = None
         if cut_crs is not None:
             cut_crs_obj = pyproj.CRS.from_user_input(cut_crs)
 

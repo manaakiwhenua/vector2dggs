@@ -10,7 +10,6 @@ characters, 1-12).
 """
 
 import math
-from typing import Optional
 
 from geohash import decode, encode, neighbors
 from shapely.geometry import LineString
@@ -59,19 +58,19 @@ def path_cells_linewise(
         return 1.0 + w * line.distance(Point(lng, lat))
 
     g_fwd = {start: 0.0}
-    came_from_fwd: dict[str, Optional[str]] = {start: None}
+    came_from_fwd: dict[str, str | None] = {start: None}
     heap_fwd = [(h_fwd(start), start)]
 
     g_bwd = {end: 0.0}
-    came_from_bwd: dict[str, Optional[str]] = {end: None}
+    came_from_bwd: dict[str, str | None] = {end: None}
     heap_bwd = [(h_bwd(end), end)]
 
     best_cost = math.inf
-    meeting_cell: Optional[str] = None
+    meeting_cell: str | None = None
 
     def reconstruct(cell: str) -> set[str]:
         path = set()
-        node: Optional[str] = cell
+        node: str | None = cell
         while node is not None:
             path.add(node)
             node = came_from_fwd[node]

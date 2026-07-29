@@ -1,9 +1,8 @@
 from importlib import import_module
-from typing import Dict, Tuple, Type
 
 from vector2dggs.indexers import vectorindexer
 
-INDEXER_LOOKUP: Dict[str, Tuple[str, str]] = {
+INDEXER_LOOKUP: dict[str, tuple[str, str]] = {
     "h3": ("vector2dggs.indexers.h3vectorindexer", "H3VectorIndexer"),
     "rhp": ("vector2dggs.indexers.rhpvectorindexer", "RHPVectorIndexer"),
     "geohash": ("vector2dggs.indexers.geohashvectorindexer", "GeohashVectorIndexer"),
@@ -28,5 +27,5 @@ def indexer_instance(dggs: str) -> vectorindexer.VectorIndexer:
             f"Install optional dependencies: pip install 'vector2dggs[{dggs}]' "
             f"(or 'vector2dggs[all]')."
         ) from e
-    indexer: Type[vectorindexer.VectorIndexer] = getattr(module, class_name)
+    indexer: type[vectorindexer.VectorIndexer] = getattr(module, class_name)
     return indexer(dggs)

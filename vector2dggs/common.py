@@ -7,7 +7,6 @@ import tempfile
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from pathlib import Path, PurePath
 from types import ModuleType
-from typing import Optional, Union  # , Callable
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -36,7 +35,7 @@ from vector2dggs.indexers.vectorindexer import VectorIndexer
 
 from . import katana
 
-resource: Optional[ModuleType]
+resource: ModuleType | None
 try:
     import resource
 except ImportError:  # resource is POSIX-only
@@ -47,7 +46,7 @@ SQLConnectionType = sqlalchemy.engine.Engine
 
 LOGGER = logging.getLogger(__name__)
 click_log.basic_config(LOGGER)
-click_log.ColorFormatter.colors["info"] = dict(fg="green")
+click_log.ColorFormatter.colors["info"] = {"fg": "green"}
 
 
 class ParentResolutionException(Exception):
@@ -60,18 +59,14 @@ class IdFieldError(ValueError):
     pass
 
 
-def check_resolutions(
-    resolution: Union[str, int], parent_res: Union[None, str, int]
-) -> None:
+def check_resolutions(resolution: str | int, parent_res: None | str | int) -> None:
     if parent_res is not None and not int(parent_res) < int(resolution):
         raise ParentResolutionException(
-            "Parent resolution ({pr}) must be less than target resolution ({r})".format(
-                pr=parent_res, r=resolution
-            )
+            f"Parent resolution ({parent_res}) must be less than target resolution ({resolution})"
         )
 
 
-def check_compaction_requirements(compact: bool, id_field: Union[str, None]) -> None:
+def check_compaction_requirements(compact: bool, id_field: str | None) -> None:
     if compact and not id_field:
         raise IdFieldError(
             "An id_field is required for compaction, in order to handle the potential for overlapping features"
@@ -95,9 +90,9 @@ def validate_compression(ctx, param, value: str) -> str:
 
 
 def db_conn_and_input_path(
-    vector_input: Union[str, Path],
-) -> tuple[Optional[SQLConnectionType], Union[str, Path]]:
-    con: Optional[SQLConnectionType] = None
+    vector_input: str | Path,
+) -> tuple[SQLConnectionType | None, str | Path]:
+    con: SQLConnectionType | None = None
     scheme: str = urlparse(str(vector_input)).scheme
 
     if bool(scheme) and scheme != "file":
@@ -120,9 +115,7 @@ def db_conn_and_input_path(
     return (con, vector_input)
 
 
-def resolve_output_path(
-    output_directory: Union[str, Path], overwrite: bool
-) -> Union[str, Path]:
+def resolve_output_path(output_directory: str | Path, overwrite: bool) -> str | Path:
     output_directory = Path(output_directory)
     outputexists = os.path.exists(output_directory)
 
@@ -161,9 +154,7 @@ def drop_condition(
     return df
 
 
-def get_parent_res(
-    dggs: str, parent_res: Union[None, str, int], resolution: int
-) -> int:
+def get_parent_res(dggs: str, parent_res: None | str | int, resolution: int) -> int:
     """
     Uses a parent resolution,
     OR,
@@ -171,7 +162,7 @@ def get_parent_res(
 
     Used for intermediate re-partioning.
     """
-    if dggs not in const.DEFAULT_DGGS_PARENT_RES.keys():
+    if dggs not in const.DEFAULT_DGGS_PARENT_RES:
         raise RuntimeError(
             "Unknown dggs {dggs}) -  must be one of [ {options} ]".format(
                 dggs=dggs, options=", ".join(const.DEFAULT_DGGS_PARENT_RES.keys())
@@ -398,10 +389,10 @@ def _merge_partition_files(partition_dir: Path, compression: str) -> None:
 def _parent_partitioning(
     indexer: VectorIndexer,
     input_dir: Path,
-    output_dir: Union[Path, str],
+    output_dir: Path | str,
     resolution: int,
     parent_res: int,
-    id_field: Optional[str],
+    id_field: str | None,
     compact: bool,
     geo: str,
     **kwargs,
@@ -539,9 +530,9 @@ def bisection_preparation(
     df: pd.DataFrame,
     dggs: str,
     parent_res: int,
-    cut_crs: Optional[pyproj.CRS] = None,
-    cut_threshold: Union[None, float] = None,
-) -> tuple[pd.DataFrame, pyproj.CRS, Union[None, float]]:
+    cut_crs: pyproj.CRS | None = None,
+    cut_threshold: None | float = None,
+) -> tuple[pd.DataFrame, pyproj.CRS, None | float]:
     cut_threshold = float(cut_threshold) if cut_threshold is not None else None
 
     if cut_threshold and cut_crs:
@@ -593,11 +584,11 @@ def bisect_geometry(geometry, cut_threshold):
 
 
 def _read_input(
-    input_file: Union[Path, str],
-    layer: Optional[str],
-    con: Optional[SQLConnectionType],
+    input_file: Path | str,
+    layer: str | None,
+    con: SQLConnectionType | None,
     keep_attributes: bool,
-    id_field: Optional[str],
+    id_field: str | None,
     geom_col: str,
 ) -> gpd.GeoDataFrame:
     if layer and con:
@@ -627,7 +618,7 @@ def _read_input(
 
 def _prepare_dataframe(
     df: gpd.GeoDataFrame,
-    id_field: Optional[str],
+    id_field: str | None,
     keep_attributes: bool,
 ) -> gpd.GeoDataFrame:
     if id_field:
@@ -642,7 +633,7 @@ def _prepare_dataframe(
 
 def _run_bisection(
     df: gpd.GeoDataFrame,
-    cut_threshold: Union[None, float],
+    cut_threshold: None | float,
     processes: int,
 ) -> gpd.GeoDataFrame:
     LOGGER.debug("Bisecting large geometries")
@@ -788,25 +779,25 @@ def _run_dggs_indexing(
 
 def index(
     dggs: str,
-    input_file: Union[Path, str],
-    output_directory: Union[Path, str],
+    input_file: Path | str,
+    output_directory: Path | str,
     resolution: int,
-    parent_res: Union[None, str, int],
+    parent_res: None | str | int,
     keep_attributes: bool,
     chunksize: int,
     spatial_sorting: str,
-    cut_threshold: Union[None, float],
+    cut_threshold: None | float,
     processes: int,
     compression: str = "snappy",
-    id_field: Optional[str] = None,
-    cut_crs: Optional[pyproj.CRS] = None,
-    con: Optional[SQLConnectionType] = None,
-    layer: Optional[str] = None,
+    id_field: str | None = None,
+    cut_crs: pyproj.CRS | None = None,
+    con: SQLConnectionType | None = None,
+    layer: str | None = None,
     geom_col: str = "geom",
     geo: str = const.GeoOutputMode.NONE.value,
     overwrite: bool = False,
     compact: bool = True,
-) -> Union[Path, str]:
+) -> Path | str:
     """
     Performs multi-threaded DGGS indexing on geometries (including multipart and collections).
     """
