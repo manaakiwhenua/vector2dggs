@@ -647,16 +647,36 @@ def _run_bisection(
 ) -> gpd.GeoDataFrame:
     LOGGER.debug("Bisecting large geometries")
     if cut_threshold is not None and cut_threshold > 0:
-        with ThreadPoolExecutor(max_workers=max(1, processes)) as executor:
-            futures = []
-            for idx, row in df.iterrows():
-                futures.append(
-                    (idx, executor.submit(bisect_geometry, row.geometry, cut_threshold))
-                )
-            with tqdm(total=len(futures), desc="Bisection") as pbar:
-                for idx, future in futures:
-                    df.at[idx, "geometry"] = future.result()
-                    pbar.update(1)
+        # katana's own early exit is exactly this bbox-area check; computing
+        # it vectorized upfront (rather than dispatching every row to the
+        # thread pool regardless) skips that overhead for features that
+        # don't need bisecting at all.
+        bounds = df.geometry.bounds
+        bbox_area = (bounds["maxx"] - bounds["minx"]) * (
+            bounds["maxy"] - bounds["miny"]
+        )
+        oversized = df[bbox_area > cut_threshold]
+        LOGGER.debug(
+            "%d of %d features exceed the bisection area threshold",
+            len(oversized),
+            len(df),
+        )
+        if not oversized.empty:
+            with ThreadPoolExecutor(max_workers=max(1, processes)) as executor:
+                futures = []
+                for idx, row in oversized.iterrows():
+                    futures.append(
+                        (
+                            idx,
+                            executor.submit(
+                                bisect_geometry, row.geometry, cut_threshold
+                            ),
+                        )
+                    )
+                with tqdm(total=len(futures), desc="Bisection") as pbar:
+                    for idx, future in futures:
+                        df.at[idx, "geometry"] = future.result()
+                        pbar.update(1)
     else:
         LOGGER.debug("No bisection applied to input.")
     return df
