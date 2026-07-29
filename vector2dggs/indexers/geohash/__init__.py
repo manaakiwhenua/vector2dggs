@@ -1,1 +1,1 @@
-from vector2dggs.indexers.geohash import traversal
+from vector2dggs.indexers.geohash import traversal as traversal

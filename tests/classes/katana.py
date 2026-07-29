@@ -1,9 +1,8 @@
-from .base import TestRunthrough
-
 from shapely import wkt
-from shapely.geometry import GeometryCollection
 
 from vector2dggs.katana import katana
+
+from .base import TestRunthrough
 
 polygon_a = wkt.loads(
     "POLYGON ((-62.490234 37.09024, -87.363281 30.524413, -86.484375 21.616579, "
@@ -30,5 +29,4 @@ class TestKatana(TestRunthrough):
     def test_katana(self):
         area_threshold = 0.05
         for geom in [polygon_a, polygon_b, polygon_c, polygon_d]:
-            collection = katana(geom, area_threshold)
-            # print(GeometryCollection(collection))
+            katana(geom, area_threshold)

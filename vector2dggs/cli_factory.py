@@ -1,6 +1,6 @@
 import tempfile
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 import click
 import click_log
@@ -169,7 +169,7 @@ def make_dggs_command(
         compact: bool,
         overwrite: bool,
     ):
-        tempfile.tempdir = tempdir if tempdir is not None else tempfile.tempdir
+        tempfile.tempdir = str(tempdir) if tempdir is not None else tempfile.tempdir
 
         common.check_resolutions(resolution, parent_res)
         common.check_compaction_requirements(compact, id_field)
@@ -180,8 +180,9 @@ def make_dggs_command(
         con, vector_input = common.db_conn_and_input_path(vector_input)
         output_directory = common.resolve_output_path(output_directory, overwrite)
 
+        cut_crs_obj: Optional[pyproj.CRS] = None
         if cut_crs is not None:
-            cut_crs = pyproj.CRS.from_user_input(cut_crs)
+            cut_crs_obj = pyproj.CRS.from_user_input(cut_crs)
 
         common.index(
             dggs_key,
@@ -195,7 +196,7 @@ def make_dggs_command(
             cut_threshold,
             threads,
             compression=compression,
-            cut_crs=cut_crs,
+            cut_crs=cut_crs_obj,
             id_field=id_field,
             con=con,
             layer=layer,

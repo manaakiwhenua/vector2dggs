@@ -44,6 +44,8 @@ cryptography = "^48.0.1"
 pytest = "^9"
 twine ="^6"
 black = "^26.3.1"
+ruff = "^0.16.0"
+mypy = "^2.3.0"
 
 [tool.poetry.scripts]
 vector2dggs = "vector2dggs.cli:main"
@@ -54,6 +56,19 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.black]
 line-length = 88
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]  # line length is black's job
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+check_untyped_defs = true
 
 [tool.poetry.extras]
 h3 = ["h3"]

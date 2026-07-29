@@ -37,6 +37,18 @@ jobs:
         shell: bash -el {0}
         run: poetry install -E all --with dev
 
+      - name: Lint (ruff)
+        shell: bash -el {0}
+        run: poetry run ruff check .
+
+      - name: Format check (black)
+        shell: bash -el {0}
+        run: poetry run black --check .
+
+      - name: Type check (mypy)
+        shell: bash -el {0}
+        run: poetry run mypy vector2dggs/
+
       - name: Run tests
         shell: bash -el {0}
         run: poetry run pytest tests/

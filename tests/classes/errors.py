@@ -1,12 +1,13 @@
-import click
 from unittest import TestCase
+
+import click
 
 from vector2dggs import common
 from vector2dggs.h3 import h3
 from vector2dggs.indexerfactory import indexer_instance
 
+from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME, TEST_OUTPUT_PATH
 from .base import TestRunthrough
-from ..data.datapaths import *
 
 
 class TestErrors(TestCase):

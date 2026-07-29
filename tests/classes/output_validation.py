@@ -2,10 +2,10 @@ import json
 
 import pyarrow.parquet as pq
 
-from .base import TestRunthrough
-from ..data.datapaths import *
-
 from vector2dggs.h3 import h3
+
+from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME, TEST_OUTPUT_PATH
+from .base import TestRunthrough
 
 
 class TestOutputValidation(TestRunthrough):
