@@ -12,6 +12,12 @@ class VectorIndexer(ABC):
     Abstract base class and interface for all DGGS indexers.
     """
 
+    # Whether this backend's polyfill does its point-in-polygon containment
+    # test geodesically (on the sphere) rather than on planar coordinates.
+    # A geodesic polyfill indexes antimeridian-crossing geometries correctly
+    # whether or not they've been pre-split; a planar one does not.
+    GEODESIC_POLYFILL: bool = False
+
     def __init__(self, dggs: str):
         self.dggs = dggs
 

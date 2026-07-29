@@ -16,6 +16,8 @@ class GeohashVectorIndexer(VectorIndexer):
     Provides integration for the Geohash geocode system.
     """
 
+    GEODESIC_POLYFILL = False
+
     GEOHASH_BASE32_SET = set("0123456789bcdefghjkmnpqrstuvwxyz")
 
     def polyfill(self, df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:

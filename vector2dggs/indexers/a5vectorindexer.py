@@ -11,6 +11,8 @@ class A5VectorIndexer(VectorIndexer):
     Provides integration for the A5 pentagonal DGGS.
     """
 
+    GEODESIC_POLYFILL = True
+
     @staticmethod
     def _polyfill_polygon(geom, resolution: int) -> list:
         interiors = [i.coords for i in geom.interiors]

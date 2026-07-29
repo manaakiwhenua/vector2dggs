@@ -18,6 +18,8 @@ class S2VectorIndexer(VectorIndexer):
     Provides integration for Google's S2 DGGS.
     """
 
+    GEODESIC_POLYFILL = True
+
     def polyfill(self, df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
         geom_col = df.geometry.name
         parts = []
