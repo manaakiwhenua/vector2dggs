@@ -1,5 +1,5 @@
+from collections.abc import Iterable
 from itertools import product
-from typing import Iterable
 
 import geopandas as gpd
 import pandas as pd

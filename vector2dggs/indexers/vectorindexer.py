@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Callable, Iterable
+from collections.abc import Callable, Iterable
 from uuid import uuid4
 
 import geopandas as gpd
@@ -159,11 +159,11 @@ class VectorIndexer(ABC):
 
         uncompressable = {
             id: feature_cell_groups[id] & feature_cell_compact[id]
-            for id in feature_cell_groups.keys()
+            for id in feature_cell_groups
         }
         compressable = {
             id: feature_cell_compact[id] - feature_cell_groups[id]
-            for id in feature_cell_groups.keys()
+            for id in feature_cell_groups
         }
 
         # Get rows that cannot be compressed

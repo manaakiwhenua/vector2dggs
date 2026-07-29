@@ -11,8 +11,6 @@ Redistribution and use in source and binary forms, with or without modification,
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
-from typing import List, Union
-
 from shapely import force_2d, has_m, has_z
 from shapely.geometry import (
     GeometryCollection,
@@ -28,12 +26,12 @@ from shapely.validation import make_valid
 
 
 def katana(
-    geometry: Union[BaseGeometry, None],
+    geometry: BaseGeometry | None,
     threshold: float,
     count: int = 0,
     max_recursion_depth: int = 250,
     check_2D: bool = True,
-) -> List[BaseGeometry]:
+) -> list[BaseGeometry]:
     """
     Recursively split a geometry into two parts across its shortest dimension.
     Invalid input `geometry` will silently be made valid (if possible).
@@ -68,7 +66,7 @@ def katana(
         a = box(bounds[0], bounds[1], bounds[0] + width / 2, bounds[3])
         b = box(bounds[0] + width / 2, bounds[1], bounds[2], bounds[3])
     # Add additional vertices to help prevent indexing errors from use of EPSG:4386 later under the presence of long edges
-    a, b = map(lambda g: g.segmentize(min(width, height) / 4), [a, b])
+    a, b = (g.segmentize(min(width, height) / 4) for g in (a, b))
     result = []
     for d in (
         a,

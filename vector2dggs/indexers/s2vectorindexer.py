@@ -1,5 +1,5 @@
+from collections.abc import Iterable
 from math import ceil
-from typing import Iterable, Union
 
 import geopandas as gpd
 import pandas as pd
@@ -157,7 +157,7 @@ class S2VectorIndexer(VectorIndexer):
         return df
 
     def max_cells_for_geom(
-        self, geom: Union[Polygon, LineString], level: int, margin: float = 1.02
+        self, geom: Polygon | LineString, level: int, margin: float = 1.02
     ) -> int:
         """
         Calculate the maximum number of S2 cells that are appropriate for the given geometry and level.
@@ -173,8 +173,8 @@ class S2VectorIndexer(VectorIndexer):
     def bbox_area_in_m2(
         self,
         geom: Polygon,
-        src_crs: Union[str, CRS] = "EPSG:4326",
-        dst_crs: Union[str, CRS] = "EPSG:6933",
+        src_crs: str | CRS = "EPSG:4326",
+        dst_crs: str | CRS = "EPSG:6933",
     ) -> float:
         """
         Calculate the area of the bounding box of a geometry in square meters.
