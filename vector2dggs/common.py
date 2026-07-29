@@ -605,18 +605,22 @@ def _read_input(
             schema, tbl_name = (
                 (parts[0], parts[1]) if len(parts) == 2 else (None, parts[0])
             )
-            tbl = sqlalchemy.table(tbl_name, schema=schema)
+            tbl = sqlalchemy.Table(
+                tbl_name,
+                sqlalchemy.MetaData(),
+                schema=schema,
+                autoload_with=connection,
+            )
             if keep_attributes:
                 stmt = tbl.select()
             elif id_field and not keep_attributes:
-                stmt = sqlalchemy.select(
-                    sqlalchemy.column(id_field), sqlalchemy.column(geom_col)
-                ).select_from(tbl)
+                stmt = sqlalchemy.select(tbl.c[id_field], tbl.c[geom_col])
             else:
-                stmt = sqlalchemy.select(sqlalchemy.column(geom_col)).select_from(tbl)
-            return gpd.read_postgis(
-                stmt, connection, geom_col=geom_col
-            ).rename_geometry("geometry")
+                stmt = sqlalchemy.select(tbl.c[geom_col])
+            result = gpd.read_postgis(stmt, connection, geom_col=geom_col)
+            if geom_col != "geometry":
+                result = result.rename_geometry("geometry")
+            return result
     return gpd.read_file(input_file, layer=layer)
 
 

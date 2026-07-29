@@ -13,5 +13,6 @@ from .classes.geometry_types import TestGeometryTypes as TestGeometryTypes
 from .classes.h3 import TestH3 as TestH3
 from .classes.katana import TestKatana as TestKatana
 from .classes.output_validation import TestOutputValidation as TestOutputValidation
+from .classes.postgis import TestPostGIS as TestPostGIS
 from .classes.rHP import TestRHP as TestRHP
 from .classes.s2 import TestS2 as TestS2
