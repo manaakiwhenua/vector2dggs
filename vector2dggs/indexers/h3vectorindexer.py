@@ -27,37 +27,24 @@ class H3VectorIndexer(VectorIndexer):
             cells.update(h3.grid_path_cells(start, end))
         return list(cells)
 
-    def polyfill(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
-        geom_col = df.geometry.name
-        parts = []
+    def _polyfill_polygons(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
+        return self._geo_to_cells(
+            df, resolution, self._polyfill_polygon, df.geometry.name
+        )
 
-        df_polygon = df[df.geom_type == "Polygon"]
-        if not df_polygon.empty:
-            parts.append(
-                self._geo_to_cells(
-                    df_polygon, resolution, self._polyfill_polygon, geom_col
-                )
-            )
+    def _polyfill_linestrings(
+        self, df: gpd.GeoDataFrame, resolution: int
+    ) -> pd.DataFrame:
+        result = self._geo_to_cells(df, resolution, self._linetrace, df.geometry.name)
+        return result[~result.index.duplicated(keep="first")]
 
-        df_linestring = df[df.geom_type == "LineString"]
-        if not df_linestring.empty:
-            ls = self._geo_to_cells(
-                df_linestring, resolution, self._linetrace, geom_col
-            )
-            parts.append(ls[~ls.index.duplicated(keep="first")])
-
-        df_point = df[df.geom_type == "Point"]
-        if not df_point.empty:
-            parts.append(
-                self._geo_to_cells(
-                    df_point,
-                    resolution,
-                    lambda geom, res: [h3.latlng_to_cell(geom.y, geom.x, res)],
-                    geom_col,
-                )
-            )
-
-        return pd.concat(parts) if parts else pd.DataFrame()
+    def _polyfill_points(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
+        return self._geo_to_cells(
+            df,
+            resolution,
+            lambda geom, res: [h3.latlng_to_cell(geom.y, geom.x, res)],
+            df.geometry.name,
+        )
 
     def secondary_index(self, df: pd.DataFrame, parent_res: int) -> pd.DataFrame:
         df[f"h3_{parent_res:02}"] = df.index.map(

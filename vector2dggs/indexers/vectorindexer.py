@@ -21,8 +21,41 @@ class VectorIndexer(ABC):
     def __init__(self, dggs: str):
         self.dggs = dggs
 
+    def polyfill(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
+        """
+        Splits df by geometry type, dispatches each non-empty subset to the
+        corresponding _polyfill_* implementation, and concatenates the results.
+        """
+        parts = []
+
+        df_polygon = df[df.geom_type == "Polygon"]
+        if not df_polygon.empty:
+            parts.append(self._polyfill_polygons(df_polygon, resolution))
+
+        df_linestring = df[df.geom_type == "LineString"]
+        if not df_linestring.empty:
+            parts.append(self._polyfill_linestrings(df_linestring, resolution))
+
+        df_point = df[df.geom_type == "Point"]
+        if not df_point.empty:
+            parts.append(self._polyfill_points(df_point, resolution))
+
+        return pd.concat(parts) if parts else pd.DataFrame()
+
     @abstractmethod
-    def polyfill(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame: ...
+    def _polyfill_polygons(
+        self, df: gpd.GeoDataFrame, resolution: int
+    ) -> pd.DataFrame: ...
+
+    @abstractmethod
+    def _polyfill_linestrings(
+        self, df: gpd.GeoDataFrame, resolution: int
+    ) -> pd.DataFrame: ...
+
+    @abstractmethod
+    def _polyfill_points(
+        self, df: gpd.GeoDataFrame, resolution: int
+    ) -> pd.DataFrame: ...
 
     @abstractmethod
     def secondary_index(self, df: pd.DataFrame, parent_res: int) -> pd.DataFrame: ...
