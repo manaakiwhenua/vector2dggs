@@ -53,7 +53,7 @@ class GeohashVectorIndexer(VectorIndexer):
             .dropna(subset=[gh_col])
             .set_index(gh_col)
         )
-        return pd.DataFrame(result[~result.index.duplicated(keep="first")])
+        return pd.DataFrame(result)
 
     def _polyfill_points(self, df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
         geom_col = df.geometry.name
