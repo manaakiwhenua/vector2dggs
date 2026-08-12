@@ -724,6 +724,8 @@ def _normalise_longitudes(df: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, bool]
     wrapped coordinate-wise, leaving a genuine antimeridian crossing for
     downstream handling. Returns (df, whether any straddlers were wrapped).
     """
+    if df.crs is None or not df.crs.is_geographic:
+        raise ValueError("_normalise_longitudes requires a geographic CRS")
     bounds = df.geometry.bounds
     east = bounds["minx"] >= 180
     west = bounds["maxx"] <= -180

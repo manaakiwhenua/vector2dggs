@@ -1,18 +1,18 @@
 from unittest import TestCase
 
 import geopandas as gpd
-import h3 as h3lib
 import pyarrow.parquet as pq
 from shapely.geometry import Polygon
 
 from vector2dggs.common import (
     _clean_geometries,
+    _normalise_longitudes,
     _prepare_dataframe,
     _run_bisection,
     bisection_preparation,
 )
 from vector2dggs.h3 import h3
-from vector2dggs.indexers.h3vectorindexer import H3VectorIndexer
+from vector2dggs.indexerfactory import indexer_instance
 from vector2dggs.indexers.rhpvectorindexer import RHPVectorIndexer
 from vector2dggs.rHP import rhp
 
@@ -122,28 +122,52 @@ class TestUnwrappedLongitudes(TestCase):
     """
     Geographic input may store longitudes beyond +/-180 (e.g. the Chatham
     Islands at 183 degrees E in EPSG:4167). These must be normalised so they
-    index rather than silently producing zero cells.
+    index rather than silently producing zero cells. Run against every
+    installed backend: the straddling case exercises each backend's
+    antimeridian handling (geodesic polyfill, or the pre-split fix).
     """
 
-    def _clean(self, poly):
+    RESOLUTIONS = {"h3": 7, "rhp": 7, "s2": 12, "a5": 12, "geohash": 5}
+
+    def _backends(self):
+        for dggs, res in self.RESOLUTIONS.items():
+            try:
+                yield indexer_instance(dggs), res
+            except ImportError:
+                continue
+
+    def _cells(self, indexer, poly, res):
         df = gpd.GeoDataFrame({"geometry": [poly]}, crs=4167)
-        return _clean_geometries(df, H3VectorIndexer("h3"))
+        cleaned = _clean_geometries(df, indexer)
+        self.assertLessEqual(cleaned.total_bounds[2], 180)
+        return indexer.polyfill(cleaned, res)
+
+    def test_rejects_projected_crs(self):
+        df = gpd.GeoDataFrame(
+            {"geometry": [Polygon([(0, 0), (1000, 0), (1000, 1000), (0, 1000)])]},
+            crs=2193,
+        )
+        with self.assertRaises(ValueError):
+            _normalise_longitudes(df)
 
     def test_wholly_beyond_180_is_normalised_and_indexed(self):
         chatham_like = Polygon(
             [(183.1, -44.1), (183.8, -44.1), (183.8, -43.7), (183.1, -43.7)]
         )
-        cleaned = self._clean(chatham_like)
-        self.assertLessEqual(cleaned.total_bounds[2], 180)
-        cells = H3VectorIndexer("h3").polyfill(cleaned, 7)
-        self.assertGreater(len(cells), 0)
+        for indexer, res in self._backends():
+            with self.subTest(dggs=indexer.dggs):
+                cells = self._cells(indexer, chatham_like, res)
+                self.assertGreater(len(cells), 0)
+                lngs = [indexer.cell_to_point(c).x for c in cells.index]
+                self.assertTrue(all(-178 < lng < -175 for lng in lngs))
 
     def test_straddling_180_unwrapped_is_indexed_on_both_sides(self):
         straddler = Polygon(
             [(179.5, -44.0), (180.5, -44.0), (180.5, -43.5), (179.5, -43.5)]
         )
-        cleaned = self._clean(straddler)
-        cells = H3VectorIndexer("h3").polyfill(cleaned, 7)
-        lngs = [h3lib.cell_to_latlng(c)[1] for c in cells.index]
-        self.assertTrue(any(lng > 179 for lng in lngs))
-        self.assertTrue(any(lng < -179 for lng in lngs))
+        for indexer, res in self._backends():
+            with self.subTest(dggs=indexer.dggs):
+                cells = self._cells(indexer, straddler, res)
+                lngs = [indexer.cell_to_point(c).x for c in cells.index]
+                self.assertTrue(any(lng > 170 for lng in lngs))
+                self.assertTrue(any(lng < -170 for lng in lngs))
