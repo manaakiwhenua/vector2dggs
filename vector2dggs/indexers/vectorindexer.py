@@ -143,6 +143,13 @@ class VectorIndexer(ABC):
         """
         df = df.reset_index(drop=False)
 
+        if df.empty:
+            # A dask partition can be empty (e.g. after a shuffle); return an
+            # empty frame of the expected shape. (Also avoids a pandas trap:
+            # an all-False mask built from an empty list has object dtype, so
+            # df[mask] would select columns rather than filter rows.)
+            return df.set_index(dggs_col)[col_order]
+
         feature_cell_groups = (
             df.groupby(id_field)[dggs_col].apply(lambda x: set(x)).to_dict()
         )

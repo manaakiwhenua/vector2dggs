@@ -409,10 +409,17 @@ def _parent_partitioning(
     ):
 
         if compact:
-            # Compact by spatial partitions (not cell parent partitions; that repartition occurs at pq.write_to_dataset time)
+            # Shuffle so that all rows sharing a parent cell are in the same
+            # dask partition before compacting. Compaction is applied per
+            # partition, and the parent_res floor means sibling cells can only
+            # ever merge within one parent cell - so co-locating rows by the
+            # parent cell column makes per-partition compaction globally
+            # correct, no matter how bisection and chunking have fragmented a
+            # feature's rows across partitions.
             ddf = (
                 ddf.reset_index(drop=False)
                 .dropna(subset=[partition_col])
+                .shuffle(on=partition_col)
                 .map_partitions(
                     indexer.compaction,
                     resolution,
