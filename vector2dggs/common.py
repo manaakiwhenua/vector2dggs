@@ -409,13 +409,9 @@ def _parent_partitioning(
     ):
 
         if compact:
-            # Shuffle so that all rows sharing a parent cell are in the same
-            # dask partition before compacting. Compaction is applied per
-            # partition, and the parent_res floor means sibling cells can only
-            # ever merge within one parent cell - so co-locating rows by the
-            # parent cell column makes per-partition compaction globally
-            # correct, no matter how bisection and chunking have fragmented a
-            # feature's rows across partitions.
+            # Shuffle by parent cell first: compaction is per-partition, and
+            # the parent_res floor means siblings can only merge within one
+            # parent cell.
             ddf = (
                 ddf.reset_index(drop=False)
                 .dropna(subset=[partition_col])

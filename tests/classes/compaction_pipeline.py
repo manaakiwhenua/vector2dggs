@@ -41,8 +41,7 @@ class TestCompactionAcrossPartitions(TestRunthrough):
     """
 
     def test_compaction_merges_siblings_across_dask_partitions(self):
-        # A small cut threshold fragments features into many rows, and a
-        # small chunksize spreads those rows across many dask partitions.
+        # small -c and -ch scatter each feature across many partitions
         h3(
             [
                 TEST_FILE_PATH,
@@ -69,9 +68,7 @@ class TestCompactionAcrossPartitions(TestRunthrough):
         for cell, feature_id in set(zip(df.index, df["LCDB_UID"], strict=True)):
             cells_by_feature.setdefault(feature_id, set()).add(cell)
 
-        # A complete set of 7 sibling cells (all children of one parent, at
-        # any resolution finer than the parent_res floor) present for a
-        # single feature should have been compacted into that parent.
+        # all 7 children present for one feature => should have been compacted
         unmerged_septets = 0
         for cells in cells_by_feature.values():
             parents = Counter(

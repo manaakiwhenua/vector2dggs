@@ -144,10 +144,8 @@ class VectorIndexer(ABC):
         df = df.reset_index(drop=False)
 
         if df.empty:
-            # A dask partition can be empty (e.g. after a shuffle); return an
-            # empty frame of the expected shape. (Also avoids a pandas trap:
-            # an all-False mask built from an empty list has object dtype, so
-            # df[mask] would select columns rather than filter rows.)
+            # e.g. an empty partition after a shuffle; the mask logic below
+            # misbehaves on empty frames (object-dtype mask)
             return df.set_index(dggs_col)[col_order]
 
         feature_cell_groups = (
