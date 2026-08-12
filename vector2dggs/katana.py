@@ -79,6 +79,14 @@ def katana(
             if isinstance(
                 e, (Polygon, MultiPolygon, LineString, MultiLineString, LinearRing)
             ):
-                result.extend(katana(e, threshold, count + 1, check_2D))
+                result.extend(
+                    katana(
+                        e,
+                        threshold,
+                        count + 1,
+                        max_recursion_depth=max_recursion_depth,
+                        check_2D=check_2D,
+                    )
+                )
 
     return result

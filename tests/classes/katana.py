@@ -1,4 +1,5 @@
 from shapely import wkt
+from shapely.geometry import Polygon
 
 from vector2dggs.katana import katana
 
@@ -30,3 +31,13 @@ class TestKatana(TestRunthrough):
         area_threshold = 0.05
         for geom in [polygon_a, polygon_b, polygon_c, polygon_d]:
             katana(geom, area_threshold)
+
+    def test_katana_respects_threshold(self):
+        square = Polygon([(0, 0), (100, 0), (100, 100), (0, 100)])
+        threshold = 10.0
+        parts = katana(square, threshold)
+        for part in parts:
+            minx, miny, maxx, maxy = part.bounds
+            self.assertLessEqual((maxx - minx) * (maxy - miny), threshold)
+        # No area may be lost or duplicated by the splitting
+        self.assertAlmostEqual(sum(p.area for p in parts), square.area, places=6)
