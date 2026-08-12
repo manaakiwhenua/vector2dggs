@@ -143,6 +143,11 @@ class VectorIndexer(ABC):
         """
         df = df.reset_index(drop=False)
 
+        if df.empty:
+            # e.g. an empty partition after a shuffle; the mask logic below
+            # misbehaves on empty frames (object-dtype mask)
+            return df.set_index(dggs_col)[col_order]
+
         feature_cell_groups = (
             df.groupby(id_field)[dggs_col].apply(lambda x: set(x)).to_dict()
         )

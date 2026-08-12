@@ -409,10 +409,13 @@ def _parent_partitioning(
     ):
 
         if compact:
-            # Compact by spatial partitions (not cell parent partitions; that repartition occurs at pq.write_to_dataset time)
+            # Shuffle by parent cell first: compaction is per-partition, and
+            # the parent_res floor means siblings can only merge within one
+            # parent cell.
             ddf = (
                 ddf.reset_index(drop=False)
                 .dropna(subset=[partition_col])
+                .shuffle(on=partition_col)
                 .map_partitions(
                     indexer.compaction,
                     resolution,

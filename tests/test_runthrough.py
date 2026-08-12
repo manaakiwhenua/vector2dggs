@@ -8,6 +8,9 @@ from .classes.compaction import (
 from .classes.compaction import TestH3CompactionBounds as TestH3CompactionBounds
 from .classes.compaction import TestRHPCompactionBounds as TestRHPCompactionBounds
 from .classes.compaction import TestS2CompactionBounds as TestS2CompactionBounds
+from .classes.compaction_pipeline import (
+    TestCompactionAcrossPartitions as TestCompactionAcrossPartitions,
+)
 from .classes.errors import TestErrors as TestErrors
 from .classes.errors import TestOverwriteRequired as TestOverwriteRequired
 from .classes.geohash import TestGeohash as TestGeohash
