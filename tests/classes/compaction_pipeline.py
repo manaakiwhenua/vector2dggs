@@ -66,7 +66,7 @@ class TestCompactionAcrossPartitions(TestRunthrough):
 
         df = pd.read_parquet(TEST_OUTPUT_PATH)
         cells_by_feature: dict[str, set[str]] = {}
-        for cell, feature_id in set(zip(df.index, df["LCDB_UID"])):
+        for cell, feature_id in set(zip(df.index, df["LCDB_UID"], strict=True)):
             cells_by_feature.setdefault(feature_id, set()).add(cell)
 
         # A complete set of 7 sibling cells (all children of one parent, at
