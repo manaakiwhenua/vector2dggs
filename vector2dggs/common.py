@@ -646,27 +646,31 @@ def _run_bisection(
         bbox_area = (bounds["maxx"] - bounds["minx"]) * (
             bounds["maxy"] - bounds["miny"]
         )
-        oversized = df[bbox_area > cut_threshold]
+        # Positions (not index labels) of oversized rows: the index is the
+        # user-supplied id_field, which is not guaranteed to be unique, and
+        # label-based assignment would write one feature's result into every
+        # row sharing that label.
+        oversized_positions = np.flatnonzero(bbox_area > cut_threshold)
         LOGGER.debug(
             "%d of %d features exceed the bisection area threshold",
-            len(oversized),
+            len(oversized_positions),
             len(df),
         )
-        if not oversized.empty:
+        if len(oversized_positions):
+            geometry_loc = df.columns.get_loc("geometry")
             with ThreadPoolExecutor(max_workers=max(1, processes)) as executor:
-                futures = []
-                for idx, row in oversized.iterrows():
-                    futures.append(
-                        (
-                            idx,
-                            executor.submit(
-                                bisect_geometry, row.geometry, cut_threshold
-                            ),
-                        )
+                futures = [
+                    (
+                        pos,
+                        executor.submit(
+                            bisect_geometry, df.geometry.iloc[pos], cut_threshold
+                        ),
                     )
+                    for pos in oversized_positions
+                ]
                 with tqdm(total=len(futures), desc="Bisection") as pbar:
-                    for idx, future in futures:
-                        df.at[idx, "geometry"] = future.result()
+                    for pos, future in futures:
+                        df.iloc[pos, geometry_loc] = future.result()
                         pbar.update(1)
     else:
         LOGGER.debug("No bisection applied to input.")
