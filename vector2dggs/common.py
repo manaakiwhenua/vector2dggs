@@ -24,6 +24,7 @@ import pyarrow.dataset as pa_ds
 import pyarrow.parquet as pq
 import pyproj
 import shapely
+import shapely.affinity
 import sqlalchemy
 from shapely.geometry import GeometryCollection
 from tqdm import tqdm
@@ -716,15 +717,43 @@ def _fix_antimeridian_crossing(geom):
     return geom
 
 
+def _normalise_longitudes(df: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, bool]:
+    """
+    Shift geometries stored with longitudes beyond +/-180 (e.g. the Chatham
+    Islands at 183 degrees E) back into range. Geometries straddling 180 are
+    wrapped coordinate-wise, leaving a genuine antimeridian crossing for
+    downstream handling. Returns (df, whether any straddlers were wrapped).
+    """
+    bounds = df.geometry.bounds
+    east = bounds["minx"] >= 180
+    west = bounds["maxx"] <= -180
+    straddle = ~east & ~west & ((bounds["maxx"] > 180) | (bounds["minx"] < -180))
+    n = int(east.sum() + west.sum() + straddle.sum())
+    if n:
+        LOGGER.info("Normalising longitudes for %d features stored beyond +/-180", n)
+    for mask, xoff in ((east, -360), (west, 360)):
+        if mask.any():
+            df.loc[mask, "geometry"] = df.loc[mask, "geometry"].apply(
+                lambda g, xoff=xoff: shapely.affinity.translate(g, xoff=xoff)
+            )
+    if straddle.any():
+        df.loc[straddle, "geometry"] = df.loc[straddle, "geometry"].apply(
+            lambda g: shapely.transform(
+                g, lambda c: np.column_stack((((c[:, 0] + 180) % 360) - 180, c[:, 1]))
+            )
+        )
+    return df, bool(straddle.any())
+
+
 def _clean_geometries(df: gpd.GeoDataFrame, indexer: VectorIndexer) -> gpd.GeoDataFrame:
     LOGGER.debug("Exploding geometry collections and multipolygons")
-    # Only correct antimeridian-crossing artifacts when reprojecting from a
-    # projected (unambiguous) source CRS, and only for backends whose
-    # polyfill isn't already geodesic (see VectorIndexer.GEODESIC_POLYFILL).
-    # Already-geographic input is left untouched rather than reinterpreted.
+    # Correct antimeridian-crossing artifacts when the source coordinates were
+    # unambiguous (projected CRS, or unwrapped longitudes), and only for
+    # backends whose polyfill isn't already geodesic.
     was_projected = df.crs is not None and not df.crs.is_geographic
     df = df.to_crs(4326)
-    if was_projected and not indexer.GEODESIC_POLYFILL:
+    df, had_unwrapped_crossing = _normalise_longitudes(df)
+    if (was_projected or had_unwrapped_crossing) and not indexer.GEODESIC_POLYFILL:
         LOGGER.debug("Correcting antimeridian-crossing geometries")
         df["geometry"] = df.geometry.apply(_fix_antimeridian_crossing)
     df = (

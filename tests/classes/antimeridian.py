@@ -1,5 +1,9 @@
+from unittest import TestCase
+
 import geopandas as gpd
+import h3 as h3lib
 import pyarrow.parquet as pq
+from shapely.geometry import Polygon
 
 from vector2dggs.common import (
     _clean_geometries,
@@ -8,6 +12,7 @@ from vector2dggs.common import (
     bisection_preparation,
 )
 from vector2dggs.h3 import h3
+from vector2dggs.indexers.h3vectorindexer import H3VectorIndexer
 from vector2dggs.indexers.rhpvectorindexer import RHPVectorIndexer
 from vector2dggs.rHP import rhp
 
@@ -111,3 +116,34 @@ class TestAntimeridian(TestRunthrough):
 
         self.assertLess(len(cell_ids), 50)
         self.assertGreater(len(cell_ids), 0)
+
+
+class TestUnwrappedLongitudes(TestCase):
+    """
+    Geographic input may store longitudes beyond +/-180 (e.g. the Chatham
+    Islands at 183 degrees E in EPSG:4167). These must be normalised so they
+    index rather than silently producing zero cells.
+    """
+
+    def _clean(self, poly):
+        df = gpd.GeoDataFrame({"geometry": [poly]}, crs=4167)
+        return _clean_geometries(df, H3VectorIndexer("h3"))
+
+    def test_wholly_beyond_180_is_normalised_and_indexed(self):
+        chatham_like = Polygon(
+            [(183.1, -44.1), (183.8, -44.1), (183.8, -43.7), (183.1, -43.7)]
+        )
+        cleaned = self._clean(chatham_like)
+        self.assertLessEqual(cleaned.total_bounds[2], 180)
+        cells = H3VectorIndexer("h3").polyfill(cleaned, 7)
+        self.assertGreater(len(cells), 0)
+
+    def test_straddling_180_unwrapped_is_indexed_on_both_sides(self):
+        straddler = Polygon(
+            [(179.5, -44.0), (180.5, -44.0), (180.5, -43.5), (179.5, -43.5)]
+        )
+        cleaned = self._clean(straddler)
+        cells = H3VectorIndexer("h3").polyfill(cleaned, 7)
+        lngs = [h3lib.cell_to_latlng(c)[1] for c in cells.index]
+        self.assertTrue(any(lng > 179 for lng in lngs))
+        self.assertTrue(any(lng < -179 for lng in lngs))
