@@ -549,9 +549,10 @@ def bisection_preparation(
         cut_crs = df.crs
 
     if cut_crs is None:
-        LOGGER.warning("Input has no defined CRS, and cut_crs is not specified")
-    elif cut_threshold != 0:
-        LOGGER.debug("Cutting with CRS: %s", df.crs)
+        raise ValueError(
+            "Input has no CRS, which is required for indexing. "
+            "Provide a dataset with a defined CRS."
+        )
 
     if not cut_crs.is_projected and cut_threshold != 0:
         LOGGER.warning(
@@ -845,6 +846,11 @@ def index(
             layer if layer else "<default>",
         )
         return output_directory
+    if df.crs is None:
+        raise ValueError(
+            "Input has no CRS, which is required for indexing. "
+            "Provide a dataset with a defined CRS."
+        )
 
     df, cut_crs, cut_threshold = bisection_preparation(
         df, dggs, parent_res, cut_crs, cut_threshold
