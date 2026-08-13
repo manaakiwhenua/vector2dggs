@@ -1,6 +1,7 @@
-from unittest import TestCase
+from unittest import TestCase, mock
 
 import geopandas as gpd
+import pandas as pd
 from shapely.geometry import LineString
 
 from vector2dggs.indexerfactory import indexer_instance
@@ -58,3 +59,78 @@ class TestLinetraceSetSemantics(TestCase):
                 result = self._polyfill(indexer, [self.ZIGZAG, self.LINE_A], res)
                 pairs = list(zip(result.index, result["fid"], strict=True))
                 self.assertEqual(len(pairs), len(set(pairs)))
+
+
+class TestEmptyTraces(TestCase):
+    """
+    A linestring whose trace yields no cells must contribute no rows - not a
+    NaN-indexed row (which crashes S2's secondary_index and silently
+    propagates into rHP output).
+    """
+
+    LINE = LineString([(174.75, -41.30), (174.85, -41.30)])
+
+    def _assert_no_nan_rows(self, indexer, result, n_expected_features):
+        self.assertTrue(result.index.notna().all(), "NaN cell rows leaked")
+        self.assertEqual(result["fid"].nunique(), n_expected_features)
+
+    def test_rhp_empty_trace_is_dropped(self):
+        try:
+            indexer = indexer_instance("rhp")
+        except ImportError:
+            self.skipTest("rhp backend not installed")
+        df = gpd.GeoDataFrame(
+            {"fid": [0, 1], "geometry": [self.LINE, self.LINE]}, crs=4326
+        )
+        accessor_cls = type(df.rhp)
+        real = accessor_cls.linetrace
+
+        def fake(self_acc, resolution):
+            out = real(self_acc, resolution)
+            col = out.columns[-1]
+            values = out[col].tolist()
+            values[0] = []
+            out[col] = pd.Series(values, index=out.index)
+            return out
+
+        with mock.patch.object(accessor_cls, "linetrace", fake):
+            result = indexer._polyfill_linestrings(df, 6)
+        self._assert_no_nan_rows(indexer, result, 1)
+
+    def test_s2_empty_trace_is_dropped(self):
+        try:
+            indexer = indexer_instance("s2")
+        except ImportError:
+            self.skipTest("s2 backend not installed")
+        df = gpd.GeoDataFrame(
+            {"fid": [0, 1], "geometry": [self.LINE, self.LINE]}, crs=4326
+        )
+        real = type(indexer).cell_ids_from_linestring
+        calls = iter([True, False])
+
+        def fake(self_idx, geom, level):
+            return [] if next(calls) else real(self_idx, geom, level)
+
+        with mock.patch.object(type(indexer), "cell_ids_from_linestring", fake):
+            result = indexer._polyfill_linestrings(df, 14)
+        self._assert_no_nan_rows(indexer, result, 1)
+
+    def test_s2_subcell_polygon_is_dropped(self):
+        try:
+            indexer = indexer_instance("s2")
+        except ImportError:
+            self.skipTest("s2 backend not installed")
+        from shapely.geometry import Polygon
+
+        tiny = Polygon(  # ~1 m^2: no level-10 cell centre can fall inside
+            [
+                (174.75, -41.30),
+                (174.75001, -41.30),
+                (174.75001, -41.30001),
+                (174.75, -41.30001),
+            ]
+        )
+        big = Polygon([(174.7, -41.3), (174.9, -41.3), (174.9, -41.2), (174.7, -41.2)])
+        df = gpd.GeoDataFrame({"fid": [0, 1], "geometry": [tiny, big]}, crs=4326)
+        result = indexer._polyfill_polygons(df, 10)
+        self._assert_no_nan_rows(indexer, result, 1)
