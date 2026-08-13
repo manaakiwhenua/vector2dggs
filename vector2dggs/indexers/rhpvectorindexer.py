@@ -40,7 +40,12 @@ class RHPVectorIndexer(VectorIndexer):
         result = df.rhp.linetrace(resolution)
         # linetrace returns a traversal sequence, which may revisit cells
         result[col] = result[col].map(lambda cells: list(dict.fromkeys(cells)))
-        result = result.explode(col).set_index(col).drop(columns=[geom_col])
+        result = (
+            result.explode(col)
+            .dropna(subset=[col])
+            .set_index(col)
+            .drop(columns=[geom_col])
+        )
         return pd.DataFrame(result)
 
     def _polyfill_points(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:

@@ -36,7 +36,12 @@ class S2VectorIndexer(VectorIndexer):
         df["s2index"] = df.geometry.apply(
             lambda geom: self.cell_ids_from_linestring(geom, level)
         )
-        result = df.drop(columns=[geom_col]).explode("s2index").set_index("s2index")
+        result = (
+            df.drop(columns=[geom_col])
+            .explode("s2index")
+            .dropna(subset=["s2index"])
+            .set_index("s2index")
+        )
         return pd.DataFrame(result)
 
     def _polyfill_points(self, df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
