@@ -1,6 +1,8 @@
 from unittest import TestCase
 
 import click
+import geopandas as gpd
+from shapely.geometry import Polygon
 
 from vector2dggs import common
 from vector2dggs.h3 import h3
@@ -15,6 +17,13 @@ class TestErrors(TestCase):
     Error-path unit tests that raise before touching the filesystem,
     so no output cleanup is needed.
     """
+
+    def test_crsless_input_raises_clear_error(self):
+        naive = gpd.GeoDataFrame(
+            {"geometry": [Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])]}
+        )
+        with self.assertRaisesRegex(ValueError, "CRS"):
+            common.bisection_preparation(naive, "h3", 5, None, None)
 
     def test_invalid_compression_raises(self):
         with self.assertRaises(click.BadParameter):

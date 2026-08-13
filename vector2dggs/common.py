@@ -549,7 +549,10 @@ def bisection_preparation(
         cut_crs = df.crs
 
     if cut_crs is None:
-        LOGGER.warning("Input has no defined CRS, and cut_crs is not specified")
+        raise ValueError(
+            "Input has no CRS, which is required for indexing. "
+            "Provide a dataset with a defined CRS."
+        )
     elif cut_threshold != 0:
         LOGGER.debug("Cutting with CRS: %s", df.crs)
 
