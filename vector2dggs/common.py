@@ -176,27 +176,17 @@ def get_parent_res(dggs: str, parent_res: None | str | int, resolution: int) -> 
     )
 
 
-def _max_open_files_per_task() -> int:
-    """
-    Bound how many files pq.write_to_dataset may leave open within a single
-    write task.
-
-    pyarrow's default (max_open_files=900) is on its own often almost the entire
-    process's file descriptor limit. Since dask runs multiple of these write
-    tasks concurrently (one per spatial partition, each independently
-    allowed to open up to that many files), the process can exceed its file
-    descriptor limit with "Too many open files" - especially with finer
-    parent_res values, which produce many more distinct output partitions
-    per task. Divide the soft limit across the concurrent tasks, leaving
-    headroom for other open files (input reads, etc.).
-    """
-    soft_limit = (
-        resource.getrlimit(resource.RLIMIT_NOFILE)[0]
-        if resource is not None
-        else const.FALLBACK_RLIMIT_NOFILE
-    )
-    concurrency = max(1, os.cpu_count() or 1)
-    return max(8, soft_limit // (2 * concurrency))
+def raise_rlimit_nofile() -> None:
+    """Raise the soft RLIMIT_NOFILE to the hard limit (POSIX; no-op elsewhere)."""
+    if resource is None:
+        return
+    try:
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        if soft != hard:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
+            LOGGER.debug("Raised RLIMIT_NOFILE soft limit from %s to %s", soft, hard)
+    except (ValueError, OSError) as e:
+        LOGGER.debug("Could not raise RLIMIT_NOFILE: %s", e)
 
 
 def write_partition_as_geoparquet(
@@ -268,6 +258,9 @@ def write_partition_as_geoparquet(
     pdf = partition_df.copy()
     pdf[partition_col] = pdf[partition_col].astype("string")
     pdf["geometry"] = shapely.to_wkb(geoms, hex=False)
+    # Contiguous partition values: one output file per parent cell, no
+    # writer churn under a small max_open_files
+    pdf = pdf.sort_values(partition_col, kind="stable")
 
     table = pa.Table.from_pandas(pdf, preserve_index=True)
 
@@ -311,7 +304,10 @@ def write_partition_as_geoparquet(
         compression=compression,
         basename_template=f"part.{{i}}-{uuid4().hex}.parquet",
         use_threads=True,
-        max_open_files=_max_open_files_per_task(),
+        max_open_files=const.MAX_OPEN_FILES_PER_TASK,
+        # pyarrow's default max_partitions (1024) is a safety valve; this
+        # batch's true partition count is known, so pass it exactly
+        max_partitions=max(1, int(pdf[partition_col].nunique())),
     )
 
     return int(len(pdf.index) > 0)

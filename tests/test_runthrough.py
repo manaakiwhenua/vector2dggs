@@ -22,3 +22,5 @@ from .classes.output_validation import TestOutputValidation as TestOutputValidat
 from .classes.postgis import TestPostGIS as TestPostGIS
 from .classes.rHP import TestRHP as TestRHP
 from .classes.s2 import TestS2 as TestS2
+from .classes.write_limits import TestRaiseRlimitNofile as TestRaiseRlimitNofile
+from .classes.write_limits import TestSortedHiveWrite as TestSortedHiveWrite

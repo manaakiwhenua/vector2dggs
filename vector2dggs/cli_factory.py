@@ -169,6 +169,7 @@ def make_dggs_command(
         overwrite: bool,
     ):
         tempfile.tempdir = str(tempdir) if tempdir is not None else tempfile.tempdir
+        common.raise_rlimit_nofile()
 
         common.check_resolutions(resolution, parent_res)
         common.check_compaction_requirements(compact, id_field)

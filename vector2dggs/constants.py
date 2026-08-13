@@ -9,9 +9,10 @@ MIN_S2, MAX_S2 = 0, 30
 MIN_GEOHASH, MAX_GEOHASH = 1, 12
 MIN_A5, MAX_A5 = 0, 30
 
-# Assumed file descriptor soft limit (RLIMIT_NOFILE) on platforms where it
-# cannot be queried (e.g. Windows, where the `resource` module is unavailable).
-FALLBACK_RLIMIT_NOFILE = 1024
+# max_open_files per pq.write_to_dataset call. Rows are written sorted by
+# partition column, so a small pool cannot fragment output; a small fixed
+# value keeps total FD use safe under any concurrency and rlimit.
+MAX_OPEN_FILES_PER_TASK = 64
 
 
 @unique
