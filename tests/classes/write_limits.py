@@ -9,21 +9,6 @@ from vector2dggs import common
 from vector2dggs.indexers.h3vectorindexer import H3VectorIndexer
 
 
-class TestMaxOpenFilesPerTask(TestCase):
-    def test_unlimited_rlimit_uses_pyarrow_default(self):
-        # RLIM_INFINITY is -1; must not floor-divide into the minimum
-        self.assertEqual(common._max_open_files_per_task(-1, 8), 1024)
-
-    def test_large_rlimit_is_capped_at_pyarrow_default(self):
-        self.assertEqual(common._max_open_files_per_task(1048576, 8), 1024)
-
-    def test_small_rlimit_many_cores_floors_at_8(self):
-        self.assertEqual(common._max_open_files_per_task(1024, 128), 8)
-
-    def test_mid_range(self):
-        self.assertEqual(common._max_open_files_per_task(4096, 4), 512)
-
-
 @skipIf(common.resource is None, "resource module is POSIX-only")
 class TestRaiseRlimitNofile(TestCase):
     def test_soft_limit_raised_to_hard(self):
@@ -39,8 +24,8 @@ class TestRaiseRlimitNofile(TestCase):
 
 class TestSortedHiveWrite(TestCase):
     """
-    With rows interleaved across many parent cells and a small open-file
-    budget, the write must still produce one file per parent-cell directory
+    With rows interleaved across more parent cells than the open-file pool
+    holds, the write must still produce one file per parent-cell directory
     (rows sorted by partition column, so no writer churn).
     """
 
@@ -62,7 +47,7 @@ class TestSortedHiveWrite(TestCase):
         )
 
         with tempfile.TemporaryDirectory() as out, mock.patch.object(
-            common, "_max_open_files_per_task", return_value=8
+            common.const, "MAX_OPEN_FILES_PER_TASK", 8
         ):
             common.write_partition_as_geoparquet(
                 df,

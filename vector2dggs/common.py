@@ -189,31 +189,6 @@ def raise_rlimit_nofile() -> None:
         LOGGER.debug("Could not raise RLIMIT_NOFILE: %s", e)
 
 
-def _max_open_files_per_task(
-    soft_limit: int | None = None, concurrency: int | None = None
-) -> int:
-    """
-    Per-write-task max_open_files for pq.write_to_dataset: a share of the
-    soft RLIMIT_NOFILE across concurrent tasks, clamped to [8, pyarrow's
-    default]. Rows are written sorted by partition column, so even the
-    floor cannot fragment output.
-    """
-    if soft_limit is None:
-        soft_limit = (
-            resource.getrlimit(resource.RLIMIT_NOFILE)[0]
-            if resource is not None
-            else const.FALLBACK_RLIMIT_NOFILE
-        )
-    if soft_limit <= 0:  # RLIM_INFINITY is -1
-        return const.PYARROW_DEFAULT_MAX_OPEN_FILES
-    if concurrency is None:
-        concurrency = os.cpu_count() or 1
-    return min(
-        const.PYARROW_DEFAULT_MAX_OPEN_FILES,
-        max(8, soft_limit // (2 * concurrency)),
-    )
-
-
 def write_partition_as_geoparquet(
     partition_df: pd.DataFrame,
     geo_serialisation_method,
@@ -329,7 +304,7 @@ def write_partition_as_geoparquet(
         compression=compression,
         basename_template=f"part.{{i}}-{uuid4().hex}.parquet",
         use_threads=True,
-        max_open_files=_max_open_files_per_task(),
+        max_open_files=const.MAX_OPEN_FILES_PER_TASK,
     )
 
     return int(len(pdf.index) > 0)
