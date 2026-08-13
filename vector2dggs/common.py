@@ -305,6 +305,9 @@ def write_partition_as_geoparquet(
         basename_template=f"part.{{i}}-{uuid4().hex}.parquet",
         use_threads=True,
         max_open_files=const.MAX_OPEN_FILES_PER_TASK,
+        # pyarrow's default max_partitions (1024) is a safety valve; this
+        # batch's true partition count is known, so pass it exactly
+        max_partitions=max(1, int(pdf[partition_col].nunique())),
     )
 
     return int(len(pdf.index) > 0)

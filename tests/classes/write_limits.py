@@ -64,3 +64,32 @@ class TestSortedHiveWrite(TestCase):
             ]
             self.assertEqual(len(counts), 30)
             self.assertEqual(max(counts), 1, f"fragmented dirs: {sorted(counts)}")
+
+    def test_write_spanning_more_than_1024_partitions(self):
+        # pyarrow's max_partitions defaults to 1024; a task's rows can span
+        # far more parent cells than that at fine parent_res
+        parents = list(
+            {
+                h3lib.latlng_to_cell(-47.0 + 0.1 * i, 166.0 + 0.1 * j, 8)
+                for i in range(34)
+                for j in range(34)
+            }
+        )
+        self.assertGreater(len(parents), 1024)
+        df = pd.DataFrame(
+            {"h3_08": parents, "fid": range(len(parents))},
+            index=pd.Index(
+                [h3lib.cell_to_center_child(p, 9) for p in parents], name="h3_09"
+            ),
+        )
+        with tempfile.TemporaryDirectory() as out:
+            common.write_partition_as_geoparquet(
+                df,
+                H3VectorIndexer.cell_to_polygon,
+                Path(out),
+                "h3_08",
+                "h3_09",
+                "snappy",
+            )
+            dirs = [d for d in Path(out).iterdir() if d.is_dir()]
+            self.assertEqual(len(dirs), len(parents))
