@@ -80,8 +80,8 @@ Options:
                                   units match the units of the supplied CRS.
                                   If left unspecified, the threshold will be
                                   the maximum area of a cell at the parent
-                                  resolution, in square metres or feet
-                                  according to the CRS. A threshold of 0 will
+                                  resolution, converted into the squared units
+                                  of the cutting CRS. A threshold of 0 will
                                   skip bisection entirely (effectively
                                   ignoring --cut_crs).
   -t, --threads INTEGER RANGE     Amount of threads used for operation

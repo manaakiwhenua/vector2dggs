@@ -535,7 +535,8 @@ def bisection_preparation(
 ) -> tuple[pd.DataFrame, pyproj.CRS, None | float]:
     cut_threshold = float(cut_threshold) if cut_threshold is not None else None
 
-    if cut_threshold and cut_crs:
+    # cut_threshold == 0 disables bisection entirely, ignoring cut_crs
+    if cut_crs is not None and cut_threshold != 0:
         if df.crs is None and df.empty:
             # empty + naive: nothing to transform
             df = df.set_crs(cut_crs, allow_override=True)
@@ -554,28 +555,17 @@ def bisection_preparation(
             "Provide a dataset with a defined CRS."
         )
 
-    if not cut_crs.is_projected and cut_threshold != 0:
-        LOGGER.warning(
-            f"CRS {cut_crs} is not a projected coordinate system. (units: {cut_crs.axis_info[0].unit_name}) Bisection will result in sections of varying area"
-        )
-    elif cut_threshold != 0:
-        LOGGER.debug(
-            f"Using CRS units for input polygon bisection: {cut_crs.axis_info[0].unit_name}"
-        )
-
     if cut_threshold is None:
-        unit_name = cut_crs.axis_info[0].unit_name
-        cut_threshold_m2 = const.DEFAULT_AREA_THRESHOLD_M2(dggs, (int(parent_res)))
-        if unit_name == "metre":
-            cut_threshold = cut_threshold_m2
-        elif unit_name == "feet":
-            cut_threshold = cut_threshold_m2 * 3.28084
-        else:
-            cut_threshold = 100000000 if cut_crs.is_projected else 0.5
-            LOGGER.warning(
-                f'Unspecified cut_threshold for {"projected" if cut_crs.is_projected else "geographic"} CRS: {cut_crs}, with squared units: {unit_name}'
-            )
-        LOGGER.debug(f"Using default cut_threshold of {cut_threshold} ({unit_name}^2)")
+        axis = cut_crs.axis_info[0]
+        # unit_conversion_factor: linear units -> metres, angular -> radians
+        metres_per_unit = axis.unit_conversion_factor * (
+            1 if cut_crs.is_projected else const.EARTH_MEAN_RADIUS_M
+        )
+        cut_threshold_m2 = const.DEFAULT_AREA_THRESHOLD_M2(dggs, int(parent_res))
+        cut_threshold = cut_threshold_m2 / metres_per_unit**2
+        LOGGER.debug(
+            f"Using default cut_threshold of {cut_threshold} ({axis.unit_name}^2)"
+        )
 
     return df, cut_crs, cut_threshold
 

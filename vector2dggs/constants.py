@@ -9,6 +9,8 @@ MIN_S2, MAX_S2 = 0, 30
 MIN_GEOHASH, MAX_GEOHASH = 1, 12
 MIN_A5, MAX_A5 = 0, 30
 
+EARTH_MEAN_RADIUS_M = 6_371_008.8
+
 # max_open_files per pq.write_to_dataset call. Rows are written sorted by
 # partition column, so a small pool cannot fragment output; a small fixed
 # value keeps total FD use safe under any concurrency and rlimit.
