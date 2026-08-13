@@ -60,12 +60,23 @@ class TestBisectionPreparation(TestCase):
         df = gpd.GeoDataFrame({"geometry": [self.SQUARE_4167]}, crs=4167)
         return common.bisection_preparation(df, "h3", 5, cut_crs, cut_threshold)
 
+    def test_default_threshold_scales_with_target_resolution(self):
+        # granularity follows the target resolution (K cells per piece),
+        # not the parent resolution
+        target = pyproj.CRS.from_epsg(2193)
+        df = gpd.GeoDataFrame({"geometry": [self.SQUARE_4167]}, crs=4167)
+        _, _, threshold = common.bisection_preparation(df, "h3", 9, target, None)
+        expected = const.DEFAULT_CUT_CELLS_PER_PIECE * const.DGGS_CELL_AREA_M2_BY_RES[
+            "h3"
+        ](9)
+        self.assertAlmostEqual(threshold, expected, delta=expected * 0.001)
+
     def test_cut_crs_applies_without_explicit_threshold(self):
         target = pyproj.CRS.from_epsg(2193)
         df, cut_crs, threshold = self._prep(cut_crs=target)
         self.assertEqual(df.crs, target)
         self.assertEqual(cut_crs, target)
-        # metre CRS: threshold is the parent-res cell area in m^2
+        # metre CRS: threshold is the default area in m^2, unconverted
         self.assertAlmostEqual(
             threshold, const.DEFAULT_AREA_THRESHOLD_M2("h3", 5), delta=1
         )

@@ -183,8 +183,16 @@ DGGS_CELL_AREA_M2_BY_RES = {
 }
 
 
-def DEFAULT_AREA_THRESHOLD_M2(dggs, parent_res):
-    return DGGS_CELL_AREA_M2_BY_RES[dggs](parent_res)
+# Default bisection granularity: pieces sized to roughly this many cells of
+# the target resolution. Benchmarked on national-scale coastline data: flat
+# optimum between ~2k and ~10k, degrading sharply below ~500 (per-piece
+# overhead) and above ~25k (load imbalance; per-cell tests against
+# high-vertex geometries).
+DEFAULT_CUT_CELLS_PER_PIECE = 5000
+
+
+def DEFAULT_AREA_THRESHOLD_M2(dggs, resolution):
+    return DEFAULT_CUT_CELLS_PER_PIECE * DGGS_CELL_AREA_M2_BY_RES[dggs](resolution)
 
 
 DEFAULTS = {

@@ -529,7 +529,7 @@ def _polyfill_star(args) -> None:
 def bisection_preparation(
     df: pd.DataFrame,
     dggs: str,
-    parent_res: int,
+    resolution: int,
     cut_crs: pyproj.CRS | None = None,
     cut_threshold: None | float = None,
 ) -> tuple[pd.DataFrame, pyproj.CRS, None | float]:
@@ -561,7 +561,7 @@ def bisection_preparation(
         metres_per_unit = axis.unit_conversion_factor * (
             1 if cut_crs.is_projected else const.EARTH_MEAN_RADIUS_M
         )
-        cut_threshold_m2 = const.DEFAULT_AREA_THRESHOLD_M2(dggs, int(parent_res))
+        cut_threshold_m2 = const.DEFAULT_AREA_THRESHOLD_M2(dggs, int(resolution))
         cut_threshold = cut_threshold_m2 / metres_per_unit**2
         LOGGER.debug(
             f"Using default cut_threshold of {cut_threshold} ({axis.unit_name}^2)"
@@ -843,7 +843,7 @@ def index(
         )
 
     df, cut_crs, cut_threshold = bisection_preparation(
-        df, dggs, parent_res, cut_crs, cut_threshold
+        df, dggs, resolution, cut_crs, cut_threshold
     )
     df = _prepare_dataframe(df, id_field, keep_attributes)
     df = _run_bisection(df, cut_threshold, processes)
