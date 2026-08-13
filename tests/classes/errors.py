@@ -1,3 +1,5 @@
+import tempfile
+import warnings
 from unittest import TestCase
 
 import click
@@ -24,6 +26,29 @@ class TestErrors(TestCase):
         )
         with self.assertRaisesRegex(ValueError, "CRS"):
             common.bisection_preparation(naive, "h3", 5, None, None)
+
+    def test_crsless_file_rejected_before_any_processing(self):
+        naive = gpd.GeoDataFrame(
+            {"geometry": [Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])]}
+        )
+        with tempfile.TemporaryDirectory() as d:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                naive.to_file(f"{d}/naive.gpkg", layer="naive")
+            with self.assertRaisesRegex(ValueError, "CRS"):
+                common.index(
+                    "h3",
+                    f"{d}/naive.gpkg",
+                    f"{d}/out.pq",
+                    9,
+                    5,
+                    False,
+                    50,
+                    "none",
+                    None,
+                    1,
+                    layer="naive",
+                )
 
     def test_invalid_compression_raises(self):
         with self.assertRaises(click.BadParameter):
