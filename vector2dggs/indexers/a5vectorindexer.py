@@ -26,9 +26,10 @@ class A5VectorIndexer(VectorIndexer):
 
     @staticmethod
     def _linetrace(geom, resolution: int) -> list:
+        # set: no documented uniqueness guarantee from line_string_to_cells
         return [
             a5.u64_to_hex(c)
-            for c in a5.line_string_to_cells(list(geom.coords), resolution)
+            for c in set(a5.line_string_to_cells(list(geom.coords), resolution))
         ]
 
     def _polyfill_polygons(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
@@ -39,8 +40,7 @@ class A5VectorIndexer(VectorIndexer):
     def _polyfill_linestrings(
         self, df: gpd.GeoDataFrame, resolution: int
     ) -> pd.DataFrame:
-        result = self._geo_to_cells(df, resolution, self._linetrace, df.geometry.name)
-        return result[~result.index.duplicated(keep="first")]
+        return self._geo_to_cells(df, resolution, self._linetrace, df.geometry.name)
 
     def _polyfill_points(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
         return self._geo_to_cells(

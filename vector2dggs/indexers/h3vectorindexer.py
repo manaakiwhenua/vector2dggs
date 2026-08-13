@@ -35,8 +35,7 @@ class H3VectorIndexer(VectorIndexer):
     def _polyfill_linestrings(
         self, df: gpd.GeoDataFrame, resolution: int
     ) -> pd.DataFrame:
-        result = self._geo_to_cells(df, resolution, self._linetrace, df.geometry.name)
-        return result[~result.index.duplicated(keep="first")]
+        return self._geo_to_cells(df, resolution, self._linetrace, df.geometry.name)
 
     def _polyfill_points(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
         return self._geo_to_cells(
