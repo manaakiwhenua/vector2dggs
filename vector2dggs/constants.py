@@ -13,6 +13,9 @@ MIN_A5, MAX_A5 = 0, 30
 # cannot be queried (e.g. Windows, where the `resource` module is unavailable).
 FALLBACK_RLIMIT_NOFILE = 1024
 
+# pyarrow's own default for write_dataset(max_open_files=...); never exceed it
+PYARROW_DEFAULT_MAX_OPEN_FILES = 1024
+
 
 @unique
 class SpatialSortingMethod(StrEnum):
