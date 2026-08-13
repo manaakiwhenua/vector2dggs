@@ -24,9 +24,10 @@ class S2VectorIndexer(VectorIndexer):
         geom_col = df.geometry.name
         result = (
             self.polyfill_polygons(df.copy(), level)
-            .explode("s2index")
-            .set_index("s2index")
             .drop(columns=[geom_col])
+            .explode("s2index")
+            .dropna(subset=["s2index"])
+            .set_index("s2index")
         )
         return pd.DataFrame(result)
 

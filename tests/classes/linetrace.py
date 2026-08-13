@@ -114,3 +114,23 @@ class TestEmptyTraces(TestCase):
         with mock.patch.object(type(indexer), "cell_ids_from_linestring", fake):
             result = indexer._polyfill_linestrings(df, 14)
         self._assert_no_nan_rows(indexer, result, 1)
+
+    def test_s2_subcell_polygon_is_dropped(self):
+        try:
+            indexer = indexer_instance("s2")
+        except ImportError:
+            self.skipTest("s2 backend not installed")
+        from shapely.geometry import Polygon
+
+        tiny = Polygon(  # ~1 m^2: no level-10 cell centre can fall inside
+            [
+                (174.75, -41.30),
+                (174.75001, -41.30),
+                (174.75001, -41.30001),
+                (174.75, -41.30001),
+            ]
+        )
+        big = Polygon([(174.7, -41.3), (174.9, -41.3), (174.9, -41.2), (174.7, -41.2)])
+        df = gpd.GeoDataFrame({"fid": [0, 1], "geometry": [tiny, big]}, crs=4326)
+        result = indexer._polyfill_polygons(df, 10)
+        self._assert_no_nan_rows(indexer, result, 1)
