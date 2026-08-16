@@ -7,7 +7,7 @@ from ..data.datapaths import (
     TEST_POINT_FILE_PATH,
     TEST_POINT_LAYER_NAME,
 )
-from .base import TestRunthrough
+from .base import TestRunthrough, skip_unless_backend
 
 
 class TestGeometryTypes(TestRunthrough):
@@ -16,6 +16,11 @@ class TestGeometryTypes(TestRunthrough):
     Uses H3 as the reference backend. Bisection is disabled (-c 0) since the
     fixtures are small and these tests are purely about geometry-type routing.
     """
+
+    @classmethod
+    def setUpClass(cls):
+        skip_unless_backend("h3")
+        super().setUpClass()
 
     def test_h3_linestring(self):
         h3(

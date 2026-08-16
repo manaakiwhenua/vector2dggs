@@ -13,7 +13,6 @@ from vector2dggs.common import (
 )
 from vector2dggs.h3 import h3
 from vector2dggs.indexerfactory import indexer_instance
-from vector2dggs.indexers.rhpvectorindexer import RHPVectorIndexer
 from vector2dggs.rHP import rhp
 
 from ..data.datapaths import (
@@ -21,7 +20,7 @@ from ..data.datapaths import (
     TEST_ANTIMERIDIAN_LAYER_NAME,
     TEST_OUTPUT_PATH,
 )
-from .base import TestRunthrough
+from .base import TestRunthrough, skip_unless_backend
 
 
 class TestAntimeridian(TestRunthrough):
@@ -55,7 +54,8 @@ class TestAntimeridian(TestRunthrough):
         return _clean_geometries(df, indexer)
 
     def test_clean_geometries_splits_for_backends_that_require_it(self):
-        cleaned = self._cleaned_via_full_pipeline(RHPVectorIndexer("rhp"))
+        skip_unless_backend("rhp")
+        cleaned = self._cleaned_via_full_pipeline(indexer_instance("rhp"))
 
         self.assertEqual(len(cleaned), 2)
         self.assertTrue((cleaned.geometry.geom_type == "Polygon").all())
@@ -68,6 +68,7 @@ class TestAntimeridian(TestRunthrough):
     def test_h3_run_across_antimeridian(self):
         """H3 doesn't require the pre-split fix - it indexes this correctly
         on its own."""
+        skip_unless_backend("h3")
         h3(
             [
                 TEST_ANTIMERIDIAN_FILE_PATH,
@@ -95,6 +96,7 @@ class TestAntimeridian(TestRunthrough):
     def test_rhp_run_across_antimeridian(self):
         """rHEALPix requires the pre-split fix; without it, the unfixed
         reprojection artifact indexes as ~322 cells instead of ~2."""
+        skip_unless_backend("rhp")
         rhp(
             [
                 TEST_ANTIMERIDIAN_FILE_PATH,

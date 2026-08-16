@@ -5,7 +5,7 @@ import pyarrow.parquet as pq
 from vector2dggs.h3 import h3
 
 from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME, TEST_OUTPUT_PATH
-from .base import TestRunthrough
+from .base import TestRunthrough, skip_unless_backend
 
 
 class TestOutputValidation(TestRunthrough):
@@ -14,6 +14,11 @@ class TestOutputValidation(TestRunthrough):
     correctness. Uses H3 at resolution 8 (default parent_res=2) as the
     reference backend throughout.
     """
+
+    @classmethod
+    def setUpClass(cls):
+        skip_unless_backend("h3")
+        super().setUpClass()
 
     def _parquet_files(self):
         files = sorted(TEST_OUTPUT_PATH.rglob("*.parquet"))

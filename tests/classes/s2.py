@@ -9,13 +9,18 @@ from ..data.datapaths import (
     TEST_POINT_FILE_PATH,
     TEST_POINT_LAYER_NAME,
 )
-from .base import TestRunthrough
+from .base import TestRunthrough, skip_unless_backend
 
 
 class TestS2(TestRunthrough):
     """
     Sends the test data file through S2 indexing using default parameters.
     """
+
+    @classmethod
+    def setUpClass(cls):
+        skip_unless_backend("s2")
+        super().setUpClass()
 
     def test_s2_run(self):
         s2(
