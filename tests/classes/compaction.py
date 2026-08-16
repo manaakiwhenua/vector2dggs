@@ -1,18 +1,40 @@
 from itertools import product
 from unittest import TestCase
 
-import a5
-import h3
 import pandas as pd
-import s2geometry as S2
-from rhealpixdggs.rhp_wrappers import rhp_get_resolution
 
-from vector2dggs.indexers.a5vectorindexer import A5VectorIndexer
-from vector2dggs.indexers.geohashvectorindexer import GeohashVectorIndexer
-from vector2dggs.indexers.h3vectorindexer import H3VectorIndexer
-from vector2dggs.indexers.rhpvectorindexer import RHPVectorIndexer
-from vector2dggs.indexers.s2vectorindexer import S2VectorIndexer
 from vector2dggs.indexers.vectorindexer import VectorIndexer
+
+from .base import skip_unless_backend
+
+try:
+    import h3
+
+    from vector2dggs.indexers.h3vectorindexer import H3VectorIndexer
+except ImportError:
+    h3 = None
+try:
+    import a5
+
+    from vector2dggs.indexers.a5vectorindexer import A5VectorIndexer
+except ImportError:
+    a5 = None
+try:
+    import s2geometry as S2
+
+    from vector2dggs.indexers.s2vectorindexer import S2VectorIndexer
+except ImportError:
+    S2 = None
+try:
+    from rhealpixdggs.rhp_wrappers import rhp_get_resolution
+
+    from vector2dggs.indexers.rhpvectorindexer import RHPVectorIndexer
+except ImportError:
+    rhp_get_resolution = None
+try:
+    from vector2dggs.indexers.geohashvectorindexer import GeohashVectorIndexer
+except ImportError:
+    GeohashVectorIndexer = None
 
 
 class TestH3CompactionBounds(TestCase):
@@ -23,6 +45,7 @@ class TestH3CompactionBounds(TestCase):
     """
 
     def setUp(self):
+        skip_unless_backend("h3")
         self.parent_res = 5
         # An ancestor one level coarser than parent_res, fully covered by all
         # of its grandchildren at parent_res + 1.
@@ -75,6 +98,7 @@ class TestGeohashCompactionBounds(TestCase):
     """
 
     def setUp(self):
+        skip_unless_backend("geohash")
         self.parent_res = 2
         self.ancestor = "s"
         self.res = self.parent_res + 1
@@ -130,6 +154,7 @@ class TestRHPCompactionBounds(TestCase):
     """
 
     def setUp(self):
+        skip_unless_backend("rhp")
         self.parent_res = 5
         # An ancestor one level coarser than parent_res, fully covered by all
         # of its grandchildren at parent_res + 1.
@@ -192,6 +217,7 @@ class TestS2CompactionBounds(TestCase):
     """
 
     def setUp(self):
+        skip_unless_backend("s2")
         self.parent_res = 10
         # An ancestor one level coarser than parent_res, fully covered by all
         # of its grandchildren at parent_res + 1.
@@ -271,6 +297,7 @@ class TestA5CompactionBounds(TestCase):
     """
 
     def setUp(self):
+        skip_unless_backend("a5")
         self.parent_res = 2
         # An ancestor one level coarser than parent_res, fully covered by all
         # of its grandchildren at parent_res + 1.

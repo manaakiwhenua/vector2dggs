@@ -1,6 +1,16 @@
-from unittest import TestCase
+from unittest import SkipTest, TestCase
+
+from vector2dggs.indexerfactory import indexer_instance
 
 from ..data.datapaths import TEST_OUTPUT_PATH
+
+
+def skip_unless_backend(dggs: str) -> None:
+    """Skip the calling test/class when the backend's extra isn't installed."""
+    try:
+        indexer_instance(dggs)
+    except ImportError as e:
+        raise SkipTest(str(e)) from e
 
 
 class TestRunthrough(TestCase):

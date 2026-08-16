@@ -9,13 +9,18 @@ from ..data.datapaths import (
     TEST_POINT_FILE_PATH,
     TEST_POINT_LAYER_NAME,
 )
-from .base import TestRunthrough
+from .base import TestRunthrough, skip_unless_backend
 
 
 class TestGeohash(TestRunthrough):
     """
     Sends the test data file through Geohash indexing using default parameters.
     """
+
+    @classmethod
+    def setUpClass(cls):
+        skip_unless_backend("geohash")
+        super().setUpClass()
 
     def test_geohash_run(self):
         geohash(

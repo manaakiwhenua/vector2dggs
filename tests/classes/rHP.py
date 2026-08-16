@@ -9,13 +9,18 @@ from ..data.datapaths import (
     TEST_POINT_FILE_PATH,
     TEST_POINT_LAYER_NAME,
 )
-from .base import TestRunthrough
+from .base import TestRunthrough, skip_unless_backend
 
 
 class TestRHP(TestRunthrough):
     """
     Sends the test data file through rHP indexing using default parameters.
     """
+
+    @classmethod
+    def setUpClass(cls):
+        skip_unless_backend("rhp")
+        super().setUpClass()
 
     def test_rhp_run(self):
         rhp(
