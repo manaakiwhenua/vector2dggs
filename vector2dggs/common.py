@@ -189,7 +189,7 @@ def raise_rlimit_nofile() -> None:
         LOGGER.debug("Could not raise RLIMIT_NOFILE: %s", e)
 
 
-def write_partition_as_geoparquet(
+def write_partition(
     partition_df: pd.DataFrame,
     geo_serialisation_method,
     output_dir: Path,
@@ -197,6 +197,10 @@ def write_partition_as_geoparquet(
     dggs_col: str,
     compression: str,
 ) -> int:
+    """
+    Hive-partitioned parquet write of one dask partition; GeoParquet when
+    geo_serialisation_method (cell -> shapely geometry) is given.
+    """
     if partition_df.empty:
         return 0
 
@@ -225,71 +229,18 @@ def write_partition_as_geoparquet(
         partition_df = partition_df.loc[valid_cell_mask].copy()
         cell_ids = cell_ids.loc[valid_cell_mask]
 
-    geoms = cell_ids.map(geo_serialisation_method)
-
-    # Compute optional GeoParquet bbox / geometry_types metadata (vectorized)
-    geom_arr = geoms.to_numpy()
-    valid_mask = pd.notna(geom_arr)
-    if valid_mask.any():
-        valid_mask[valid_mask] &= ~shapely.is_empty(geom_arr[valid_mask])
-
-    if valid_mask.any():
-        bounds = np.asarray(shapely.bounds(geom_arr[valid_mask]))
-        bounds = np.atleast_2d(bounds)
-        finite_mask = ~np.isnan(bounds).any(axis=1)
-        bbox_vals = bounds[finite_mask]
-
-        if len(bbox_vals):
-            bbox = [
-                float(np.min(bbox_vals[:, 0])),
-                float(np.min(bbox_vals[:, 1])),
-                float(np.max(bbox_vals[:, 2])),
-                float(np.max(bbox_vals[:, 3])),
-            ]
-        else:
-            bbox = None
-
-        valid_geoms = geom_arr[valid_mask]
-        geometry_types = sorted({g.geom_type for g in valid_geoms})
-    else:
-        bbox = None
-        geometry_types = []
-
     pdf = partition_df.copy()
     pdf[partition_col] = pdf[partition_col].astype("string")
-    pdf["geometry"] = shapely.to_wkb(geoms, hex=False)
-    # Contiguous partition values: one output file per parent cell, no
-    # writer churn under a small max_open_files
+    if geo_serialisation_method is not None:
+        pdf["geometry"] = shapely.to_wkb(
+            cell_ids.map(geo_serialisation_method), hex=False
+        )
+    # sorted by partition value: one file per parent cell, no writer churn
     pdf = pdf.sort_values(partition_col, kind="stable")
 
     table = pa.Table.from_pandas(pdf, preserve_index=True)
-
-    # Ensure geometry field is Binary
-    geom_idx = table.schema.get_field_index("geometry")
-    if geom_idx >= 0 and not (
-        pa.types.is_binary(table.field(geom_idx).type)
-        or pa.types.is_large_binary(table.field(geom_idx).type)
-    ):
-        geom_array = pa.array(table.column(geom_idx).to_pylist(), type=pa.binary())
-        table = table.set_column(geom_idx, "geometry", geom_array)
-
-    col_meta = {
-        "encoding": "WKB",
-        "crs": pyproj.CRS.from_epsg(4326).to_json_dict(),
-    }
-    if geometry_types:
-        col_meta["geometry_types"] = geometry_types
-    if bbox is not None:
-        col_meta["bbox"] = bbox
-
-    geo_meta = {
-        "version": "1.1.0",
-        "primary_column": "geometry",
-        "columns": {"geometry": col_meta},
-    }
-    existing_meta = table.schema.metadata or {}
-    new_meta = {**existing_meta, b"geo": json.dumps(geo_meta).encode("utf-8")}
-    table = table.replace_schema_metadata(new_meta)
+    if geo_serialisation_method is not None:
+        table = _with_geoparquet_metadata(table)
 
     # Explicitly type the partition column as string so that Hive directory values
     # like "204" (valid geohash) or "9983180000000000" (A5 cell ID) are not
@@ -313,6 +264,46 @@ def write_partition_as_geoparquet(
     return int(len(pdf.index) > 0)
 
 
+def _with_geoparquet_metadata(table: pa.Table) -> pa.Table:
+    """Binary-typed geometry column plus GeoParquet 1.1.0 metadata."""
+    geom_idx = table.schema.get_field_index("geometry")
+    if not (
+        pa.types.is_binary(table.field(geom_idx).type)
+        or pa.types.is_large_binary(table.field(geom_idx).type)
+    ):
+        geom_array = pa.array(table.column(geom_idx).to_pylist(), type=pa.binary())
+        table = table.set_column(geom_idx, "geometry", geom_array)
+
+    geoms = shapely.from_wkb(table.column(geom_idx).to_numpy(zero_copy_only=False))
+    valid = pd.notna(geoms)
+    if valid.any():
+        valid[valid] &= ~shapely.is_empty(geoms[valid])
+    col_meta = {
+        "encoding": "WKB",
+        "crs": pyproj.CRS.from_epsg(4326).to_json_dict(),
+    }
+    if valid.any():
+        bounds = np.atleast_2d(np.asarray(shapely.bounds(geoms[valid])))
+        bounds = bounds[~np.isnan(bounds).any(axis=1)]
+        if len(bounds):
+            col_meta["bbox"] = [
+                float(bounds[:, 0].min()),
+                float(bounds[:, 1].min()),
+                float(bounds[:, 2].max()),
+                float(bounds[:, 3].max()),
+            ]
+        col_meta["geometry_types"] = sorted({g.geom_type for g in geoms[valid]})
+
+    geo_meta = {
+        "version": "1.1.0",
+        "primary_column": "geometry",
+        "columns": {"geometry": col_meta},
+    }
+    return table.replace_schema_metadata(
+        {**(table.schema.metadata or {}), b"geo": json.dumps(geo_meta).encode("utf-8")}
+    )
+
+
 def _merge_partition_files(partition_dir: Path, compression: str) -> None:
     """
     Merges all Parquet files within a single hive partition directory into one file.
@@ -323,7 +314,8 @@ def _merge_partition_files(partition_dir: Path, compression: str) -> None:
     if len(files) <= 1:
         return
 
-    tables = [pq.read_table(f) for f in files]
+    # partitioning=None: don't hive-parse the file's own path into a column
+    tables = [pq.read_table(f, partitioning=None) for f in files]
 
     # Aggregate 'geo' metadata across files if present (GeoParquet)
     all_bboxes = []
@@ -425,49 +417,29 @@ def _parent_partitioning(
             )
 
         if geo == const.GeoOutputMode.NONE.value:
-            # Ensure the partition column is string-typed so that Hive directory
-            # values like "204" (geohash) are not inferred as integers by readers.
-            ddf[partition_col] = ddf[partition_col].astype(str)
-            ddf.to_parquet(
-                output_dir,
-                overwrite=kwargs.get("overwrite", False),
-                engine=kwargs.get("engine", "pyarrow"),
-                partition_on=[partition_col],
-                write_index=True,
-                append=False,
-                compression=kwargs.get("compression", "ZSTD"),
-                # **kwargs
-            )
+            geom_fn = None
+        elif geo == const.GeoOutputMode.POINT.value:
+            geom_fn = indexer.cell_to_point
+        elif geo == const.GeoOutputMode.POLYGON.value:
+            geom_fn = indexer.cell_to_polygon
         else:
-            if geo not in (
-                const.GeoOutputMode.POINT.value,
-                const.GeoOutputMode.POLYGON.value,
-            ):
-                raise ValueError(
-                    f"Unknown geo output mode '{geo}'. Expected one of {const.GEOM_TYPES}."
-                )
-
-            geom_fn = (
-                indexer.cell_to_point
-                if geo == const.GeoOutputMode.POINT.value
-                else indexer.cell_to_polygon
+            raise ValueError(
+                f"Unknown geo output mode '{geo}'. Expected one of {const.GEOM_TYPES}."
             )
 
-            delayed_parts = ddf.to_delayed()
-            write_tasks = [
-                dask.delayed(write_partition_as_geoparquet)(
-                    part,
-                    geom_fn,
-                    output_dir,
-                    partition_col,
-                    dggs_col,
-                    kwargs.get("compression", "ZSTD"),
-                )
-                for part in delayed_parts
-            ]
-
-            with TqdmCallback(desc="Writing GeoParquet"):
-                dask.compute(*write_tasks)
+        write_tasks = [
+            dask.delayed(write_partition)(
+                part,
+                geom_fn,
+                output_dir,
+                partition_col,
+                dggs_col,
+                kwargs.get("compression", "ZSTD"),
+            )
+            for part in ddf.to_delayed()
+        ]
+        with TqdmCallback(desc="Writing output"):
+            dask.compute(*write_tasks)
 
         # Combine multiple parts per parent partition into one file per parent partition, to avoid too many small files and to correctly aggregate GeoParquet metadata; this is helpful for cloud object storage and spatial databases, which often perform better with fewer files
         merge_tasks = [

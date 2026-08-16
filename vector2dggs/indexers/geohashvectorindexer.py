@@ -33,6 +33,7 @@ class GeohashVectorIndexer(VectorIndexer):
             )
             .drop(columns=[geom_col])
             .explode(gh_col, ignore_index=True)
+            .dropna(subset=[gh_col])
             .set_index(gh_col)
         )
         return pd.DataFrame(result)

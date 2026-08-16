@@ -5,8 +5,6 @@
 import contextlib
 
 with contextlib.suppress(ImportError):
-    from .classes.a5 import TestA5 as TestA5
-with contextlib.suppress(ImportError):
     from .classes.antimeridian import TestAntimeridian as TestAntimeridian
 with contextlib.suppress(ImportError):
     from .classes.bisection import TestBisection as TestBisection
@@ -31,12 +29,6 @@ with contextlib.suppress(ImportError):
 with contextlib.suppress(ImportError):
     from .classes.errors import TestOverwriteRequired as TestOverwriteRequired
 with contextlib.suppress(ImportError):
-    from .classes.geohash import TestGeohash as TestGeohash
-with contextlib.suppress(ImportError):
-    from .classes.geometry_types import TestGeometryTypes as TestGeometryTypes
-with contextlib.suppress(ImportError):
-    from .classes.h3 import TestH3 as TestH3
-with contextlib.suppress(ImportError):
     from .classes.katana import TestKatana as TestKatana
 with contextlib.suppress(ImportError):
     from .classes.linetrace import (
@@ -47,10 +39,12 @@ with contextlib.suppress(ImportError):
 with contextlib.suppress(ImportError):
     from .classes.postgis import TestPostGIS as TestPostGIS
 with contextlib.suppress(ImportError):
-    from .classes.rHP import TestRHP as TestRHP
-with contextlib.suppress(ImportError):
-    from .classes.s2 import TestS2 as TestS2
-with contextlib.suppress(ImportError):
     from .classes.write_limits import TestRaiseRlimitNofile as TestRaiseRlimitNofile
 with contextlib.suppress(ImportError):
     from .classes.write_limits import TestSortedHiveWrite as TestSortedHiveWrite
+with contextlib.suppress(ImportError):
+    from .classes.runthrough import TestA5 as TestA5
+    from .classes.runthrough import TestGeohash as TestGeohash
+    from .classes.runthrough import TestH3 as TestH3
+    from .classes.runthrough import TestRHP as TestRHP
+    from .classes.runthrough import TestS2 as TestS2
