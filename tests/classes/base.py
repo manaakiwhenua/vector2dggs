@@ -1,8 +1,8 @@
+import tempfile
+from pathlib import Path
 from unittest import SkipTest, TestCase
 
 from vector2dggs.indexerfactory import indexer_instance
-
-from ..data.datapaths import TEST_OUTPUT_PATH
 
 
 def skip_unless_backend(dggs: str) -> None:
@@ -15,27 +15,12 @@ def skip_unless_backend(dggs: str) -> None:
 
 class TestRunthrough(TestCase):
     """
-    Parent class for the smoke tests. Handles temporary output files by
-    overriding the built in setup and teardown methods from TestCase. Provides
-    two new member functions to recurse through nested output folders to empty
-    them.
+    Parent class for tests that write DGGS output. Provides a per-test
+    output path inside a temporary directory, so tests are isolated from
+    each other and can run in parallel.
     """
 
     def setUp(self):
-        self.checkAndClearOutput(TEST_OUTPUT_PATH)
-
-    def tearDown(self):
-        self.checkAndClearOutput(TEST_OUTPUT_PATH)
-
-    def checkAndClearOutput(self, folder):
-        if folder.exists():
-            self.clearOutput(folder)
-            folder.rmdir()
-
-    def clearOutput(self, folder):
-        for child in folder.iterdir():
-            if child.is_dir():
-                self.clearOutput(child)
-                child.rmdir()
-            else:
-                child.unlink()
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.output_path = Path(tmp.name) / "output"

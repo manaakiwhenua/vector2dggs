@@ -11,15 +11,12 @@ from vector2dggs import common
 from vector2dggs.h3 import h3
 from vector2dggs.indexerfactory import indexer_instance
 
-from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME, TEST_OUTPUT_PATH
+from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME
 from .base import TestRunthrough
 
 
-class TestErrors(TestCase):
-    """
-    Error-path unit tests that raise before touching the filesystem,
-    so no output cleanup is needed.
-    """
+class TestErrors(TestRunthrough):
+    """Error-path unit tests that raise before writing any output."""
 
     def test_crsless_input_raises_clear_error(self):
         naive = gpd.GeoDataFrame(
@@ -56,7 +53,7 @@ class TestErrors(TestCase):
             h3(
                 [
                     TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
+                    str(self.output_path),
                     "--layer",
                     TEST_LAYER_NAME,
                     "-r",
@@ -72,7 +69,7 @@ class TestErrors(TestCase):
             h3(
                 [
                     TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
+                    str(self.output_path),
                     "--layer",
                     TEST_LAYER_NAME,
                     "-r",
@@ -88,7 +85,7 @@ class TestErrors(TestCase):
             h3(
                 [
                     TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
+                    str(self.output_path),
                     "--layer",
                     TEST_LAYER_NAME,
                     "-r",
@@ -104,7 +101,7 @@ class TestErrors(TestCase):
             h3(
                 [
                     TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
+                    str(self.output_path),
                     "--layer",
                     TEST_LAYER_NAME,
                     "-r",
@@ -120,7 +117,7 @@ class TestErrors(TestCase):
             h3(
                 [
                     TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
+                    str(self.output_path),
                     "--layer",
                     TEST_LAYER_NAME,
                     "-r",
@@ -190,11 +187,13 @@ class TestOverwriteRequired(TestRunthrough):
         h3(
             [
                 TEST_FILE_PATH,
-                str(TEST_OUTPUT_PATH),
+                str(self.output_path),
                 "--layer",
                 TEST_LAYER_NAME,
                 "-r",
                 "8",
+                "-t",
+                "1",
             ],
             standalone_mode=False,
         )
@@ -202,7 +201,7 @@ class TestOverwriteRequired(TestRunthrough):
             h3(
                 [
                     TEST_FILE_PATH,
-                    str(TEST_OUTPUT_PATH),
+                    str(self.output_path),
                     "--layer",
                     TEST_LAYER_NAME,
                     "-r",

@@ -7,7 +7,7 @@ import pandas as pd
 from vector2dggs.h3 import h3
 from vector2dggs.indexers.h3vectorindexer import H3VectorIndexer
 
-from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME, TEST_OUTPUT_PATH
+from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME
 from .base import TestRunthrough
 
 
@@ -45,7 +45,7 @@ class TestCompactionAcrossPartitions(TestRunthrough):
         h3(
             [
                 TEST_FILE_PATH,
-                str(TEST_OUTPUT_PATH),
+                str(self.output_path),
                 "--layer",
                 TEST_LAYER_NAME,
                 "-r",
@@ -59,11 +59,13 @@ class TestCompactionAcrossPartitions(TestRunthrough):
                 "-ch",
                 "10",
                 "-co",
+                "-t",
+                "1",
             ],
             standalone_mode=False,
         )
 
-        df = pd.read_parquet(TEST_OUTPUT_PATH)
+        df = pd.read_parquet(self.output_path)
         cells_by_feature: dict[str, set[str]] = {}
         for cell, feature_id in set(zip(df.index, df["LCDB_UID"], strict=True)):
             cells_by_feature.setdefault(feature_id, set()).add(cell)

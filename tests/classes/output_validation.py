@@ -4,7 +4,7 @@ import pyarrow.parquet as pq
 
 from vector2dggs.h3 import h3
 
-from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME, TEST_OUTPUT_PATH
+from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME
 from .base import TestRunthrough, skip_unless_backend
 
 
@@ -21,7 +21,7 @@ class TestOutputValidation(TestRunthrough):
         super().setUpClass()
 
     def _parquet_files(self):
-        files = sorted(TEST_OUTPUT_PATH.rglob("*.parquet"))
+        files = sorted(self.output_path.rglob("*.parquet"))
         self.assertTrue(files, "No parquet files written to output")
         return files
 
@@ -29,11 +29,13 @@ class TestOutputValidation(TestRunthrough):
         h3(
             [
                 TEST_FILE_PATH,
-                str(TEST_OUTPUT_PATH),
+                str(self.output_path),
                 "--layer",
                 TEST_LAYER_NAME,
                 "-r",
                 "8",
+                "-t",
+                "1",
                 *extra_args,
             ],
             standalone_mode=False,
@@ -42,7 +44,7 @@ class TestOutputValidation(TestRunthrough):
     def test_partition_dirs_named_by_parent_res(self):
         """Hive partition directories are named h3_02=<token>."""
         self._run_h3()
-        dirs = [d for d in TEST_OUTPUT_PATH.iterdir() if d.is_dir()]
+        dirs = [d for d in self.output_path.iterdir() if d.is_dir()]
         self.assertTrue(dirs, "No partition directories in output")
         for d in dirs:
             self.assertTrue(
@@ -53,7 +55,7 @@ class TestOutputValidation(TestRunthrough):
     def test_explicit_parent_res_reflected_in_dirs(self):
         """--parent-res 3 produces h3_03=… partition directories."""
         self._run_h3(("-pr", "3"))
-        dirs = [d for d in TEST_OUTPUT_PATH.iterdir() if d.is_dir()]
+        dirs = [d for d in self.output_path.iterdir() if d.is_dir()]
         self.assertTrue(dirs, "No partition directories in output")
         for d in dirs:
             self.assertTrue(

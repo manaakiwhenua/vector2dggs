@@ -6,7 +6,7 @@ import sqlalchemy
 
 from vector2dggs.h3 import h3
 
-from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME, TEST_OUTPUT_PATH
+from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME
 from .base import TestRunthrough
 
 
@@ -56,17 +56,19 @@ class TestPostGIS(TestRunthrough):
         h3(
             [
                 self.connection_url,
-                str(TEST_OUTPUT_PATH),
+                str(self.output_path),
                 "--layer",
                 self.TABLE_NAME,
                 "-g",
                 "geometry",
                 "-r",
                 "8",
+                "-t",
+                "1",
             ],
             standalone_mode=False,
         )
-        files = sorted(TEST_OUTPUT_PATH.rglob("*.parquet"))
+        files = sorted(self.output_path.rglob("*.parquet"))
         self.assertTrue(files, "No parquet files written from PostGIS input")
         table = pq.read_table(files[0])
         self.assertIn("h3_08", table.schema.names)
@@ -76,18 +78,20 @@ class TestPostGIS(TestRunthrough):
         h3(
             [
                 self.connection_url,
-                str(TEST_OUTPUT_PATH),
+                str(self.output_path),
                 "--layer",
                 self.TABLE_NAME,
                 "-g",
                 "geometry",
                 "-r",
                 "8",
+                "-t",
+                "1",
                 "-k",
             ],
             standalone_mode=False,
         )
-        files = sorted(TEST_OUTPUT_PATH.rglob("*.parquet"))
+        files = sorted(self.output_path.rglob("*.parquet"))
         self.assertTrue(files, "No parquet files written from PostGIS input")
         table = pq.read_table(files[0])
         self.assertIn("Name_2018", table.schema.names)
@@ -97,7 +101,7 @@ class TestPostGIS(TestRunthrough):
         h3(
             [
                 self.connection_url,
-                str(TEST_OUTPUT_PATH),
+                str(self.output_path),
                 "--layer",
                 self.TABLE_NAME,
                 "-g",
@@ -106,10 +110,12 @@ class TestPostGIS(TestRunthrough):
                 "LCDB_UID",
                 "-r",
                 "8",
+                "-t",
+                "1",
             ],
             standalone_mode=False,
         )
-        files = sorted(TEST_OUTPUT_PATH.rglob("*.parquet"))
+        files = sorted(self.output_path.rglob("*.parquet"))
         self.assertTrue(files, "No parquet files written from PostGIS input")
         table = pq.read_table(files[0])
         self.assertIn("LCDB_UID", table.schema.names)

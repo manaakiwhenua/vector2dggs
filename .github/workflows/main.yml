@@ -51,4 +51,4 @@ jobs:
 
       - name: Run tests
         shell: bash -el {0}
-        run: poetry run pytest tests/
+        run: poetry run pytest -n auto tests/

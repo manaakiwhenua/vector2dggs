@@ -16,7 +16,6 @@ from ..data.datapaths import (
     TEST_LAYER_NAME,
     TEST_LINESTRING_FILE_PATH,
     TEST_LINESTRING_LAYER_NAME,
-    TEST_OUTPUT_PATH,
     TEST_POINT_FILE_PATH,
     TEST_POINT_LAYER_NAME,
 )
@@ -53,15 +52,25 @@ class RunthroughScenarios:
     def _run(self, dataset, res, *extra):
         path, layer, _, _ = dataset
         self.COMMAND(
-            [path, str(TEST_OUTPUT_PATH), "--layer", layer, "-r", res, *extra],
+            [
+                path,
+                str(self.output_path),
+                "--layer",
+                layer,
+                "-r",
+                res,
+                "-t",
+                "1",
+                *extra,
+            ],
             standalone_mode=False,
         )
 
     def _assert_output(self, res, id_col="fid", attr_col=None, geo=None, compact=False):
-        files = sorted(TEST_OUTPUT_PATH.rglob("*.parquet"))
+        files = sorted(self.output_path.rglob("*.parquet"))
         self.assertTrue(files, "no parquet output written")
 
-        df = pd.read_parquet(TEST_OUTPUT_PATH)
+        df = pd.read_parquet(self.output_path)
         self.assertGreater(len(df), 0, "output has no rows")
 
         dggs_col = f"{self.DGGS}_{int(res):02}"
@@ -80,7 +89,7 @@ class RunthroughScenarios:
             self.assertEqual(resolutions, {int(res)})
 
         # hive partition dirs carry the parent cell
-        partition_dirs = [d for d in TEST_OUTPUT_PATH.iterdir() if d.is_dir()]
+        partition_dirs = [d for d in self.output_path.iterdir() if d.is_dir()]
         self.assertTrue(
             all(d.name.startswith(f"{parent_col}=") for d in partition_dirs)
         )
