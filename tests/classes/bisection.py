@@ -94,3 +94,45 @@ class TestBisectionPreparation(TestCase):
         metres_per_degree = 111_195  # pi/180 * mean earth radius
         expected = m2 / metres_per_degree**2
         self.assertAlmostEqual(threshold, expected, delta=expected * 0.001)
+
+
+class TestDroppedFeatureReport(TestCase):
+    def test_features_with_no_cells_are_reported(self):
+        import tempfile
+        import warnings as _warnings
+
+        big = Polygon([(174.7, -41.3), (174.9, -41.3), (174.9, -41.2), (174.7, -41.2)])
+        tiny = Polygon(  # ~1 m^2: produces no cells at a coarse resolution
+            [
+                (174.75, -41.30),
+                (174.75001, -41.30),
+                (174.75001, -41.30001),
+                (174.75, -41.30001),
+            ]
+        )
+        df = gpd.GeoDataFrame(
+            {"name": ["big", "tiny"], "geometry": [big, tiny]}, crs=4326
+        )
+        with tempfile.TemporaryDirectory() as d:
+            with _warnings.catch_warnings():
+                _warnings.simplefilter("ignore")
+                df.to_file(f"{d}/in.gpkg", layer="x")
+            with self.assertLogs(common.LOGGER, level="WARNING") as logs:
+                common.index(
+                    "h3",
+                    f"{d}/in.gpkg",
+                    f"{d}/out.pq",
+                    7,
+                    None,
+                    False,
+                    50,
+                    "none",
+                    0.0,
+                    1,
+                    layer="x",
+                    compact=False,
+                )
+        self.assertTrue(
+            any("1 of 2 features produced no cells" in m for m in logs.output),
+            logs.output,
+        )

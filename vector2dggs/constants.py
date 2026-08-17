@@ -1,6 +1,5 @@
 import multiprocessing
 import tempfile
-import warnings
 from enum import StrEnum, unique
 
 MIN_H3, MAX_H3 = 0, 15
@@ -209,7 +208,3 @@ DEFAULTS = {
     "tempdir": tempfile.tempdir,
     "geo": GeoOutputMode.NONE.value,
 }
-
-warnings.filterwarnings(
-    "ignore"
-)  # This is to filter out the polyfill warnings when rows failed to get indexed at a resolution, can be commented out to find missing rows

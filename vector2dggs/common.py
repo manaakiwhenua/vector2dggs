@@ -1,6 +1,7 @@
 import errno
 import json
 import logging
+import multiprocessing
 import os
 import shutil
 import tempfile
@@ -462,26 +463,27 @@ def _polyfill(
     resolution: int,
     parent_res: int,
     output_directory: str,
-    compression: str = "snappy",
-) -> None:
+    compression: str,
+    id_col: str,
+) -> np.ndarray:
     """
     Reads a geoparquet, performs polyfilling (for Polygon),
     linetracing (for LineString), or indexing (for Point),
-    and writes out to parquet.
+    and writes out to parquet. Returns the ids of features that
+    produced at least one cell.
     """
     df = gpd.read_parquet(pq_in).reset_index()
     if spatial_sort_col != "none":
         df = df.drop(columns=[spatial_sort_col])
     if df.empty:
-        # Input is empty, nothing to convert
-        return None
+        return np.array([])
 
     # DGGS specific conversion
     df = indexer.polyfill(df, resolution)
 
     if df.empty:
-        # Conversion resulted in empty output (e.g. large cell, small feature)
-        return None
+        # e.g. features smaller than a cell at this resolution
+        return np.array([])
 
     df.index.rename(f"{indexer.dggs}_{resolution:02}", inplace=True)
 
@@ -491,10 +493,10 @@ def _polyfill(
     df.to_parquet(
         PurePath(output_directory, pq_in.name), engine="auto", compression=compression
     )
-    return None
+    return df[id_col].unique()
 
 
-def _polyfill_star(args) -> None:
+def _polyfill_star(args) -> np.ndarray:
     return _polyfill(*args)
 
 
@@ -739,6 +741,14 @@ def _clean_geometries(df: gpd.GeoDataFrame, indexer: VectorIndexer) -> gpd.GeoDa
     return df
 
 
+def _mp_context() -> multiprocessing.context.BaseContext:
+    """Never fork: the parent is multi-threaded by the time the pool starts."""
+    methods = multiprocessing.get_all_start_methods()
+    return multiprocessing.get_context(
+        "forkserver" if "forkserver" in methods else "spawn"
+    )
+
+
 def _run_dggs_indexing(
     indexer: VectorIndexer,
     filepaths: list,
@@ -748,7 +758,8 @@ def _run_dggs_indexing(
     output_dir: str,
     compression: str,
     processes: int,
-) -> None:
+    id_col: str,
+) -> set:
     LOGGER.debug("DGGS indexing by spatial partitions with resolution: %d", resolution)
     args = [
         (
@@ -759,19 +770,24 @@ def _run_dggs_indexing(
             parent_res,
             output_dir,
             compression,
+            id_col,
         )
         for filepath in filepaths
     ]
-    with ProcessPoolExecutor(max_workers=max(1, processes)) as executor:
+    indexed_ids: set = set()
+    with ProcessPoolExecutor(
+        max_workers=max(1, processes), mp_context=_mp_context()
+    ) as executor:
         futures = {executor.submit(_polyfill_star, arg): arg for arg in args}
         for future in tqdm(
             as_completed(futures), total=len(futures), desc="DGGS indexing"
         ):
             try:
-                future.result()
+                indexed_ids.update(future.result())
             except Exception as e:
                 LOGGER.error(f"Task failed with {e}")
                 raise e
+    return indexed_ids
 
 
 def index(
@@ -818,6 +834,7 @@ def index(
         df, dggs, resolution, cut_crs, cut_threshold
     )
     df = _prepare_dataframe(df, id_field, keep_attributes)
+    features_in = set(df.index)
     df = _run_bisection(df, cut_threshold, processes)
     df = _clean_geometries(df, indexer)
 
@@ -837,7 +854,7 @@ def index(
         filepaths = [f.absolute() for f in Path(tmpdir).glob("*")]
 
         with tempfile.TemporaryDirectory(suffix=".parquet") as tmpdir2:
-            _run_dggs_indexing(
+            indexed_ids = _run_dggs_indexing(
                 indexer,
                 filepaths,
                 spatial_sort_col,
@@ -846,7 +863,16 @@ def index(
                 tmpdir2,
                 compression,
                 processes,
+                id_field or "fid",
             )
+            dropped = features_in - indexed_ids
+            if dropped:
+                LOGGER.warning(
+                    "%d of %d features produced no cells at resolution %s and were omitted",
+                    len(dropped),
+                    len(features_in),
+                    resolution,
+                )
             if not any(Path(tmpdir2).glob("*.parquet")):
                 LOGGER.warning(
                     "No features were indexed (resolution %s may be too coarse for the input). Nothing to write; exiting.",

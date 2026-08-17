@@ -1,3 +1,4 @@
+import warnings
 from collections.abc import Iterable
 from itertools import product
 
@@ -16,6 +17,11 @@ from rhppandas.util.const import COLUMNS
 from shapely.geometry import Point, Polygon
 
 from vector2dggs.indexers.vectorindexer import VectorIndexer
+
+# upstream fix pending; fires per geometry, flooding CLI output
+warnings.filterwarnings(
+    "ignore", message="WARNING: Implementation of linetrace is incomplete"
+)
 
 
 class RHPVectorIndexer(VectorIndexer):
