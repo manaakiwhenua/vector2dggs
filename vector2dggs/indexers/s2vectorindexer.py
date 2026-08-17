@@ -35,7 +35,7 @@ class S2VectorIndexer(VectorIndexer):
         geom_col = df.geometry.name
         df = df.copy()
         df["s2index"] = df.geometry.apply(
-            lambda geom: self.cell_ids_from_linestring(geom, level)
+            lambda geom: self.tokens_from_linestring(geom, level)
         )
         result = (
             df.drop(columns=[geom_col])
@@ -49,7 +49,7 @@ class S2VectorIndexer(VectorIndexer):
         geom_col = df.geometry.name
         df = df.copy()
         df["s2index"] = df.geometry.apply(
-            lambda geom: self.cell_id_from_point(geom, level)
+            lambda geom: self.token_from_point(geom, level)
         )
         result = df.drop(columns=[geom_col]).set_index("s2index")
         return pd.DataFrame(result)
@@ -58,13 +58,9 @@ class S2VectorIndexer(VectorIndexer):
         """
         Implementation of abstract function.
         """
-
-        # NB also converts the index to S2 cell tokens
-        index_series = df.index.to_series().astype(object)
-        df[f"s2_{parent_level:02}"] = index_series.map(
-            lambda cell_id: cell_id.parent(parent_level).ToToken()
+        df[f"s2_{parent_level:02}"] = df.index.to_series().map(
+            lambda token: S2.S2CellId.FromToken(token).parent(parent_level).ToToken()
         )
-        df.index = index_series.map(lambda cell_id: cell_id.ToToken())
         return df
 
     def compaction(
@@ -102,7 +98,7 @@ class S2VectorIndexer(VectorIndexer):
 
         def generate_covering(
             geom: Polygon, level: int, centroid_inside: bool = True
-        ) -> set[S2.S2CellId]:
+        ) -> set[str]:
             geom = force_2d(geom)
             # Prepare loops: first the exterior loop, then the interior loops
             loops = []
@@ -151,7 +147,7 @@ class S2VectorIndexer(VectorIndexer):
             else:
                 covering = set(raw_covering)
 
-            return covering
+            return {cell.ToToken() for cell in covering}
 
         df["s2index"] = df["geometry"].apply(
             lambda geom: generate_covering(geom, level)
@@ -204,9 +200,7 @@ class S2VectorIndexer(VectorIndexer):
         cell_center = S2.S2Cell(cell).GetCenter()
         return polygon.Contains(cell_center)
 
-    def cell_ids_from_linestring(
-        self, linestring: LineString, level: int
-    ) -> list[S2.S2CellId]:
+    def tokens_from_linestring(self, linestring: LineString, level: int) -> list[str]:
         """
         Not a part of the interface provided by VectorIndexer.
         """
@@ -221,16 +215,16 @@ class S2VectorIndexer(VectorIndexer):
         coverer.set_min_level(level)
         coverer.set_max_level(level)
 
-        return coverer.GetCovering(polyline)
+        return [cell.ToToken() for cell in coverer.GetCovering(polyline)]
 
-    def cell_id_from_point(self, geom: Point, level: int) -> S2.S2CellId:
+    def token_from_point(self, geom: Point, level: int) -> str:
         """
-        Convert a point geometry to an S2 cell at the specified level.
+        Convert a point geometry to an S2 cell token at the specified level.
 
         Not a part of the interface provided by VectorIndexer.
         """
         latlng = S2.S2LatLng.FromDegrees(geom.y, geom.x)
-        return S2.S2CellId(latlng).parent(level)
+        return S2.S2CellId(latlng).parent(level).ToToken()
 
     def compact_tokens(self, tokens: Iterable[str]) -> set[str]:
         """
