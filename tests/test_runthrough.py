@@ -41,6 +41,10 @@ with contextlib.suppress(ImportError):
 with contextlib.suppress(ImportError):
     from .classes.output_validation import TestOutputValidation as TestOutputValidation
 with contextlib.suppress(ImportError):
+    from .classes.polyfill_contract import (
+        TestPolyfillTokenContract as TestPolyfillTokenContract,
+    )
+with contextlib.suppress(ImportError):
     from .classes.postgis import TestPostGIS as TestPostGIS
 with contextlib.suppress(ImportError):
     from .classes.write_limits import TestRaiseRlimitNofile as TestRaiseRlimitNofile
