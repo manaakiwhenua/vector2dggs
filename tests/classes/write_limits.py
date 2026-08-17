@@ -49,7 +49,7 @@ class TestSortedHiveWrite(TestCase):
         with tempfile.TemporaryDirectory() as out, mock.patch.object(
             common.const, "MAX_OPEN_FILES_PER_TASK", 8
         ):
-            common.write_partition_as_geoparquet(
+            common.write_partition(
                 df,
                 H3VectorIndexer.cell_to_polygon,
                 Path(out),
@@ -83,7 +83,7 @@ class TestSortedHiveWrite(TestCase):
             ),
         )
         with tempfile.TemporaryDirectory() as out:
-            common.write_partition_as_geoparquet(
+            common.write_partition(
                 df,
                 H3VectorIndexer.cell_to_polygon,
                 Path(out),

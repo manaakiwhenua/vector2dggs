@@ -134,3 +134,23 @@ class TestEmptyTraces(TestCase):
         df = gpd.GeoDataFrame({"fid": [0, 1], "geometry": [tiny, big]}, crs=4326)
         result = indexer._polyfill_polygons(df, 10)
         self._assert_no_nan_rows(indexer, result, 1)
+
+    def test_geohash_subcell_polygon_is_dropped(self):
+        try:
+            indexer = indexer_instance("geohash")
+        except ImportError:
+            self.skipTest("geohash backend not installed")
+        from shapely.geometry import Polygon
+
+        tiny = Polygon(  # ~1 m^2: no level-6 cell centre can fall inside
+            [
+                (174.75, -41.30),
+                (174.75001, -41.30),
+                (174.75001, -41.30001),
+                (174.75, -41.30001),
+            ]
+        )
+        big = Polygon([(174.7, -41.3), (174.9, -41.3), (174.9, -41.2), (174.7, -41.2)])
+        df = gpd.GeoDataFrame({"fid": [0, 1], "geometry": [tiny, big]}, crs=4326)
+        result = indexer._polyfill_polygons(df, 6)
+        self._assert_no_nan_rows(indexer, result, 1)
