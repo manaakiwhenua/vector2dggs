@@ -93,3 +93,8 @@ class TestSortedHiveWrite(TestCase):
             )
             dirs = [d for d in Path(out).iterdir() if d.is_dir()]
             self.assertEqual(len(dirs), len(parents))
+
+
+class TestProcessPoolContext(TestCase):
+    def test_indexing_pool_does_not_fork(self):
+        self.assertNotEqual(common._mp_context().get_start_method(), "fork")
