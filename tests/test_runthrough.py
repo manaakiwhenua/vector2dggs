@@ -27,6 +27,10 @@ with contextlib.suppress(ImportError):
 with contextlib.suppress(ImportError):
     from .classes.errors import TestErrors as TestErrors
 with contextlib.suppress(ImportError):
+    from .classes.errors import (
+        TestIndexCompactionDefaults as TestIndexCompactionDefaults,
+    )
+with contextlib.suppress(ImportError):
     from .classes.errors import TestOverwriteRequired as TestOverwriteRequired
 with contextlib.suppress(ImportError):
     from .classes.katana import TestKatana as TestKatana

@@ -809,11 +809,12 @@ def index(
     geom_col: str = "geom",
     geo: str = const.GeoOutputMode.NONE.value,
     overwrite: bool = False,
-    compact: bool = True,
+    compact: bool = False,
 ) -> Path | str:
     """
     Performs multi-threaded DGGS indexing on geometries (including multipart and collections).
     """
+    check_compaction_requirements(compact, id_field)
     indexer = idxfactory.indexer_instance(dggs)
     parent_res = get_parent_res(dggs, parent_res, resolution)
 
