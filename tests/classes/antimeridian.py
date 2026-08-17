@@ -18,7 +18,6 @@ from vector2dggs.rHP import rhp
 from ..data.datapaths import (
     TEST_ANTIMERIDIAN_FILE_PATH,
     TEST_ANTIMERIDIAN_LAYER_NAME,
-    TEST_OUTPUT_PATH,
 )
 from .base import TestRunthrough, skip_unless_backend
 
@@ -72,15 +71,17 @@ class TestAntimeridian(TestRunthrough):
         h3(
             [
                 TEST_ANTIMERIDIAN_FILE_PATH,
-                str(TEST_OUTPUT_PATH),
+                str(self.output_path),
                 "--layer",
                 TEST_ANTIMERIDIAN_LAYER_NAME,
                 "-r",
                 "4",
+                "-t",
+                "1",
             ],
             standalone_mode=False,
         )
-        files = sorted(TEST_OUTPUT_PATH.rglob("*.parquet"))
+        files = sorted(self.output_path.rglob("*.parquet"))
         self.assertTrue(files, "No parquet files written")
 
         cell_ids = set()
@@ -100,15 +101,17 @@ class TestAntimeridian(TestRunthrough):
         rhp(
             [
                 TEST_ANTIMERIDIAN_FILE_PATH,
-                str(TEST_OUTPUT_PATH),
+                str(self.output_path),
                 "--layer",
                 TEST_ANTIMERIDIAN_LAYER_NAME,
                 "-r",
                 "4",
+                "-t",
+                "1",
             ],
             standalone_mode=False,
         )
-        files = sorted(TEST_OUTPUT_PATH.rglob("*.parquet"))
+        files = sorted(self.output_path.rglob("*.parquet"))
         self.assertTrue(files, "No parquet files written")
 
         cell_ids = set()

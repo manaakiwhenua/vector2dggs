@@ -160,13 +160,13 @@ Tests are included. Some tests (covering the PostgreSQL/PostGIS input path) spin
 To run them, activate the Poetry environment first (`eval "$(poetry env activate)"`), then run:
 
 ```bash
-python tests/test_vector2dggs.py
+python -m pytest -n auto tests/
 ```
 
 Or without activating the shell:
 
 ```bash
-poetry run python tests/test_vector2dggs.py
+poetry run pytest -n auto tests/
 ```
 
 To test a specific DGGS:
