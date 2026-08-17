@@ -1,5 +1,6 @@
 import tempfile
 import warnings
+from pathlib import Path
 from unittest import TestCase
 
 import click
@@ -132,6 +133,54 @@ class TestErrors(TestCase):
     def test_unknown_dggs_raises(self):
         with self.assertRaises(ValueError):
             indexer_instance("not_a_real_dggs")
+
+
+class TestIndexCompactionDefaults(TestCase):
+    """Library API: index() must validate compaction requirements itself."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        df = gpd.GeoDataFrame(
+            {
+                "geometry": [
+                    Polygon(
+                        [(174.7, -41.3), (174.9, -41.3), (174.9, -41.2), (174.7, -41.2)]
+                    )
+                ]
+            },
+            crs=4326,
+        )
+        self.src = f"{self._tmp.name}/in.gpkg"
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            df.to_file(self.src, layer="x")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _index(self, **kwargs):
+        return common.index(
+            "h3",
+            self.src,
+            f"{self._tmp.name}/out.pq",
+            7,
+            None,
+            False,
+            50,
+            "none",
+            0.0,
+            1,
+            layer="x",
+            **kwargs,
+        )
+
+    def test_compact_without_id_field_raises_idfielderror(self):
+        with self.assertRaises(common.IdFieldError):
+            self._index(compact=True)
+
+    def test_compaction_defaults_off(self):
+        out = self._index()
+        self.assertTrue(any(Path(out).rglob("*.parquet")))
 
 
 class TestOverwriteRequired(TestRunthrough):
