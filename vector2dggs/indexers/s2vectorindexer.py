@@ -21,41 +21,20 @@ class S2VectorIndexer(VectorIndexer):
     GEODESIC_POLYFILL = True
 
     def _polyfill_polygons(self, df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
-        geom_col = df.geometry.name
-        df = df.copy()
-        df["s2index"] = df.geometry.apply(
-            lambda geom: self.tokens_from_polygon(geom, level)
-        )
-        result = (
-            df.drop(columns=[geom_col])
-            .explode("s2index")
-            .dropna(subset=["s2index"])
-            .set_index("s2index")
-        )
-        return pd.DataFrame(result)
+        return self._geo_to_cells(df, level, self.tokens_from_polygon, df.geometry.name)
 
     def _polyfill_linestrings(self, df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
-        geom_col = df.geometry.name
-        df = df.copy()
-        df["s2index"] = df.geometry.apply(
-            lambda geom: self.tokens_from_linestring(geom, level)
+        return self._geo_to_cells(
+            df, level, self.tokens_from_linestring, df.geometry.name
         )
-        result = (
-            df.drop(columns=[geom_col])
-            .explode("s2index")
-            .dropna(subset=["s2index"])
-            .set_index("s2index")
-        )
-        return pd.DataFrame(result)
 
     def _polyfill_points(self, df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
-        geom_col = df.geometry.name
-        df = df.copy()
-        df["s2index"] = df.geometry.apply(
-            lambda geom: self.token_from_point(geom, level)
+        return self._geo_to_cells(
+            df,
+            level,
+            lambda geom, lvl: [self.token_from_point(geom, lvl)],
+            df.geometry.name,
         )
-        result = df.drop(columns=[geom_col]).set_index("s2index")
-        return pd.DataFrame(result)
 
     def secondary_index(self, df: pd.DataFrame, parent_level: int) -> pd.DataFrame:
         """
