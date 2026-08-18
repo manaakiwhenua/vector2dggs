@@ -22,9 +22,12 @@ class S2VectorIndexer(VectorIndexer):
 
     def _polyfill_polygons(self, df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
         geom_col = df.geometry.name
+        df = df.copy()
+        df["s2index"] = df.geometry.apply(
+            lambda geom: self.tokens_from_polygon(geom, level)
+        )
         result = (
-            self.polyfill_polygons(df.copy(), level)
-            .drop(columns=[geom_col])
+            df.drop(columns=[geom_col])
             .explode("s2index")
             .dropna(subset=["s2index"])
             .set_index("s2index")
@@ -91,72 +94,61 @@ class S2VectorIndexer(VectorIndexer):
             self.children_at_res,
         )
 
-    def polyfill_polygons(self, df: gpd.GeoDataFrame, level: int) -> gpd.GeoDataFrame:
+    def tokens_from_polygon(
+        self, geom: Polygon, level: int, centroid_inside: bool = True
+    ) -> set[str]:
         """
         Not a part of the interface provided by VectorIndexer.
         """
+        geom = force_2d(geom)
+        # Prepare loops: first the exterior loop, then the interior loops
+        loops = []
+        # Exterior ring
+        latlngs = [
+            S2.S2LatLng.FromDegrees(lat, lon) for lon, lat in geom.exterior.coords
+        ]
+        s2loop = S2.S2Loop([latlng.ToPoint() for latlng in latlngs])
+        s2loop.Normalize()
+        loops.append(s2loop)
 
-        def generate_covering(
-            geom: Polygon, level: int, centroid_inside: bool = True
-        ) -> set[str]:
-            geom = force_2d(geom)
-            # Prepare loops: first the exterior loop, then the interior loops
-            loops = []
-            # Exterior ring
-            latlngs = [
-                S2.S2LatLng.FromDegrees(lat, lon) for lon, lat in geom.exterior.coords
+        # Interior rings (polygon holes)
+        for interior in geom.interiors:
+            interior_latlngs = [
+                S2.S2LatLng.FromDegrees(lat, lon) for lon, lat in interior.coords
             ]
-            s2loop = S2.S2Loop([latlng.ToPoint() for latlng in latlngs])
-            s2loop.Normalize()
-            loops.append(s2loop)
+            s2interior_loop = S2.S2Loop(
+                [latlng.ToPoint() for latlng in interior_latlngs]
+            )
+            s2interior_loop.Normalize()
+            loops.append(s2interior_loop)
 
-            # Interior rings (polygon holes)
-            for interior in geom.interiors:
-                interior_latlngs = [
-                    S2.S2LatLng.FromDegrees(lat, lon) for lon, lat in interior.coords
-                ]
-                s2interior_loop = S2.S2Loop(
-                    [latlng.ToPoint() for latlng in interior_latlngs]
-                )
-                s2interior_loop.Normalize()
-                loops.append(s2interior_loop)
+        # Build an S2Polygon from the loops
+        s2polygon = S2.S2Polygon()
+        s2polygon.InitNested(loops)
 
-            # Build an S2Polygon from the loops
-            s2polygon = S2.S2Polygon()
-            s2polygon.InitNested(loops)
+        # Use S2RegionCoverer to get the cell IDs at the specified level
+        coverer = S2.S2RegionCoverer()
 
-            # Use S2RegionCoverer to get the cell IDs at the specified level
-            coverer = S2.S2RegionCoverer()
+        max_cells = self.max_cells_for_geom(geom, level)
+        coverer.set_max_cells(max_cells)
+        coverer.set_min_level(level)
+        coverer.set_max_level(level)
 
-            max_cells = self.max_cells_for_geom(geom, level)
-            coverer.set_max_cells(max_cells)
-            coverer.set_min_level(level)
-            coverer.set_max_level(level)
+        raw_covering: Iterable[S2.S2CellId] = coverer.GetCovering(s2polygon)
+        covering: set[S2.S2CellId]
 
-            raw_covering: Iterable[S2.S2CellId] = coverer.GetCovering(s2polygon)
-            covering: set[S2.S2CellId]
+        if centroid_inside:
+            # Coverings are "intersects" modality, polyfill is "centre inside" modality
+            # ergo, filter out covering cells that are not inside the polygon
+            covering = {
+                cell
+                for cell in raw_covering
+                if self.cell_center_is_inside_polygon(cell, s2polygon)
+            }
+        else:
+            covering = set(raw_covering)
 
-            if centroid_inside:
-                # Coverings are "intersects" modality, polyfill is "centre inside" modality
-                # ergo, filter out covering cells that are not inside the polygon
-                covering = {
-                    cell
-                    for cell in raw_covering
-                    if self.cell_center_is_inside_polygon(cell, s2polygon)
-                }
-            else:
-                covering = set(raw_covering)
-
-            return {cell.ToToken() for cell in covering}
-
-        df["s2index"] = df["geometry"].apply(
-            lambda geom: generate_covering(geom, level)
-        )
-        df = df[
-            df["s2index"].map(lambda x: len(x) > 0)
-        ]  # Remove rows with no covering at this level
-
-        return df
+        return {cell.ToToken() for cell in covering}
 
     def max_cells_for_geom(
         self, geom: Polygon | LineString, level: int, margin: float = 1.02
