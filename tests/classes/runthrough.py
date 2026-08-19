@@ -126,6 +126,17 @@ class RunthroughScenarios:
         self._run(POLYGON, self.POLYGON_RES, "-c", "0")
         self._assert_output(self.POLYGON_RES)
 
+    def test_bisection_invariance(self):
+        """Bisection must be invisible: identical (cell, feature) sets with
+        and without cutting."""
+        self._run(POLYGON, self.POLYGON_RES, "-c", "0")
+        uncut = pd.read_parquet(self.output_path)
+        uncut_cells = set(zip(uncut.index, uncut["fid"], strict=True))
+        self._run(POLYGON, self.POLYGON_RES, "-o", "-c", "300000")
+        cut = pd.read_parquet(self.output_path)
+        cut_cells = set(zip(cut.index, cut["fid"], strict=True))
+        self.assertEqual(uncut_cells, cut_cells)
+
     def test_compaction(self):
         self._run(POLYGON, self.POLYGON_RES, "-co", "-id", POLYGON[2])
         self._assert_output(self.POLYGON_RES, id_col=POLYGON[2], compact=True)

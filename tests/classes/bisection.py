@@ -136,3 +136,49 @@ class TestDroppedFeatureReport(TestCase):
             any("1 of 2 features produced no cells" in m for m in logs.output),
             logs.output,
         )
+
+
+class TestGeodesicCutEdges(TestCase):
+    """
+    Adjacent bisection pieces can carry different vertices along the same cut
+    line (T-junctions from cuts at different recursion depths). Geodesic
+    backends read each chord as a great circle, so the two curves differ and
+    a cell whose centre falls between them belongs to neither piece.
+    Coordinates from a real S2 r15 reproducer: two chords of the same
+    constant-latitude cut line, whose great circles bulge 0.39m and 0.20m
+    poleward; the missing cell's centre sits 0.29m poleward, in the gap.
+    _clean_geometries must densify so both curves hug the cut line.
+    """
+
+    CUT_LAT = -41.857542761228
+    MISSING_CELL = "6d3a4841c"
+
+    def test_cell_between_t_junction_chords_is_not_lost(self):
+        from .base import skip_unless_backend
+
+        skip_unless_backend("s2")
+        from vector2dggs.indexerfactory import indexer_instance
+
+        south = Polygon(
+            [
+                (173.1988782522566, -41.88),
+                (173.2559078324737, -41.88),
+                (173.2559078324737, self.CUT_LAT),
+                (173.1988782522566, self.CUT_LAT),
+            ]
+        )
+        north = Polygon(
+            [
+                (173.2063719775, self.CUT_LAT),
+                (173.247464236, self.CUT_LAT),
+                (173.247464236, -41.84),
+                (173.2063719775, -41.84),
+            ]
+        )
+        indexer = indexer_instance("s2")
+        df = gpd.GeoDataFrame({"geometry": [south, north]}, crs=4326)
+        df = common._clean_geometries(df, indexer, 15)
+        tokens: set = set()
+        for geom in df.geometry:
+            tokens |= indexer.tokens_from_polygon(geom, 15)
+        self.assertIn(self.MISSING_CELL, tokens)

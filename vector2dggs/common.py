@@ -702,7 +702,24 @@ def _normalise_longitudes(df: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, bool]
     return df, bool(straddle.any())
 
 
-def _clean_geometries(df: gpd.GeoDataFrame, indexer: VectorIndexer) -> gpd.GeoDataFrame:
+def _clean_geometries(
+    df: gpd.GeoDataFrame, indexer: VectorIndexer, resolution: int
+) -> gpd.GeoDataFrame:
+    if indexer.GEODESIC_POLYFILL:
+        # Geodesic backends reinterpret long straight segments (notably
+        # bisection cut lines) as great circles; adjacent pieces carrying
+        # different vertices along the same cut line then disagree, and
+        # cells whose centres fall between the two curves are lost.
+        # Densify in the source CRS, where coordinates are still continuous.
+        eps_m = max(
+            const.DGGS_CELL_AREA_M2_BY_RES[indexer.dggs](resolution) ** 0.5 / 10,
+            10.0,
+        )
+        axis = df.crs.axis_info[0]
+        metres_per_unit = axis.unit_conversion_factor * (
+            1 if df.crs.is_projected else const.EARTH_MEAN_RADIUS_M
+        )
+        df["geometry"] = shapely.segmentize(df.geometry, eps_m / metres_per_unit)
     LOGGER.debug("Exploding geometry collections and multipolygons")
     # Correct antimeridian-crossing artifacts when the source coordinates were
     # unambiguous (projected CRS, or unwrapped longitudes), and only for
@@ -831,7 +848,7 @@ def index(
     df = _prepare_dataframe(df, id_field, keep_attributes)
     features_in = set(df.index)
     df = _run_bisection(df, cut_threshold, processes)
-    df = _clean_geometries(df, indexer)
+    df = _clean_geometries(df, indexer, resolution)
 
     ddf = dgpd.from_geopandas(df, chunksize=max(1, chunksize), sort=True)
     if spatial_sorting != "none":
