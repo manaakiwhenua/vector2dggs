@@ -4,7 +4,7 @@ import geopandas as gpd
 import pyproj
 from shapely.geometry import Polygon
 
-from vector2dggs import common
+from vector2dggs import common, katana
 from vector2dggs import constants as const
 from vector2dggs.common import _run_bisection
 
@@ -147,18 +147,13 @@ class TestGeodesicCutEdges(TestCase):
     Coordinates from a real S2 r15 reproducer: two chords of the same
     constant-latitude cut line, whose great circles bulge 0.39m and 0.20m
     poleward; the missing cell's centre sits 0.29m poleward, in the gap.
-    _clean_geometries must densify so both curves hug the cut line.
     """
 
     CUT_LAT = -41.857542761228
     MISSING_CELL = "6d3a4841c"
+    EPS_DEG = 0.0002838765651889054  # 31.6m: cell edge at r15 / 10
 
-    def test_cell_between_t_junction_chords_is_not_lost(self):
-        from .base import skip_unless_backend
-
-        skip_unless_backend("s2")
-        from vector2dggs.indexerfactory import indexer_instance
-
+    def _pieces(self):
         south = Polygon(
             [
                 (173.1988782522566, -41.88),
@@ -175,10 +170,42 @@ class TestGeodesicCutEdges(TestCase):
                 (173.2063719775, -41.84),
             ]
         )
+        return south, north
+
+    def test_eps_vertex_spacing_closes_t_junction_gap(self):
+        from .base import skip_unless_backend
+
+        skip_unless_backend("s2")
+        import shapely
+
+        from vector2dggs.indexerfactory import indexer_instance
+
         indexer = indexer_instance("s2")
-        df = gpd.GeoDataFrame({"geometry": [south, north]}, crs=4326)
-        df = common._clean_geometries(df, indexer, 15)
-        tokens: set = set()
-        for geom in df.geometry:
-            tokens |= indexer.tokens_from_polygon(geom, 15)
-        self.assertIn(self.MISSING_CELL, tokens)
+
+        def union_tokens(geoms):
+            tokens: set = set()
+            for geom in geoms:
+                tokens |= indexer.tokens_from_polygon(geom, 15)
+            return tokens
+
+        sparse = self._pieces()
+        self.assertNotIn(self.MISSING_CELL, union_tokens(sparse))
+        dense = (shapely.segmentize(g, self.EPS_DEG) for g in sparse)
+        self.assertIn(self.MISSING_CELL, union_tokens(dense))
+
+    def test_katana_blade_segment_caps_cut_edge_spacing(self):
+        # axis-aligned square: any piece boundary segment not on the outer
+        # bbox is a cut segment, and must respect the blade cap
+        square = Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])
+        eps = 0.01
+        pieces = katana.katana(square, threshold=0.05, blade_segment=eps)
+        self.assertGreater(len(pieces), 2)
+        for piece in pieces:
+            coords = list(piece.exterior.coords)
+            for (x0, y0), (x1, y1) in zip(coords, coords[1:], strict=False):
+                on_bbox = (y0 == y1 and y0 in (0.0, 1.0)) or (
+                    x0 == x1 and x0 in (0.0, 1.0)
+                )
+                if not on_bbox:
+                    length = ((x1 - x0) ** 2 + (y1 - y0) ** 2) ** 0.5
+                    self.assertLessEqual(length, eps * 1.001)

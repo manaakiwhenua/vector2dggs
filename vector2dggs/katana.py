@@ -31,6 +31,7 @@ def katana(
     count: int = 0,
     max_recursion_depth: int = 250,
     check_2D: bool = True,
+    blade_segment: float | None = None,
 ) -> list[BaseGeometry]:
     """
     Recursively split a geometry into two parts across its shortest dimension.
@@ -38,6 +39,10 @@ def katana(
     Any LinearRings will be converted to Polygons.
     `threshold`: maximum acceptable area of the bounding box for any output geometry.
     `count`: used to track recursion depth
+    `blade_segment`: cap on the vertex spacing of the cutting blade. Pieces cut
+    at different recursion depths carry differently-spaced vertices along the
+    same cut line; backends that interpret edges geodesically turn that into
+    diverging curves, losing cells whose centres fall between them.
     """
 
     if (geometry is None) or (geometry.is_empty):
@@ -66,7 +71,10 @@ def katana(
         a = box(bounds[0], bounds[1], bounds[0] + width / 2, bounds[3])
         b = box(bounds[0] + width / 2, bounds[1], bounds[2], bounds[3])
     # Add additional vertices to help prevent indexing errors from use of EPSG:4386 later under the presence of long edges
-    a, b = (g.segmentize(min(width, height) / 4) for g in (a, b))
+    seg = min(width, height) / 4
+    if blade_segment is not None:
+        seg = min(seg, blade_segment)
+    a, b = (g.segmentize(seg) for g in (a, b))
     result = []
     for d in (
         a,
@@ -86,6 +94,7 @@ def katana(
                         count + 1,
                         max_recursion_depth=max_recursion_depth,
                         check_2D=check_2D,
+                        blade_segment=blade_segment,
                     )
                 )
 

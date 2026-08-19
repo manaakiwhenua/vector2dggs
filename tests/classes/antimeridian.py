@@ -50,7 +50,7 @@ class TestAntimeridian(TestRunthrough):
             gdf, indexer.dggs, 0, None, None
         )
         df = _run_bisection(df, cut_threshold, 1)
-        return _clean_geometries(df, indexer, 4)
+        return _clean_geometries(df, indexer)
 
     def test_clean_geometries_splits_for_backends_that_require_it(self):
         skip_unless_backend("rhp")
@@ -143,7 +143,7 @@ class TestUnwrappedLongitudes(TestCase):
 
     def _cells(self, indexer, poly, res):
         df = gpd.GeoDataFrame({"geometry": [poly]}, crs=4167)
-        cleaned = _clean_geometries(df, indexer, res)
+        cleaned = _clean_geometries(df, indexer)
         self.assertLessEqual(cleaned.total_bounds[2], 180)
         return indexer.polyfill(cleaned, res)
 
