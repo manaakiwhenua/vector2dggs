@@ -33,6 +33,8 @@ with contextlib.suppress(ImportError):
 with contextlib.suppress(ImportError):
     from .classes.errors import TestOverwriteRequired as TestOverwriteRequired
 with contextlib.suppress(ImportError):
+    from .classes.input_dispatch import TestInputDispatch as TestInputDispatch
+with contextlib.suppress(ImportError):
     from .classes.katana import TestKatana as TestKatana
 with contextlib.suppress(ImportError):
     from .classes.linetrace import (

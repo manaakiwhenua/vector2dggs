@@ -8,7 +8,6 @@ import tempfile
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from pathlib import Path, PurePath
 from types import ModuleType
-from urllib.parse import urlparse
 from uuid import uuid4
 
 import antimeridian
@@ -28,6 +27,8 @@ import shapely
 import shapely.affinity
 import sqlalchemy
 from shapely.geometry import GeometryCollection
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError, NoSuchModuleError
 from tqdm import tqdm
 from tqdm.dask import TqdmCallback
 
@@ -94,27 +95,25 @@ def validate_compression(ctx, param, value: str) -> str:
 def db_conn_and_input_path(
     vector_input: str | Path,
 ) -> tuple[SQLConnectionType | None, str | Path]:
-    con: SQLConnectionType | None = None
-    scheme: str = urlparse(str(vector_input)).scheme
+    if Path(vector_input).exists():
+        return (None, Path(vector_input))
 
-    if bool(scheme) and scheme != "file":
-        # Assume database connection
-        con = sqlalchemy.create_engine(str(vector_input))
-
-    elif not Path(vector_input).exists():
-        if not scheme:
-            LOGGER.error(
-                f"Input vector {vector_input} does not exist, and is not recognised as a remote URI"
-            )
-            raise FileNotFoundError(
-                errno.ENOENT, os.strerror(errno.ENOENT), vector_input
-            )
-        vector_input = str(vector_input)
-
+    try:
+        url = make_url(str(vector_input))
+        url.get_dialect()
+    except (ArgumentError, NoSuchModuleError):
+        pass
     else:
-        vector_input = Path(vector_input)
+        return (sqlalchemy.create_engine(url), vector_input)
 
-    return (con, vector_input)
+    if "://" in str(vector_input):
+        # e.g. https:// or s3://; GDAL may be able to read it
+        return (None, str(vector_input))
+
+    LOGGER.error(
+        f"Input vector {vector_input} does not exist, and is not recognised as a remote URI"
+    )
+    raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), vector_input)
 
 
 def resolve_output_path(output_directory: str | Path, overwrite: bool) -> str | Path:
