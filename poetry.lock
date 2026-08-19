@@ -3434,4 +3434,4 @@ s2 = ["s2geometry"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "ce6ae60e181edd04cf462aedec456b57099483964834cc364680b99b12543045"
+content-hash = "94c370a020e3c181aee97a0ae54269d44000126660283711beeb589d9411974e"
