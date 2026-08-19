@@ -119,13 +119,21 @@ def resolve_output_path(output_directory: str | Path, overwrite: bool) -> Path:
     return output_directory
 
 
-def _commit_output(staging: Path, output_directory: Path) -> Path:
+def _commit_output(staging: Path, output_directory: Path, overwrite: bool) -> Path:
     """
     Move the staged run into place. The previous output (if any) is renamed
     aside before the swap and only deleted afterwards, so no crash window
     destroys data; each placement is a single same-filesystem rename.
+
+    overwrite is re-checked here: validation at run start doesn't authorise
+    replacing a directory that appeared during the run.
     """
     if output_directory.exists():
+        if not overwrite:
+            raise FileExistsError(
+                f"{output_directory} was created while this run was in progress; "
+                "not replacing it without -o/--overwrite"
+            )
         LOGGER.warning(f"Overwriting the contents of {output_directory}")
         replaced = output_directory.parent / f".{output_directory.name}.replaced"
         if replaced.exists():
@@ -879,7 +887,7 @@ def index(
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
         raise
-    return _commit_output(staging, output_directory)
+    return _commit_output(staging, output_directory, overwrite)
 
 
 def _index(
