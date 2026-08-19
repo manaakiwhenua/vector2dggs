@@ -1,4 +1,3 @@
-import errno
 import json
 import logging
 import multiprocessing
@@ -22,6 +21,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.dataset as pa_ds
 import pyarrow.parquet as pq
+import pyogrio
 import pyproj
 import shapely
 import shapely.affinity
@@ -106,14 +106,9 @@ def db_conn_and_input_path(
     else:
         return (sqlalchemy.create_engine(url), vector_input)
 
-    if "://" in str(vector_input):
-        # e.g. https:// or s3://; GDAL may be able to read it
-        return (None, str(vector_input))
-
-    LOGGER.error(
-        f"Input vector {vector_input} does not exist, and is not recognised as a remote URI"
-    )
-    raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), vector_input)
+    # Remote URI or GDAL virtual path: raises DataSourceError if GDAL can't open it
+    pyogrio.read_info(str(vector_input))
+    return (None, str(vector_input))
 
 
 def resolve_output_path(output_directory: str | Path, overwrite: bool) -> str | Path:

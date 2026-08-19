@@ -1,13 +1,19 @@
 import tempfile
+import zipfile
 from pathlib import Path
 from unittest import TestCase
 
+from pyogrio.errors import DataSourceError
+
 from vector2dggs import common
+
+from ..data.datapaths import TEST_FILE_PATH
 
 
 class TestInputDispatch(TestCase):
-    """db_conn_and_input_path: file if it exists, database if sqlalchemy can
-    engine it, remote pass-through if it has a scheme, else FileNotFoundError."""
+    """db_conn_and_input_path: file if it exists on disk, database if
+    sqlalchemy can engine it, anything else GDAL can open is passed through;
+    GDAL's DataSourceError propagates otherwise."""
 
     def test_existing_file_returned_as_path(self):
         with tempfile.NamedTemporaryFile(suffix=".gpkg") as f:
@@ -21,20 +27,24 @@ class TestInputDispatch(TestCase):
         )
         self.assertIsNotNone(con)
 
+    def test_gdal_virtual_path_passed_through(self):
+        with tempfile.TemporaryDirectory() as d:
+            zip_path = f"{d}/data.zip"
+            with zipfile.ZipFile(zip_path, "w") as z:
+                z.write(TEST_FILE_PATH, arcname="se-island.gpkg")
+            vsi = f"/vsizip/{zip_path}/se-island.gpkg"
+            con, path = common.db_conn_and_input_path(vsi)
+            self.assertIsNone(con)
+            self.assertEqual(path, vsi)
+
     def test_windows_drive_letter_path_not_treated_as_database(self):
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaises(DataSourceError):
             common.db_conn_and_input_path(r"C:\data\input.gpkg")
 
-    def test_remote_uri_passed_through(self):
-        con, path = common.db_conn_and_input_path("https://example.com/data.gpkg")
-        self.assertIsNone(con)
-        self.assertEqual(path, "https://example.com/data.gpkg")
-
-    def test_file_uri_passed_through(self):
-        con, path = common.db_conn_and_input_path("file:///nonexistent/data.gpkg")
-        self.assertIsNone(con)
-        self.assertEqual(path, "file:///nonexistent/data.gpkg")
-
     def test_nonexistent_plain_path_raises(self):
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaises(DataSourceError):
             common.db_conn_and_input_path("/nonexistent/data.gpkg")
+
+    def test_nonexistent_uri_raises(self):
+        with self.assertRaises(DataSourceError):
+            common.db_conn_and_input_path("file:///nonexistent/data.gpkg")
