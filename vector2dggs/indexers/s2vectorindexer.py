@@ -1,15 +1,11 @@
 from collections.abc import Iterable
-from math import ceil
 
 import geopandas as gpd
 import pandas as pd
 import s2geometry as S2
-from pyproj import CRS, Transformer
 from shapely import force_2d
-from shapely.geometry import LineString, Point, Polygon, box
-from shapely.ops import transform
+from shapely.geometry import LineString, Point, Polygon
 
-import vector2dggs.constants as const
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 
 
@@ -106,10 +102,8 @@ class S2VectorIndexer(VectorIndexer):
         s2polygon.InitNested(loops)
 
         # Use S2RegionCoverer to get the cell IDs at the specified level
+        # (min_level == max_level, so max_cells is irrelevant and left unset)
         coverer = S2.S2RegionCoverer()
-
-        max_cells = self.max_cells_for_geom(geom, level)
-        coverer.set_max_cells(max_cells)
         coverer.set_min_level(level)
         coverer.set_max_level(level)
 
@@ -128,37 +122,6 @@ class S2VectorIndexer(VectorIndexer):
             covering = set(raw_covering)
 
         return {cell.ToToken() for cell in covering}
-
-    def max_cells_for_geom(
-        self, geom: Polygon | LineString, level: int, margin: float = 1.02
-    ) -> int:
-        """
-        Calculate the maximum number of S2 cells that are appropriate for the given geometry and level.
-        This is based on the area of the geometry's bounding box,
-        and the maximum area of S2 cells at the given level.
-
-        Not a part of the interface provided by VectorIndexer.
-        """
-        area = self.bbox_area_in_m2(geom)
-        max_cells = ceil(max(1, area / const.S2_CELLS_MAX_AREA_M2_BY_LEVEL[level]))
-        return ceil(max_cells * margin)
-
-    def bbox_area_in_m2(
-        self,
-        geom: Polygon,
-        src_crs: str | CRS = "EPSG:4326",
-        dst_crs: str | CRS = "EPSG:6933",
-    ) -> float:
-        """
-        Calculate the area of the bounding box of a geometry in square meters.
-
-        Not a part of the interface provided by VectorIndexer.
-        """
-        minx, miny, maxx, maxy = geom.bounds
-        bbox = box(minx, miny, maxx, maxy)
-        transformer = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
-        projected_bbox = transform(transformer.transform, bbox)
-        return projected_bbox.area
 
     def cell_center_is_inside_polygon(
         self, cell: S2.S2CellId, polygon: S2.S2Polygon
@@ -181,8 +144,6 @@ class S2VectorIndexer(VectorIndexer):
         polyline.InitFromS2LatLngs(latlngs)
 
         coverer = S2.S2RegionCoverer()
-        max_cells = self.max_cells_for_geom(linestring, level)
-        coverer.set_max_cells(max_cells)
         coverer.set_min_level(level)
         coverer.set_max_level(level)
 
