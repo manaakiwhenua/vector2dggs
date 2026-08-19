@@ -4,7 +4,7 @@ import geopandas as gpd
 import pyproj
 from shapely.geometry import Polygon
 
-from vector2dggs import common, katana
+from vector2dggs import common
 from vector2dggs import constants as const
 from vector2dggs.common import _run_bisection
 
@@ -193,12 +193,16 @@ class TestGeodesicCutEdges(TestCase):
         dense = (shapely.segmentize(g, self.EPS_DEG) for g in sparse)
         self.assertIn(self.MISSING_CELL, union_tokens(dense))
 
-    def test_katana_blade_segment_caps_cut_edge_spacing(self):
+    def test_bisection_caps_cut_edge_spacing(self):
         # axis-aligned square: any piece boundary segment not on the outer
-        # bbox is a cut segment, and must respect the blade cap
+        # bbox is a cut segment, and must respect the blade_segment cap
         square = Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])
         eps = 0.01
-        pieces = katana.katana(square, threshold=0.05, blade_segment=eps)
+        pieces = [
+            g
+            for g in common.bisect_geometry(square, 0.05, eps).geoms
+            if g.geom_type == "Polygon"
+        ]
         self.assertGreater(len(pieces), 2)
         for piece in pieces:
             coords = list(piece.exterior.coords)
