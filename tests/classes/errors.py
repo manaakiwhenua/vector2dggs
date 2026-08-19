@@ -5,6 +5,7 @@ from unittest import TestCase
 
 import click
 import geopandas as gpd
+from pyogrio.errors import DataLayerError
 from shapely.geometry import Polygon
 
 from vector2dggs import common
@@ -209,3 +210,40 @@ class TestOverwriteRequired(TestRunthrough):
                 ],
                 standalone_mode=False,
             )
+
+
+class TestStagedOutput(TestRunthrough):
+    """A failed run must never cost the user existing output (-o), nor leave
+    a half-written target that poisons the retry (fresh runs)."""
+
+    def _run_h3(self, *extra):
+        h3(
+            [
+                TEST_FILE_PATH,
+                str(self.output_path),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+                "-t",
+                "1",
+                *extra,
+            ],
+            standalone_mode=False,
+        )
+
+    def test_failed_overwrite_run_preserves_previous_output(self):
+        self._run_h3()
+        before = sorted(p.name for p in self.output_path.rglob("*.parquet"))
+        self.assertTrue(before)
+        with self.assertRaises(DataLayerError):
+            self._run_h3("-o", "--layer", "no_such_layer")
+        after = sorted(p.name for p in self.output_path.rglob("*.parquet"))
+        self.assertEqual(before, after, "previous output was destroyed")
+
+    def test_failed_fresh_run_leaves_no_output_dir(self):
+        with self.assertRaises(DataLayerError):
+            self._run_h3("--layer", "no_such_layer")
+        self.assertFalse(self.output_path.exists(), "half-written target left behind")
+        self._run_h3()  # retry must not require -o
+        self.assertTrue(any(self.output_path.rglob("*.parquet")))
