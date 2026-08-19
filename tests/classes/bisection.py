@@ -136,3 +136,80 @@ class TestDroppedFeatureReport(TestCase):
             any("1 of 2 features produced no cells" in m for m in logs.output),
             logs.output,
         )
+
+
+class TestGeodesicCutEdges(TestCase):
+    """
+    Adjacent bisection pieces can carry different vertices along the same cut
+    line (T-junctions from cuts at different recursion depths). Geodesic
+    backends read each chord as a great circle, so the two curves differ and
+    a cell whose centre falls between them belongs to neither piece.
+    Coordinates from a real S2 r15 reproducer: two chords of the same
+    constant-latitude cut line, whose great circles bulge 0.39m and 0.20m
+    poleward; the missing cell's centre sits 0.29m poleward, in the gap.
+    """
+
+    CUT_LAT = -41.857542761228
+    MISSING_CELL = "6d3a4841c"
+    EPS_DEG = 0.0002838765651889054  # 31.6m: cell edge at r15 / 10
+
+    def _pieces(self):
+        south = Polygon(
+            [
+                (173.1988782522566, -41.88),
+                (173.2559078324737, -41.88),
+                (173.2559078324737, self.CUT_LAT),
+                (173.1988782522566, self.CUT_LAT),
+            ]
+        )
+        north = Polygon(
+            [
+                (173.2063719775, self.CUT_LAT),
+                (173.247464236, self.CUT_LAT),
+                (173.247464236, -41.84),
+                (173.2063719775, -41.84),
+            ]
+        )
+        return south, north
+
+    def test_eps_vertex_spacing_closes_t_junction_gap(self):
+        from .base import skip_unless_backend
+
+        skip_unless_backend("s2")
+        import shapely
+
+        from vector2dggs.indexerfactory import indexer_instance
+
+        indexer = indexer_instance("s2")
+
+        def union_tokens(geoms):
+            tokens: set = set()
+            for geom in geoms:
+                tokens |= indexer.tokens_from_polygon(geom, 15)
+            return tokens
+
+        sparse = self._pieces()
+        self.assertNotIn(self.MISSING_CELL, union_tokens(sparse))
+        dense = (shapely.segmentize(g, self.EPS_DEG) for g in sparse)
+        self.assertIn(self.MISSING_CELL, union_tokens(dense))
+
+    def test_bisection_caps_cut_edge_spacing(self):
+        # axis-aligned square: any piece boundary segment not on the outer
+        # bbox is a cut segment, and must respect the blade_segment cap
+        square = Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])
+        eps = 0.01
+        pieces = [
+            g
+            for g in common.bisect_geometry(square, 0.05, eps).geoms
+            if g.geom_type == "Polygon"
+        ]
+        self.assertGreater(len(pieces), 2)
+        for piece in pieces:
+            coords = list(piece.exterior.coords)
+            for (x0, y0), (x1, y1) in zip(coords, coords[1:], strict=False):
+                on_bbox = (y0 == y1 and y0 in (0.0, 1.0)) or (
+                    x0 == x1 and x0 in (0.0, 1.0)
+                )
+                if not on_bbox:
+                    length = ((x1 - x0) ** 2 + (y1 - y0) ** 2) ** 0.5
+                    self.assertLessEqual(length, eps * 1.001)

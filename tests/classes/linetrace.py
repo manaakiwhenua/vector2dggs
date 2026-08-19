@@ -105,13 +105,13 @@ class TestEmptyTraces(TestCase):
         df = gpd.GeoDataFrame(
             {"fid": [0, 1], "geometry": [self.LINE, self.LINE]}, crs=4326
         )
-        real = type(indexer).cell_ids_from_linestring
+        real = type(indexer).tokens_from_linestring
         calls = iter([True, False])
 
         def fake(self_idx, geom, level):
             return [] if next(calls) else real(self_idx, geom, level)
 
-        with mock.patch.object(type(indexer), "cell_ids_from_linestring", fake):
+        with mock.patch.object(type(indexer), "tokens_from_linestring", fake):
             result = indexer._polyfill_linestrings(df, 14)
         self._assert_no_nan_rows(indexer, result, 1)
 

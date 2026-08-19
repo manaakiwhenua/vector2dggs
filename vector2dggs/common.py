@@ -538,8 +538,33 @@ def bisection_preparation(
     return df, cut_crs, cut_threshold
 
 
-def bisect_geometry(geometry, cut_threshold):
-    return GeometryCollection(katana.katana(geometry, cut_threshold))
+def _blade_segment(
+    indexer: VectorIndexer, dggs: str, resolution: int, cut_crs: pyproj.CRS
+) -> float | None:
+    """
+    Max vertex spacing (in cut CRS units) along bisection cut edges. Needed
+    whenever straight cut edges get reinterpreted as curves downstream —
+    geodesic backends read them as great circles, and cutting in a projected
+    CRS bends them on reprojection — because adjacent pieces carrying
+    different vertices along the same cut line then diverge, losing cells
+    whose centres fall between the two curves.
+    """
+    if not (indexer.GEODESIC_POLYFILL or cut_crs.is_projected):
+        return None
+    eps_m = max(const.DGGS_CELL_AREA_M2_BY_RES[dggs](resolution) ** 0.5 / 10, 10.0)
+    axis = cut_crs.axis_info[0]
+    metres_per_unit = axis.unit_conversion_factor * (
+        1 if cut_crs.is_projected else const.EARTH_MEAN_RADIUS_M
+    )
+    return eps_m / metres_per_unit
+
+
+def bisect_geometry(geometry, cut_threshold, blade_segment=None):
+    cuts: list[tuple[bool, float]] = []
+    pieces = katana.katana(geometry, cut_threshold, cuts=cuts)
+    if blade_segment is not None:
+        pieces = [katana.densify_cut_edges(g, cuts, blade_segment) for g in pieces]
+    return GeometryCollection(pieces)
 
 
 def _read_input(
@@ -594,6 +619,7 @@ def _run_bisection(
     df: gpd.GeoDataFrame,
     cut_threshold: None | float,
     processes: int,
+    blade_segment: None | float = None,
 ) -> gpd.GeoDataFrame:
     LOGGER.debug("Bisecting large geometries")
     if cut_threshold is not None and cut_threshold > 0:
@@ -622,7 +648,10 @@ def _run_bisection(
                     (
                         pos,
                         executor.submit(
-                            bisect_geometry, df.geometry.iloc[pos], cut_threshold
+                            bisect_geometry,
+                            df.geometry.iloc[pos],
+                            cut_threshold,
+                            blade_segment,
                         ),
                     )
                     for pos in oversized_positions
@@ -830,7 +859,8 @@ def index(
     )
     df = _prepare_dataframe(df, id_field, keep_attributes)
     features_in = set(df.index)
-    df = _run_bisection(df, cut_threshold, processes)
+    blade_segment = _blade_segment(indexer, dggs, resolution, cut_crs)
+    df = _run_bisection(df, cut_threshold, processes, blade_segment)
     df = _clean_geometries(df, indexer)
 
     ddf = dgpd.from_geopandas(df, chunksize=max(1, chunksize), sort=True)
