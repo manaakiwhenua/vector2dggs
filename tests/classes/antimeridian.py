@@ -1,3 +1,4 @@
+import warnings
 from unittest import TestCase
 
 import geopandas as gpd
@@ -61,8 +62,12 @@ class TestAntimeridian(TestRunthrough):
         # The true area of a 200km x 200km square near the equator is
         # roughly 3.2 degrees^2; the unfixed reprojection artifact wraps the
         # "long way" around the globe instead, giving an area in the
-        # hundreds.
-        self.assertAlmostEqual(cleaned.geometry.area.sum(), 3.25, places=1)
+        # hundreds. Square degrees are the point here, so silence the
+        # geographic-CRS area warning.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            area = cleaned.geometry.area.sum()
+        self.assertAlmostEqual(area, 3.25, places=1)
 
     def test_h3_run_across_antimeridian(self):
         """H3 doesn't require the pre-split fix - it indexes this correctly
