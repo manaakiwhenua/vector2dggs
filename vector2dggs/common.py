@@ -1,7 +1,6 @@
 import json
 import logging
 import multiprocessing
-import os
 import shutil
 import tempfile
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
@@ -111,21 +110,31 @@ def db_conn_and_input_path(
     return (None, str(vector_input))
 
 
-def resolve_output_path(output_directory: str | Path, overwrite: bool) -> str | Path:
+def resolve_output_path(output_directory: str | Path, overwrite: bool) -> Path:
     output_directory = Path(output_directory)
-    outputexists = os.path.exists(output_directory)
-
-    if outputexists and not overwrite:
+    if output_directory.exists() and not overwrite:
         raise FileExistsError(
             f"{output_directory} already exists; if you want to overwrite this, use the -o/--overwrite flag"
         )
+    return output_directory
 
-    elif outputexists and overwrite:
+
+def _commit_output(staging: Path, output_directory: Path) -> Path:
+    """
+    Move the staged run into place. The previous output (if any) is renamed
+    aside before the swap and only deleted afterwards, so no crash window
+    destroys data; each placement is a single same-filesystem rename.
+    """
+    if output_directory.exists():
         LOGGER.warning(f"Overwriting the contents of {output_directory}")
-        shutil.rmtree(output_directory)
-
-    output_directory.mkdir(parents=True, exist_ok=True)
-
+        replaced = output_directory.parent / f".{output_directory.name}.replaced"
+        if replaced.exists():
+            shutil.rmtree(replaced)
+        output_directory.rename(replaced)
+        staging.rename(output_directory)
+        shutil.rmtree(replaced)
+    else:
+        staging.rename(output_directory)
     return output_directory
 
 
@@ -836,7 +845,63 @@ def index(
 ) -> Path | str:
     """
     Performs multi-threaded DGGS indexing on geometries (including multipart and collections).
+
+    The run is staged in a sibling directory and only moved into place on
+    success, so a failed run never destroys previous output (with overwrite)
+    nor leaves a half-written target behind.
     """
+    output_directory = resolve_output_path(output_directory, overwrite)
+    staging = output_directory.parent / f".{output_directory.name}.staging"
+    if staging.exists():
+        shutil.rmtree(staging)
+    staging.mkdir(parents=True)
+    try:
+        _index(
+            dggs,
+            input_file,
+            staging,
+            resolution,
+            parent_res,
+            keep_attributes,
+            chunksize,
+            spatial_sorting,
+            cut_threshold,
+            processes,
+            compression,
+            id_field,
+            cut_crs,
+            con,
+            layer,
+            geom_col,
+            geo,
+            compact,
+        )
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    return _commit_output(staging, output_directory)
+
+
+def _index(
+    dggs: str,
+    input_file: Path | str,
+    output_directory: Path,
+    resolution: int,
+    parent_res: None | str | int,
+    keep_attributes: bool,
+    chunksize: int,
+    spatial_sorting: str,
+    cut_threshold: None | float,
+    processes: int,
+    compression: str,
+    id_field: str | None,
+    cut_crs: pyproj.CRS | None,
+    con: SQLConnectionType | None,
+    layer: str | None,
+    geom_col: str,
+    geo: str,
+    compact: bool,
+) -> None:
     check_compaction_requirements(compact, id_field)
     indexer = idxfactory.indexer_instance(dggs)
     parent_res = get_parent_res(dggs, parent_res, resolution)
@@ -847,7 +912,7 @@ def index(
             "Input contained 0 features (layer=%s). Nothing to index; exiting.",
             layer if layer else "<default>",
         )
-        return output_directory
+        return
     if df.crs is None:
         raise ValueError(
             "Input has no CRS, which is required for indexing. "
@@ -903,7 +968,7 @@ def index(
                     "No features were indexed (resolution %s may be too coarse for the input). Nothing to write; exiting.",
                     resolution,
                 )
-                return output_directory
+                return
 
             _parent_partitioning(
                 indexer,
@@ -914,8 +979,5 @@ def index(
                 id_field,
                 compact,
                 geo,
-                overwrite=overwrite,
                 compression=compression,
             )
-
-    return output_directory
