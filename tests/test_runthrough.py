@@ -82,6 +82,8 @@ with contextlib.suppress(ImportError):
 with contextlib.suppress(ImportError):
     from .classes.postgis import TestPostGIS as TestPostGIS
 with contextlib.suppress(ImportError):
+    from .classes.readme_help import TestReadmeHelp as TestReadmeHelp
+with contextlib.suppress(ImportError):
     from .classes.write_limits import TestProcessPoolContext as TestProcessPoolContext
 with contextlib.suppress(ImportError):
     from .classes.write_limits import TestRaiseRlimitNofile as TestRaiseRlimitNofile

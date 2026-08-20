@@ -1,5 +1,4 @@
 import multiprocessing
-import tempfile
 from enum import StrEnum, unique
 
 MIN_H3, MAX_H3 = 0, 15
@@ -205,6 +204,6 @@ DEFAULTS = {
     "cp": "snappy",
     "lyr": None,
     "g": "geom",
-    "tempdir": tempfile.tempdir,
+    "tempdir": None,
     "geo": GeoOutputMode.NONE.value,
 }
