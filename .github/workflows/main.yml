@@ -16,30 +16,4 @@ jobs:
         uses : manaakiwhenua/manaakiwhenua-standards@v0.2.2
 
   test:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-      - name: Install Poetry
-        run: pip install poetry
-
-      - name: Install dependencies
-        run: poetry install -E all --with dev
-
-      - name: Lint (ruff)
-        run: poetry run ruff check .
-
-      - name: Format check (black)
-        run: poetry run black --check .
-
-      - name: Type check (mypy)
-        run: poetry run mypy vector2dggs/
-
-      - name: Run tests
-        run: poetry run pytest -n auto tests/
+    uses: ./.github/workflows/test.yml
