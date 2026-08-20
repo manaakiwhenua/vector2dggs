@@ -1,5 +1,5 @@
-from shapely import wkt
-from shapely.geometry import Polygon
+from shapely import has_z, wkt
+from shapely.geometry import LinearRing, Polygon
 
 from vector2dggs.katana import katana
 
@@ -41,3 +41,21 @@ class TestKatana(TestRunthrough):
             self.assertLessEqual((maxx - minx) * (maxy - miny), threshold)
         # No area may be lost or duplicated by the splitting
         self.assertAlmostEqual(sum(p.area for p in parts), square.area, places=6)
+
+    def test_linearring_input_becomes_polygon(self):
+        ring = LinearRing([(0, 0), (10, 0), (10, 10), (0, 10)])
+        pieces = katana(ring, threshold=1000.0)
+        self.assertEqual([p.geom_type for p in pieces], ["Polygon"])
+
+    def test_3d_input_is_flattened(self):
+        poly = Polygon([(0, 0, 5), (10, 0, 5), (10, 10, 5), (0, 10, 5)])
+        pieces = katana(poly, threshold=30.0)
+        self.assertGreater(len(pieces), 1)
+        self.assertFalse(any(has_z(p) for p in pieces))
+
+    def test_invalid_bowtie_is_made_valid(self):
+        bowtie = Polygon([(0, 0), (10, 10), (10, 0), (0, 10)])  # self-intersecting
+        pieces = katana(bowtie, threshold=30.0)
+        self.assertTrue(all(p.is_valid for p in pieces))
+        # a bowtie's true area is the two triangles
+        self.assertAlmostEqual(sum(p.area for p in pieces), 50.0, places=6)
