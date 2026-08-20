@@ -38,90 +38,109 @@ A bare `pip install vector2dggs` **will not install any DGGS backends**.
 
 ## Usage
 
+All commands (`h3`, `rhp`, `s2`, `a5`, `geohash`) share the same interface:
+
 ```bash
+vector2dggs <dggs> [OPTIONS] VECTOR_INPUT OUTPUT_DIRECTORY
+```
+
+`VECTOR_INPUT` may be a local file (anything GDAL can read), a remote URI or GDAL virtual path (e.g. `https://…`, `/vsizip/…`), or a PostgreSQL/PostGIS connection URL (with `-lyr` naming the table). `OUTPUT_DIRECTORY` is written as an Apache Parquet data store: a directory with one file per partition. A failed run never destroys existing output: results are staged and only swapped into place on success.
+
+The options that benefit from explanation:
+
+- `-r`/`--resolution`: the target DGGS resolution. Each output row is one (feature, cell) pair; a cell is included when its centre falls inside the feature, uniformly across all backends.
+- `-pr`/`--parent_res`: a coarser resolution used to partition the output (hive directories such as `h3_03=…`); defaults to a fixed offset below the target resolution.
+- `-id`/`--id_field`: the feature identifier carried into the output; defaults to a synthetic index. Rows sharing an id are treated as one feature.
+- `-co`/`--compact` (requires `-id`): merges complete sets of sibling cells belonging to one feature, to no coarser than the parent resolution. Compacted output expands back to exactly the full-resolution result.
+- `-c`/`--cut_threshold` and `-crs`/`--cut_crs`: large geometries are recursively bisected before indexing, for parallelism and bounded memory; the default threshold is a benchmarked size derived from the target resolution, and `-c 0` disables bisection. Bisection does not affect which cells are produced.
+- `--geo`: plain Parquet by default; `point` or `polygon` writes GeoParquet (v1.1.0) cell geometries instead.
+
+Inputs that span the antimeridian are handled: H3, S2 and A5 index geodesically, while rHEALPix and Geohash input is pre-split at ±180°; geographic inputs that store unwrapped longitudes (e.g. the Chatham Islands at 183°E) are normalised.
+
+The full reference (`vector2dggs h3 --help`; the other commands differ only in their resolution ranges):
+
+```
 Usage: vector2dggs h3 [OPTIONS] VECTOR_INPUT OUTPUT_DIRECTORY
 
   Ingest a vector dataset and index it to the H3 DGGS.
 
   VECTOR_INPUT is the path to input vector geospatial data. OUTPUT_DIRECTORY
-  should be a directory, not a file or database table, as it will instead be
-  the write location for an Apache Parquet data store.
+  should be a directory, not a file or database table, as it will instead be the
+  write location for an Apache Parquet data store.
 
 Options:
-  -v, --verbosity LVL             Either CRITICAL, ERROR, WARNING, INFO or
-                                  DEBUG  [default: INFO]
+  -v, --verbosity LVL             Either CRITICAL, ERROR, WARNING, INFO or DEBUG
+                                  [default: INFO]
   -r, --resolution [0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15]
                                   H3 resolution to index  [required]
   -pr, --parent_res [0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15]
-                                  H3 parent resolution for the output
-                                  partition. Defaults to resolution - 6
+                                  H3 parent resolution for the output partition.
+                                  Defaults to resolution - 6
   -id, --id_field TEXT            Field to use as an ID; defaults to a
-                                  constructed single 0...n index on the
-                                  original feature order.
-  -k, --keep_attributes           Retain attributes in output. The default is
-                                  to create an output that only includes H3
-                                  cell ID and the ID given by the -id field
-                                  (or the default index ID).
-  -ch, --chunksize INTEGER RANGE  The number of rows per index partition to
-                                  use when spatially partitioning. Adjusting
-                                  this number will trade off memory use and
-                                  time.  [default: 50; x>=1; required]
+                                  constructed single 0...n index on the original
+                                  feature order.
+  -k, --keep_attributes           Retain attributes in output. The default is to
+                                  create an output that only includes H3 cell ID
+                                  and the ID given by the -id field (or the
+                                  default index ID).
+  -ch, --chunksize INTEGER RANGE  The number of rows per index partition to use
+                                  when spatially partitioning. Adjusting this
+                                  number will trade off memory use and time.
+                                  [default: 50; x>=1; required]
   -s, --spatial_sorting [hilbert|morton|geohash|none]
-                                  Spatial sorting method when performing
-                                  spatial partitioning.  [default: none]
-  -crs, --cut_crs INTEGER         Set the coordinate reference system (CRS)
-                                  used for cutting large geometries (see
+                                  Spatial sorting method when performing spatial
+                                  partitioning.  [default: none]
+  -crs, --cut_crs INTEGER         Set the coordinate reference system (CRS) used
+                                  for cutting large geometries (see
                                   `--cut_threshold`). Defaults to the same CRS
                                   as the input. Should be a valid EPSG code.
   -c, --cut_threshold FLOAT       Cutting up large geometries into smaller
                                   geometries based on a target area. Units are
                                   assumed to match the input CRS units unless
-                                  `--cut_crs` is also given, in which case
-                                  units match the units of the supplied CRS.
-                                  If left unspecified, the threshold defaults
-                                  to the area of a few thousand cells of the
-                                  target resolution (a benchmarked balance of
+                                  `--cut_crs` is also given, in which case units
+                                  match the units of the supplied CRS. If left
+                                  unspecified, the threshold defaults to the
+                                  area of a few thousand cells of the target
+                                  resolution (a benchmarked balance of
                                   parallelism against per-piece overhead),
                                   converted into the squared units of the
                                   cutting CRS. A threshold of 0 will skip
                                   bisection entirely (effectively ignoring
                                   --cut_crs).
   -t, --threads INTEGER RANGE     Amount of threads used for operation
-                                  [default: NUM_CPUS - 1; x>=1]
+                                  [default: (CPU count - 1); x>=1]
   -cp, --compression TEXT         Compression method to use for the output
                                   Parquet files. Options include 'snappy',
                                   'gzip', 'brotli', 'lz4', 'zstd', etc. Use
-                                  'none' for no compression.  [default:
-                                  snappy]
-  -lyr, --layer TEXT              Name of the layer or table to read when
-                                  using an input that supports layers or
-                                  tables
+                                  'none' for no compression.  [default: snappy]
+  -lyr, --layer TEXT              Name of the layer or table to read when using
+                                  an input that supports layers or tables
   -g, --geom_col TEXT             Column name to use when using a spatial
-                                  database connection as input  [default:
-                                  geom]
+                                  database connection as input  [default: geom]
   --geo [none|point|polygon]      Select geometry encoding for the output:
                                   'none' for regular Parquet (no GeoParquet
                                   metadata), or 'point'/'polygon' to write
                                   GeoParquet (v1.1.0) with the corresponding
                                   geometry type.  [default: none]
-  --tempdir PATH                  Temporary data is created during the
-                                  execution of this program. This parameter
-                                  allows you to control where this data will
-                                  be written.
+  --tempdir PATH                  Temporary data is created during the execution
+                                  of this program. This parameter allows you to
+                                  control where this data will be written.
+                                  [default: (system temp dir)]
   -co, --compact                  Compact the H3 cells up to the parent
                                   resolution. Compaction requires an id_field.
   -o, --overwrite
   --version                       Show the version and exit.
   --help                          Show this message and exit.
-
 ```
+
+vector2dggs is a command-line tool; the underlying Python API (`vector2dggs.common.index`) can be called directly but is not yet a stable, supported interface.
 
 ## Visualising output
 
 Output is in the Apache Parquet format, a directory with one file per partition. With `--geo point` or `--geo polygon` output will be written as GeoParquet (v1.1.0) with the respective geometry types. GeoParquet can be visualised using desktop GIS tools.
 
 The Apache Parquet output is indexed by an ID column (which you can specify), so it should be ready for two intended use-cases:
-- Joining attribute data from the original feature-level data onto computer DGGS cells.
+- Joining attribute data from the original feature-level data onto computed DGGS cells.
 - Joining other data to this output on the DGGS cell ID. (The output has a column like `{dggs}_\d`, e.g. `h3_09` or `h3_12` according to the target resolution, zero-padded to account for the maximum resolution of the DGGS).
 
 ## Compaction

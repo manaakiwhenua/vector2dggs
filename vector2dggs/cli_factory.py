@@ -94,6 +94,7 @@ def make_dggs_command(
         "--threads",
         required=False,
         default=const.DEFAULTS["t"],
+        show_default="CPU count - 1",
         type=click.IntRange(min=1),
         help="Amount of threads used for operation",
         nargs=1,
@@ -137,6 +138,7 @@ def make_dggs_command(
     @click.option(
         "--tempdir",
         default=const.DEFAULTS["tempdir"],
+        show_default="system temp dir",
         type=click.Path(),
         help="Temporary data is created during the execution of this program. This parameter allows you to control where this data will be written.",
     )
