@@ -44,18 +44,13 @@ All commands (`h3`, `rhp`, `s2`, `a5`, `geohash`) share the same interface:
 vector2dggs <dggs> [OPTIONS] VECTOR_INPUT OUTPUT_DIRECTORY
 ```
 
-`VECTOR_INPUT` may be a local file (anything GDAL can read), a remote URI or GDAL virtual path (e.g. `https://…`, `/vsizip/…`), or a PostgreSQL/PostGIS connection URL (with `-lyr` naming the table). `OUTPUT_DIRECTORY` is written as an Apache Parquet data store: a directory with one file per partition. A failed run never destroys existing output: results are staged and only swapped into place on success.
-
-The options that benefit from explanation:
+`VECTOR_INPUT` may be a local file (anything GDAL can read), a remote URI or GDAL virtual path (e.g. `https://…`, `/vsizip/…`), or a PostgreSQL/PostGIS connection URL (with `-lyr` naming the table). `OUTPUT_DIRECTORY` is written as an Apache Parquet data store: a directory with one file per partition.
 
 - `-r`/`--resolution`: the target DGGS resolution. Each output row is one (feature, cell) pair; a cell is included when its centre falls inside the feature, uniformly across all backends.
 - `-pr`/`--parent_res`: a coarser resolution used to partition the output (hive directories such as `h3_03=…`); defaults to a fixed offset below the target resolution.
 - `-id`/`--id_field`: the feature identifier carried into the output; defaults to a synthetic index. Rows sharing an id are treated as one feature.
 - `-co`/`--compact` (requires `-id`): merges complete sets of sibling cells belonging to one feature, to no coarser than the parent resolution. Compacted output expands back to exactly the full-resolution result.
-- `-c`/`--cut_threshold` and `-crs`/`--cut_crs`: large geometries are recursively bisected before indexing, for parallelism and bounded memory; the default threshold is a benchmarked size derived from the target resolution, and `-c 0` disables bisection. Bisection does not affect which cells are produced.
 - `--geo`: plain Parquet by default; `point` or `polygon` writes GeoParquet (v1.1.0) cell geometries instead.
-
-Inputs that span the antimeridian are handled: H3, S2 and A5 index geodesically, while rHEALPix and Geohash input is pre-split at ±180°; geographic inputs that store unwrapped longitudes (e.g. the Chatham Islands at 183°E) are normalised.
 
 The full reference (`vector2dggs h3 --help`; the other commands differ only in their resolution ranges):
 
@@ -133,7 +128,7 @@ Options:
   --help                          Show this message and exit.
 ```
 
-vector2dggs is a command-line tool; the underlying Python API (`vector2dggs.common.index`) can be called directly but is not yet a stable, supported interface.
+vector2dggs is a command-line tool; the underlying Python API (`vector2dggs.common.index`) can be called directly but is not a stable, supported interface.
 
 ## Visualising output
 
