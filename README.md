@@ -35,6 +35,8 @@ If you want only a subset, use the pattern `pip install vector2dggs[rhp]` (for o
 
 A bare `pip install vector2dggs` **will not install any DGGS backends**.
 
+PostgreSQL/PostGIS input requires the `postgres` extra (e.g. `pip install vector2dggs[h3,postgres]`); it is included in `all`.
+
 
 ## Usage
 

@@ -26,7 +26,6 @@ click-log = "^0.4.0"
 pyarrow = "^23.0.1"
 pyproj = "^3.7"
 sqlalchemy = "^2.0.32"
-psycopg2 = "^2.9.9"
 shapely = "^2.1"
 numpy = "^2"
 h3 = { version = "^4.1", optional = true }
@@ -36,6 +35,7 @@ s2geometry = { version = "^0.14.0", optional = true}
 rusty-polygon-geohasher = { version = "^0.2.3", optional = true}
 python-geohash = { version = "^0.8.5", optional = true}
 pya5 = { version = "^0.9.0", optional = true }
+psycopg2-binary = { version = "^2.9.9", optional = true }
 antimeridian = "^0.4.8"
 
 [tool.poetry.group.dev.dependencies]
@@ -77,5 +77,6 @@ rhp = ["rhppandas", "rhealpixdggs"]
 s2 = ["s2geometry"]
 a5 = ["pya5"]
 geohash = ["rusty-polygon-geohasher", "python-geohash"]
+postgres = ["psycopg2-binary"]
 # Convenience extras
-all = ["h3", "rhppandas", "rhealpixdggs", "s2geometry", "rusty-polygon-geohasher", "python-geohash", "pya5"]
+all = ["h3", "rhppandas", "rhealpixdggs", "s2geometry", "rusty-polygon-geohasher", "python-geohash", "pya5", "psycopg2-binary"]

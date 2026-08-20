@@ -103,7 +103,13 @@ def db_conn_and_input_path(
     except (ArgumentError, NoSuchModuleError):
         pass
     else:
-        return (sqlalchemy.create_engine(url), vector_input)
+        try:
+            return (sqlalchemy.create_engine(url), vector_input)
+        except ModuleNotFoundError as e:
+            raise ImportError(
+                f"Database input requires the '{e.name}' driver; for "
+                "PostgreSQL/PostGIS: pip install vector2dggs[postgres]"
+            ) from e
 
     # Remote URI or GDAL virtual path: raises DataSourceError if GDAL can't open it
     pyogrio.read_info(str(vector_input))
