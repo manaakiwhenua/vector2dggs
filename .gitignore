@@ -4,3 +4,4 @@ conda*
 .conda*
 .spyproject/
 .vscode/
+.pytest_cache/

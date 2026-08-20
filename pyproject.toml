@@ -51,6 +51,9 @@ geoalchemy2 = "^0.20.0"
 [tool.poetry.scripts]
 vector2dggs = "vector2dggs.cli:main"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
