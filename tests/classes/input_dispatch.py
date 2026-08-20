@@ -1,7 +1,7 @@
 import tempfile
 import zipfile
 from pathlib import Path
-from unittest import TestCase
+from unittest import TestCase, mock
 
 from pyogrio.errors import DataSourceError
 
@@ -26,6 +26,14 @@ class TestInputDispatch(TestCase):
             "postgresql+psycopg2://user:pw@localhost:1/db"
         )
         self.assertIsNotNone(con)
+
+    def test_missing_postgres_driver_gives_install_hint(self):
+        with mock.patch.object(
+            common.sqlalchemy,
+            "create_engine",
+            side_effect=ModuleNotFoundError("No module named 'psycopg2'"),
+        ), self.assertRaisesRegex(ImportError, r"vector2dggs\[postgres\]"):
+            common.db_conn_and_input_path("postgresql+psycopg2://u:p@localhost:1/db")
 
     def test_gdal_virtual_path_passed_through(self):
         with tempfile.TemporaryDirectory() as d:
