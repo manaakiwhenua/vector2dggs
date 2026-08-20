@@ -21,34 +21,25 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up Micromamba (Python + GDAL)
-        uses: mamba-org/setup-micromamba@v3.1.0
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
-          environment-name: vector2dggs-ci
-          create-args: >-
-            python=3.11
-            gdal=3.13.1
+          python-version: "3.11"
 
       - name: Install Poetry
-        shell: bash -el {0}
         run: pip install poetry
 
       - name: Install dependencies
-        shell: bash -el {0}
         run: poetry install -E all --with dev
 
       - name: Lint (ruff)
-        shell: bash -el {0}
         run: poetry run ruff check .
 
       - name: Format check (black)
-        shell: bash -el {0}
         run: poetry run black --check .
 
       - name: Type check (mypy)
-        shell: bash -el {0}
         run: poetry run mypy vector2dggs/
 
       - name: Run tests
-        shell: bash -el {0}
         run: poetry run pytest -n auto tests/

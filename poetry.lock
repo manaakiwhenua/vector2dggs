@@ -807,20 +807,6 @@ test-full = ["adlfs", "aiohttp (!=4.0.0a0,!=4.0.0a1)", "backports-zstd ; python_
 tqdm = ["tqdm"]
 
 [[package]]
-name = "gdal"
-version = "3.13.1"
-description = "GDAL: Geospatial Data Abstraction Library"
-optional = false
-python-versions = ">=3.8.0"
-groups = ["main"]
-files = [
-    {file = "gdal-3.13.1.tar.gz", hash = "sha256:94bb64d729ce73ceb75a314a15cba92696cdd854d99b6bf6b88a7b551227db74"},
-]
-
-[package.extras]
-numpy = ["numpy (>1.0.0)"]
-
-[[package]]
 name = "geoalchemy2"
 version = "0.20.0"
 description = "Using SQLAlchemy with Spatial Databases"
@@ -3433,4 +3419,4 @@ s2 = ["s2geometry"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "411f3926b9be5c0977fa867238b831972fec1127f69a28961effdaddf17e3421"
+content-hash = "ac15ba86ac18b12859ec4d7102b2a622e019bbe291f49007eefb4617b90d3650"

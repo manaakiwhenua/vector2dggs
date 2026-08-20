@@ -149,10 +149,9 @@ Compaction is supported with the `-co/--compact` argument. The result respects o
 In brief, to get started:
 
 - Install [Poetry](https://python-poetry.org/docs/basic-usage/)
-- Install [GDAL](https://gdal.org/)
-    - If you're on Windows, `pip install gdal` may be necessary before running the subsequent commands.
-    - On Linux, install GDAL 3.13.1+ according to your platform-specific instructions, including development headers, i.e. `libgdal-dev`. The Python `gdal` bindings must be matched by an equal-or-newer system `libgdal`.
 - Create and populate the virtual environment with `poetry install`. This will install necessary dependencies.
+
+No system GDAL is required: vector data is read via [pyogrio](https://pyogrio.readthedocs.io/), whose wheels bundle GDAL. If you need a GDAL driver that pyogrio's bundled build lacks, build pyogrio from source against your own GDAL.
 - Subsequently, activate the virtual environment with `eval "$(poetry env activate)"`.
 
 If you run `poetry install -E all --with dev` and activate the environment with `eval "$(poetry env activate)"`, the CLI tool will be aliased so you can simply use `vector2dggs` rather than `poetry run vector2dggs`.
