@@ -8,6 +8,8 @@ from vector2dggs.indexerfactory import indexer_instance
 from .base import skip_unless_backend
 
 RES = {"h3": 8, "s2": 13, "a5": 17, "rhp": 8, "geohash": 6}
+# fine enough that multiple cell centres fall inside the test hole
+HOLE_RES = {"h3": 10, "s2": 15, "a5": 18, "rhp": 9, "geohash": 7}
 
 
 class TestPolyfillTokenContract(TestCase):
@@ -40,17 +42,39 @@ class TestPolyfillTokenContract(TestCase):
         non_str = {type(c).__name__ for c in result.index if not isinstance(c, str)}
         self.assertFalse(non_str, f"non-str cell ids in index: {non_str}")
 
+    def _assert_hole_respected(self, dggs):
+        skip_unless_backend(dggs)
+        shell = [(174.70, -41.30), (174.76, -41.30), (174.76, -41.24), (174.70, -41.24)]
+        hole = [(174.72, -41.28), (174.74, -41.28), (174.74, -41.26), (174.72, -41.26)]
+        donut = Polygon(shell, [hole])
+        # shrunk oracle: backends interpret the hole's straight edges as
+        # curves (sub-metre band), so only centres well inside the hole count
+        hole_core = Polygon(hole).buffer(-0.001)
+        df = gpd.GeoDataFrame({"fid": [1], "geometry": [donut]}, crs=4326)
+        indexer = indexer_instance(dggs)
+        result = indexer.polyfill(df, HOLE_RES[dggs])
+        self.assertGreater(len(result), 0)
+        leaked = [
+            c for c in result.index if hole_core.contains(indexer.cell_to_point(c))
+        ]
+        self.assertFalse(leaked, f"cells with centres inside the hole: {leaked[:5]}")
+
     def test_h3(self):
         self._assert_str_index("h3")
+        self._assert_hole_respected("h3")
 
     def test_s2(self):
         self._assert_str_index("s2")
+        self._assert_hole_respected("s2")
 
     def test_a5(self):
         self._assert_str_index("a5")
+        self._assert_hole_respected("a5")
 
     def test_rhp(self):
         self._assert_str_index("rhp")
+        self._assert_hole_respected("rhp")
 
     def test_geohash(self):
         self._assert_str_index("geohash")
+        self._assert_hole_respected("geohash")

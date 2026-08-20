@@ -179,27 +179,6 @@ class GeohashVectorIndexer(VectorIndexer):
             return geohash
         return geohash.ljust(desired_length, child)
 
-    def gh_children(self, geohash: str, desired_resolution: int) -> int:
-        """
-        Determine the number of children in the geohash refinement, determined by
-        the additional character levels.
-
-        Not a part of the interface provided by VectorIndexer.
-        """
-        current_resolution = len(geohash)
-        additional_length = desired_resolution - current_resolution
-        return 32**additional_length  # Each new character increases resolution by 32
-
-    def get_central_child(self, geohash: str, precision: int):
-        """
-        Return an approximate central child of the geohash.
-        NB if only an arbitrary child is needed, use get_child_geohash
-
-        Not a part of the interface provided by VectorIndexer.
-        """
-        lat, lon = decode(geohash)
-        return encode(lat, lon, precision=precision)
-
     def _polygon_to_geohashes(self, polygon: Polygon, level: int) -> set[str]:
         """
         Function to compute geohash set for one polygon geometry
