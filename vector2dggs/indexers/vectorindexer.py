@@ -174,9 +174,7 @@ class VectorIndexer(ABC):
         pairs = pd.MultiIndex.from_arrays([df[id_field], df[dggs_col]])
 
         # Rows kept as-is: their (id, cell) survived compaction unchanged
-        keep = [
-            (id, cell) for id, cells in uncompressable.items() for cell in cells
-        ]
+        keep = [(id, cell) for id, cells in uncompressable.items() for cell in cells]
         keep_mask = pairs.isin(keep) if keep else np.zeros(len(df), dtype=bool)
         uncompressable_df = df[keep_mask].set_index(dggs_col)
 
@@ -195,9 +193,7 @@ class VectorIndexer(ABC):
             )
             sel = pairs.isin(parent_for_pair.index)
             compressable_df = df[sel].copy()
-            compressable_df[dggs_col] = parent_for_pair.reindex(
-                pairs[sel]
-            ).to_numpy()
+            compressable_df[dggs_col] = parent_for_pair.reindex(pairs[sel]).to_numpy()
             compressable_df = compressable_df.set_index(dggs_col)
         else:
             compressable_df = df.iloc[0:0].set_index(dggs_col)
