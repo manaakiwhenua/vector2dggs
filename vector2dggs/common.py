@@ -12,8 +12,6 @@ from uuid import uuid4
 import antimeridian
 import click
 import click_log
-import dask
-import dask.dataframe as dd
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -29,7 +27,6 @@ from shapely.geometry import GeometryCollection
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError, NoSuchModuleError
 from tqdm import tqdm
-from tqdm.dask import TqdmCallback
 
 import vector2dggs.constants as const
 import vector2dggs.indexerfactory as idxfactory
@@ -216,7 +213,7 @@ def write_partition(
     compression: str,
 ) -> int:
     """
-    Hive-partitioned parquet write of one dask partition; GeoParquet when
+    Hive-partitioned parquet write of one dataframe; GeoParquet when
     geo_serialisation_method (cell -> shapely geometry) is given.
     """
     if partition_df.empty:
@@ -322,14 +319,40 @@ def _with_geoparquet_metadata(table: pa.Table) -> pa.Table:
     )
 
 
-def _merge_partition_files(partition_dir: Path, compression: str) -> None:
+def _geom_fn(indexer: VectorIndexer, geo: str):
+    if geo == const.GeoOutputMode.NONE.value:
+        return None
+    if geo == const.GeoOutputMode.POINT.value:
+        return indexer.cell_to_point
+    if geo == const.GeoOutputMode.POLYGON.value:
+        return indexer.cell_to_polygon
+    raise ValueError(
+        f"Unknown geo output mode '{geo}'. Expected one of {const.GEOM_TYPES}."
+    )
+
+
+def _merge_partition_files(
+    partition_dir: Path,
+    compression: str,
+    indexer: VectorIndexer | None = None,
+    resolution: int | None = None,
+    parent_res: int | None = None,
+    id_field: str | None = None,
+    geo: str | None = None,
+) -> None:
     """
-    Merges all Parquet files within a single hive partition directory into one file.
-    Preserves and correctly aggregates GeoParquet 'geo' metadata (bbox, geometry_types)
-    if present. Peak memory is bounded to one parent cell's data at a time.
+    Merges all Parquet files within a single hive partition directory into one
+    file. Preserves and correctly aggregates GeoParquet 'geo' metadata (bbox,
+    geometry_types) if present. When a compactor is given, the merged rows are
+    compacted here — the hive write already routes a parent cell's every row
+    into this directory, and the resolution floor stops compaction crossing a
+    parent boundary, so each directory is a complete, independent unit — and
+    cell geometries are (re)generated for the compacted cells. Peak memory is
+    bounded to one parent cell's data at a time.
     """
+    compacting = indexer is not None
     files = sorted(partition_dir.glob("*.parquet"))
-    if len(files) <= 1:
+    if not files or (len(files) <= 1 and not compacting):
         return
 
     # partitioning=None: don't hive-parse the file's own path into a column
@@ -387,90 +410,69 @@ def _merge_partition_files(partition_dir: Path, compression: str) -> None:
         }
         table = table.replace_schema_metadata(new_meta)
 
+    if compacting:
+        assert (
+            indexer and id_field and resolution is not None and parent_res is not None
+        )
+        dggs_col = f"{indexer.dggs}_{resolution:02}"
+        df = table.to_pandas()
+        df = indexer.compaction(
+            df, resolution, list(df.columns), dggs_col, id_field, parent_res
+        )
+        geom_fn = _geom_fn(indexer, geo) if geo else None
+        if geom_fn is not None:
+            cells = df.index.to_series(index=df.index)
+            df = df.assign(geometry=shapely.to_wkb(cells.map(geom_fn), hex=False))
+        table = pa.Table.from_pandas(df, preserve_index=True)
+        if geom_fn is not None:
+            table = _with_geoparquet_metadata(table)
+
     merged = partition_dir / f"part.0-{uuid4().hex}.parquet"
     pq.write_table(table, merged, compression=compression)
     for f in files:
         f.unlink()
 
 
-def _parent_partitioning(
+def _merge_output(
     indexer: VectorIndexer,
-    input_dir: Path,
     output_dir: Path | str,
     resolution: int,
     parent_res: int,
     id_field: str | None,
     compact: bool,
     geo: str,
-    **kwargs,
+    compression: str,
+    processes: int,
 ) -> None:
-    partition_col = f"{indexer.dggs}_{parent_res:02}"
-    dggs_col = f"{indexer.dggs}_{resolution:02}"
-
-    # Read the parquet files into a Dask DataFrame
-    ddf = dd.read_parquet(input_dir, engine="pyarrow")
-    meta = ddf._meta
-
-    with TqdmCallback(
-        desc=f"Parent partitioning, writing {'compacted ' if compact else ''}output"
-    ):
-
-        if compact:
-            # Shuffle by parent cell first: compaction is per-partition, and
-            # the parent_res floor means siblings can only merge within one
-            # parent cell.
-            ddf = (
-                ddf.reset_index(drop=False)
-                .dropna(subset=[partition_col])
-                .shuffle(on=partition_col)
-                .map_partitions(
-                    indexer.compaction,
-                    resolution,
-                    meta.columns.to_list(),  # Column order to be returned
-                    dggs_col,
-                    id_field,
-                    parent_res,
-                    meta=meta,
-                )
+    """
+    Consolidate each hive partition directory to a single file (aggregating
+    GeoParquet metadata), compacting per-directory when requested: the hive
+    write routes a parent cell's every row into its directory, and the
+    resolution floor keeps compaction within one parent, so no shuffle is
+    needed and peak memory is one parent cell's data. Directories are
+    processed in a process pool: compaction is pure Python, so threads
+    would serialise on the GIL.
+    """
+    dirs = [d for d in sorted(Path(output_dir).iterdir()) if d.is_dir()]
+    desc = (
+        "Compacting and merging" if compact else "Merging to one file per parent cell"
+    )
+    with ProcessPoolExecutor(
+        max_workers=max(1, processes), mp_context=_mp_context()
+    ) as executor:
+        futures = [
+            executor.submit(
+                _merge_partition_files,
+                d,
+                compression,
+                *((indexer, resolution, parent_res, id_field, geo) if compact else ()),
             )
-
-        if geo == const.GeoOutputMode.NONE.value:
-            geom_fn = None
-        elif geo == const.GeoOutputMode.POINT.value:
-            geom_fn = indexer.cell_to_point
-        elif geo == const.GeoOutputMode.POLYGON.value:
-            geom_fn = indexer.cell_to_polygon
-        else:
-            raise ValueError(
-                f"Unknown geo output mode '{geo}'. Expected one of {const.GEOM_TYPES}."
-            )
-
-        write_tasks = [
-            dask.delayed(write_partition)(
-                part,
-                geom_fn,
-                output_dir,
-                partition_col,
-                dggs_col,
-                kwargs.get("compression", "ZSTD"),
-            )
-            for part in ddf.to_delayed()
+            for d in dirs
         ]
-        with TqdmCallback(desc="Writing output"):
-            dask.compute(*write_tasks)
+        for future in tqdm(as_completed(futures), total=len(futures), desc=desc):
+            future.result()
 
-        # Combine multiple parts per parent partition into one file per parent partition, to avoid too many small files and to correctly aggregate GeoParquet metadata; this is helpful for cloud object storage and spatial databases, which often perform better with fewer files
-        merge_tasks = [
-            dask.delayed(_merge_partition_files)(d, kwargs.get("compression", "ZSTD"))
-            for d in sorted(Path(output_dir).iterdir())
-            if d.is_dir()
-        ]
-        with TqdmCallback(desc="Merging to one file per parent cell"):
-            dask.compute(*merge_tasks)
-
-        LOGGER.debug("GeoParquet output writing complete")
-
-    LOGGER.debug("Parent cell partitioning complete")
+    LOGGER.debug("Output writing complete")
 
 
 def _polyfill(
@@ -481,12 +483,14 @@ def _polyfill(
     output_directory: str,
     compression: str,
     id_col: str,
+    geo: str,
+    compact: bool,
 ) -> np.ndarray:
     """
-    Reads a geoparquet, performs polyfilling (for Polygon),
-    linetracing (for LineString), or indexing (for Point),
-    and writes out to parquet. Returns the ids of features that
-    produced at least one cell.
+    Reads a geoparquet piece file, performs polyfilling (for Polygon),
+    linetracing (for LineString), or indexing (for Point), and writes the
+    cells hive-partitioned by parent cell directly into the output
+    directory. Returns the ids of features that produced at least one cell.
     """
     df = gpd.read_parquet(pq_in).reset_index()
     if df.empty:
@@ -501,11 +505,18 @@ def _polyfill(
 
     df.index.rename(f"{indexer.dggs}_{resolution:02}", inplace=True)
 
-    # Secondary (parent) index, used later for partitioning
+    # Secondary (parent) index, used for hive partitioning
     df = indexer.secondary_index(df, parent_res)
 
-    df.to_parquet(
-        PurePath(output_directory, pq_in.name), engine="auto", compression=compression
+    # With compaction, geometry is serialised after compacting (merge step)
+    geom_fn = None if compact else _geom_fn(indexer, geo)
+    write_partition(
+        df,
+        geom_fn,
+        Path(output_directory),
+        f"{indexer.dggs}_{parent_res:02}",
+        f"{indexer.dggs}_{resolution:02}",
+        compression,
     )
     return df[id_col].unique()
 
@@ -857,6 +868,8 @@ def _run_dggs_indexing(
     compression: str,
     processes: int,
     id_col: str,
+    geo: str,
+    compact: bool,
 ) -> set:
     LOGGER.debug("DGGS indexing by spatial partitions with resolution: %d", resolution)
     args = [
@@ -868,6 +881,8 @@ def _run_dggs_indexing(
             output_dir,
             compression,
             id_col,
+            geo,
+            compact,
         )
         for filepath in filepaths
     ]
@@ -1018,40 +1033,41 @@ def _index(
         pbar.close()
         filepaths = [f.absolute() for f in Path(tmpdir).glob("*")]
 
-        with tempfile.TemporaryDirectory(suffix=".parquet") as tmpdir2:
-            indexed_ids = _run_dggs_indexing(
-                indexer,
-                filepaths,
+        indexed_ids = _run_dggs_indexing(
+            indexer,
+            filepaths,
+            resolution,
+            parent_res,
+            str(output_directory),
+            compression,
+            processes,
+            id_field or "fid",
+            geo,
+            compact,
+        )
+        dropped = features_in - indexed_ids
+        if dropped:
+            LOGGER.warning(
+                "%d of %d features produced no cells at resolution %s and were omitted",
+                len(dropped),
+                len(features_in),
                 resolution,
-                parent_res,
-                tmpdir2,
-                compression,
-                processes,
-                id_field or "fid",
             )
-            dropped = features_in - indexed_ids
-            if dropped:
-                LOGGER.warning(
-                    "%d of %d features produced no cells at resolution %s and were omitted",
-                    len(dropped),
-                    len(features_in),
-                    resolution,
-                )
-            if not any(Path(tmpdir2).glob("*.parquet")):
-                LOGGER.warning(
-                    "No features were indexed (resolution %s may be too coarse for the input). Nothing to write; exiting.",
-                    resolution,
-                )
-                return
+        if not any(d.is_dir() for d in Path(output_directory).iterdir()):
+            LOGGER.warning(
+                "No features were indexed (resolution %s may be too coarse for the input). Nothing to write; exiting.",
+                resolution,
+            )
+            return
 
-            _parent_partitioning(
-                indexer,
-                Path(tmpdir2),
-                output_directory,
-                resolution,
-                parent_res,
-                id_field,
-                compact,
-                geo,
-                compression=compression,
-            )
+        _merge_output(
+            indexer,
+            output_directory,
+            resolution,
+            parent_res,
+            id_field,
+            compact,
+            geo,
+            compression,
+            processes,
+        )
