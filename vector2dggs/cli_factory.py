@@ -65,13 +65,6 @@ def make_dggs_command(
         nargs=1,
     )
     @click.option(
-        "-s",
-        "--spatial_sorting",
-        type=click.Choice(const.SPATIAL_SORTING_METHODS),
-        default=const.DEFAULTS["s"],
-        help="Spatial sorting method when performing spatial partitioning.",
-    )
-    @click.option(
         "-crs",
         "--cut_crs",
         required=False,
@@ -158,7 +151,6 @@ def make_dggs_command(
         id_field: str,
         keep_attributes: bool,
         chunksize: int,
-        spatial_sorting: str,
         cut_crs: int,
         cut_threshold: float,
         threads: int,
@@ -176,7 +168,6 @@ def make_dggs_command(
         common.check_resolutions(resolution, parent_res)
         common.check_compaction_requirements(compact, id_field)
 
-        spatial_sorting = const.SpatialSortingMethod(spatial_sorting).value
         geo = const.GeoOutputMode(geo).value
 
         con, vector_input = common.db_conn_and_input_path(vector_input)
@@ -194,7 +185,6 @@ def make_dggs_command(
             parent_res,
             keep_attributes,
             chunksize,
-            spatial_sorting,
             cut_threshold,
             threads,
             compression=compression,
