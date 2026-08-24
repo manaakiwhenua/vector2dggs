@@ -170,9 +170,14 @@ DGGS_CELL_AREA_M2_BY_RES = {
 }
 
 
-# Features per ingest batch: bounds peak memory of the read -> bisect ->
-# clean front half; everything downstream streams from staged parquet.
-INGEST_BATCH_ROWS = 100_000
+# Ingest batching bounds the memory of the read -> bisect -> clean front
+# half. Batch size adapts to the observed bytes-per-feature of the previous
+# batch, targeting this many raw-frame bytes per batch. The front half
+# holds several transient copies of a batch (read buffers, bisection,
+# cleaning), so peak memory runs a small multiple of this target.
+TARGET_BATCH_BYTES = 64 * 2**20
+INGEST_PROBE_ROWS = 10_000
+INGEST_MAX_BATCH_ROWS = 1_000_000
 
 # Staged worker files per worker across a run (load-balance sweet spot);
 # file row count is derived from the feature count and clamped.

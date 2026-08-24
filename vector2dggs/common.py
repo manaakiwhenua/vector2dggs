@@ -607,6 +607,25 @@ def _feature_count(
     return pyogrio.read_info(str(input_file), layer=layer)["features"]
 
 
+def _approx_frame_bytes(df: gpd.GeoDataFrame) -> int:
+    """
+    In-memory footprint estimate: column data, geometry coordinates, and a
+    per-geometry object overhead (which dominates for small geometries).
+    """
+    coord_bytes = int(shapely.get_num_coordinates(df.geometry.values).sum()) * 16
+    return int(df.memory_usage(deep=False).sum()) + coord_bytes + 150 * len(df)
+
+
+def _next_batch_rows(batch: gpd.GeoDataFrame) -> int:
+    bytes_per_row = max(1, _approx_frame_bytes(batch) // max(1, len(batch)))
+    return int(
+        min(
+            const.INGEST_MAX_BATCH_ROWS,
+            max(1, const.TARGET_BATCH_BYTES // bytes_per_row),
+        )
+    )
+
+
 def _read_batches(
     input_file: Path | str,
     layer: str | None,
@@ -617,11 +636,13 @@ def _read_batches(
     total: int,
 ):
     """
-    Yield the input in GeoDataFrame batches of at most
-    const.INGEST_BATCH_ROWS features, so peak memory is bounded by the
-    batch size rather than the input size.
+    Yield the input in GeoDataFrame batches, so peak memory is bounded by
+    the batch size rather than the input size. Row counts adapt to the
+    observed bytes-per-feature: a probe batch first, then batches sized to
+    const.TARGET_BATCH_BYTES from each previous batch's footprint — so
+    vertex-heavy features get proportionally smaller batches.
     """
-    batch_rows = max(1, const.INGEST_BATCH_ROWS)
+    rows = max(1, const.INGEST_PROBE_ROWS)
     if layer and con:
         with con.connect() as connection:
             tbl = _db_table(connection, layer)
@@ -633,18 +654,25 @@ def _read_batches(
                 stmt = sqlalchemy.select(tbl.c[geom_col])
             # ctid ordering makes OFFSET/LIMIT a stable partition of the table
             stmt = stmt.order_by(sqlalchemy.text("ctid"))
-            for offset in range(0, total, batch_rows):
+            offset = 0
+            while offset < total:
                 result = gpd.read_postgis(
-                    stmt.limit(batch_rows).offset(offset), connection, geom_col=geom_col
+                    stmt.limit(rows).offset(offset), connection, geom_col=geom_col
                 )
                 if geom_col != "geometry":
                     result = result.rename_geometry("geometry")
                 yield result
+                offset += len(result)
+                rows = _next_batch_rows(result)
         return
-    for offset in range(0, total, batch_rows):
-        yield gpd.read_file(
-            input_file, layer=layer, skip_features=offset, max_features=batch_rows
+    offset = 0
+    while offset < total:
+        batch = gpd.read_file(
+            input_file, layer=layer, skip_features=offset, max_features=rows
         )
+        yield batch
+        offset += len(batch)
+        rows = _next_batch_rows(batch)
 
 
 def _prepare_dataframe(
@@ -961,14 +989,11 @@ def _index(
     with tempfile.TemporaryDirectory(suffix=".parquet") as tmpdir:
         fid_offset = 0
         part = 0
-        n_batches = math.ceil(total / max(1, const.INGEST_BATCH_ROWS))
-        for batch in tqdm(
-            _read_batches(
-                input_file, layer, con, keep_attributes, id_field, geom_col, total
-            ),
-            total=n_batches,
-            desc="Ingesting",
+        pbar = tqdm(total=total, desc="Ingesting", unit="feature")
+        for batch in _read_batches(
+            input_file, layer, con, keep_attributes, id_field, geom_col, total
         ):
+            pbar.update(len(batch))
             if batch.crs is None:
                 raise ValueError(
                     "Input has no CRS, which is required for indexing. "
@@ -990,6 +1015,7 @@ def _index(
                     PurePath(tmpdir, f"part-{part:06}.parquet")
                 )
                 part += 1
+        pbar.close()
         filepaths = [f.absolute() for f in Path(tmpdir).glob("*")]
 
         with tempfile.TemporaryDirectory(suffix=".parquet") as tmpdir2:

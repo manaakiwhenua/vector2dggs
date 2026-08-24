@@ -31,7 +31,10 @@ class TestBatchedIngest(TestCase):
     def test_batches_equivalent_to_single_read(self):
         with tempfile.TemporaryDirectory() as d:
             single = self._run(f"{d}/single.pq")
-            with mock.patch.object(const, "INGEST_BATCH_ROWS", 5):
+            with (
+                mock.patch.object(const, "INGEST_PROBE_ROWS", 5),
+                mock.patch.object(const, "TARGET_BATCH_BYTES", 1),
+            ):
                 batched = self._run(f"{d}/batched.pq")
         self.assertEqual(
             set(zip(single.index, single["fid"], strict=True)),
