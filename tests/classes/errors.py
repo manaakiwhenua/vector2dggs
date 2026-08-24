@@ -42,7 +42,6 @@ class TestErrors(TestRunthrough):
                     9,
                     5,
                     False,
-                    50,
                     None,
                     1,
                     layer="naive",
@@ -76,22 +75,6 @@ class TestErrors(TestRunthrough):
                     "8",
                     "-t",
                     "0",
-                ],
-                standalone_mode=False,
-            )
-
-    def test_negative_chunksize_raises(self):
-        with self.assertRaises(click.BadParameter):
-            h3(
-                [
-                    TEST_FILE_PATH,
-                    str(self.output_path),
-                    "--layer",
-                    TEST_LAYER_NAME,
-                    "-r",
-                    "8",
-                    "-ch",
-                    "-5",
                 ],
                 standalone_mode=False,
             )
@@ -163,7 +146,6 @@ class TestIndexCompactionDefaults(TestCase):
             7,
             None,
             False,
-            50,
             0.0,
             1,
             layer="x",

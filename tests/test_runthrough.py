@@ -64,6 +64,8 @@ with contextlib.suppress(ImportError):
 with contextlib.suppress(ImportError):
     from .classes.errors import TestStagedOutput as TestStagedOutput
 with contextlib.suppress(ImportError):
+    from .classes.ingest import TestBatchedIngest as TestBatchedIngest
+with contextlib.suppress(ImportError):
     from .classes.input_dispatch import TestInputDispatch as TestInputDispatch
 with contextlib.suppress(ImportError):
     from .classes.katana import TestKatana as TestKatana

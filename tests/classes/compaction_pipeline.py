@@ -56,8 +56,6 @@ class TestCompactionAcrossPartitions(TestRunthrough):
                 "LCDB_UID",
                 "-c",
                 "50000",
-                "-ch",
-                "10",
                 "-co",
                 "-t",
                 "1",

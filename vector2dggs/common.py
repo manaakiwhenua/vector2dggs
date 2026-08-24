@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 import multiprocessing
 import shutil
 import tempfile
@@ -13,7 +14,6 @@ import click
 import click_log
 import dask
 import dask.dataframe as dd
-import dask_geopandas as dgpd
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -587,49 +587,105 @@ def bisect_geometry(geometry, cut_threshold, blade_segment=None):
     return GeometryCollection(pieces)
 
 
-def _read_input(
+def _db_table(con: sqlalchemy.engine.Connection, layer: str) -> sqlalchemy.Table:
+    parts = layer.rsplit(".", 1)
+    schema, tbl_name = (parts[0], parts[1]) if len(parts) == 2 else (None, parts[0])
+    return sqlalchemy.Table(
+        tbl_name, sqlalchemy.MetaData(), schema=schema, autoload_with=con
+    )
+
+
+def _feature_count(
+    input_file: Path | str, layer: str | None, con: SQLConnectionType | None
+) -> int:
+    if layer and con:
+        with con.connect() as connection:
+            tbl = _db_table(connection, layer)
+            return connection.execute(
+                sqlalchemy.select(sqlalchemy.func.count()).select_from(tbl)
+            ).scalar_one()
+    return pyogrio.read_info(str(input_file), layer=layer)["features"]
+
+
+def _approx_frame_bytes(df: gpd.GeoDataFrame) -> int:
+    """
+    In-memory footprint estimate: column data, geometry coordinates, and a
+    per-geometry object overhead (which dominates for small geometries).
+    """
+    coord_bytes = int(shapely.get_num_coordinates(df.geometry.values).sum()) * 16
+    return int(df.memory_usage(deep=False).sum()) + coord_bytes + 150 * len(df)
+
+
+def _next_batch_rows(batch: gpd.GeoDataFrame) -> int:
+    bytes_per_row = max(1, _approx_frame_bytes(batch) // max(1, len(batch)))
+    return int(
+        min(
+            const.INGEST_MAX_BATCH_ROWS,
+            max(1, const.TARGET_BATCH_BYTES // bytes_per_row),
+        )
+    )
+
+
+def _read_batches(
     input_file: Path | str,
     layer: str | None,
     con: SQLConnectionType | None,
     keep_attributes: bool,
     id_field: str | None,
     geom_col: str,
-) -> gpd.GeoDataFrame:
+    total: int,
+):
+    """
+    Yield the input in GeoDataFrame batches, so peak memory is bounded by
+    the batch size rather than the input size. Row counts adapt to the
+    observed bytes-per-feature: a probe batch first, then batches sized to
+    const.TARGET_BATCH_BYTES from each previous batch's footprint — so
+    vertex-heavy features get proportionally smaller batches.
+    """
+    rows = max(1, const.INGEST_PROBE_ROWS)
     if layer and con:
         with con.connect() as connection:
-            parts = layer.rsplit(".", 1)
-            schema, tbl_name = (
-                (parts[0], parts[1]) if len(parts) == 2 else (None, parts[0])
-            )
-            tbl = sqlalchemy.Table(
-                tbl_name,
-                sqlalchemy.MetaData(),
-                schema=schema,
-                autoload_with=connection,
-            )
+            tbl = _db_table(connection, layer)
             if keep_attributes:
                 stmt = tbl.select()
             elif id_field and not keep_attributes:
                 stmt = sqlalchemy.select(tbl.c[id_field], tbl.c[geom_col])
             else:
                 stmt = sqlalchemy.select(tbl.c[geom_col])
-            result = gpd.read_postgis(stmt, connection, geom_col=geom_col)
-            if geom_col != "geometry":
-                result = result.rename_geometry("geometry")
-            return result
-    return gpd.read_file(input_file, layer=layer)
+            # ctid ordering makes OFFSET/LIMIT a stable partition of the table
+            stmt = stmt.order_by(sqlalchemy.text("ctid"))
+            offset = 0
+            while offset < total:
+                result = gpd.read_postgis(
+                    stmt.limit(rows).offset(offset), connection, geom_col=geom_col
+                )
+                if geom_col != "geometry":
+                    result = result.rename_geometry("geometry")
+                yield result
+                offset += len(result)
+                rows = _next_batch_rows(result)
+        return
+    offset = 0
+    while offset < total:
+        batch = gpd.read_file(
+            input_file, layer=layer, skip_features=offset, max_features=rows
+        )
+        yield batch
+        offset += len(batch)
+        rows = _next_batch_rows(batch)
 
 
 def _prepare_dataframe(
     df: gpd.GeoDataFrame,
     id_field: str | None,
     keep_attributes: bool,
+    fid_offset: int = 0,
 ) -> gpd.GeoDataFrame:
     if id_field:
         df = df.set_index(id_field)
     else:
-        df = df.reset_index()
-        df = df.rename(columns={"index": "fid"}).set_index("fid")
+        df = df.reset_index(drop=True)
+        df.index = pd.RangeIndex(fid_offset, fid_offset + len(df), name="fid")
     if not keep_attributes:
         df = df.loc[:, ["geometry"]]
     return df
@@ -838,7 +894,6 @@ def index(
     resolution: int,
     parent_res: None | str | int,
     keep_attributes: bool,
-    chunksize: int,
     cut_threshold: None | float,
     processes: int,
     compression: str = "snappy",
@@ -871,7 +926,6 @@ def index(
             resolution,
             parent_res,
             keep_attributes,
-            chunksize,
             cut_threshold,
             processes,
             compression,
@@ -896,7 +950,6 @@ def _index(
     resolution: int,
     parent_res: None | str | int,
     keep_attributes: bool,
-    chunksize: int,
     cut_threshold: None | float,
     processes: int,
     compression: str,
@@ -912,33 +965,57 @@ def _index(
     indexer = idxfactory.indexer_instance(dggs)
     parent_res = get_parent_res(dggs, parent_res, resolution)
 
-    df = _read_input(input_file, layer, con, keep_attributes, id_field, geom_col)
-    if df is None or df.empty:
+    total = _feature_count(input_file, layer, con)
+    if total == 0:
         LOGGER.warning(
             "Input contained 0 features (layer=%s). Nothing to index; exiting.",
             layer if layer else "<default>",
         )
         return
-    if df.crs is None:
-        raise ValueError(
-            "Input has no CRS, which is required for indexing. "
-            "Provide a dataset with a defined CRS."
-        )
 
-    df, cut_crs, cut_threshold = bisection_preparation(
-        df, dggs, resolution, cut_crs, cut_threshold
+    # a handful of staged files per worker balances the pool; row count
+    # per file is clamped so worker memory stays bounded
+    rows_per_file = min(
+        const.STAGED_FILE_MAX_ROWS,
+        max(
+            1,
+            math.ceil(total / (const.STAGED_FILES_PER_WORKER * max(1, processes))),
+        ),
     )
-    df = _prepare_dataframe(df, id_field, keep_attributes)
-    features_in = set(df.index)
-    blade_segment = _blade_segment(indexer, dggs, resolution, cut_crs)
-    df = _run_bisection(df, cut_threshold, processes, blade_segment)
-    df = _clean_geometries(df, indexer)
 
-    ddf = dgpd.from_geopandas(df, chunksize=max(1, chunksize), sort=True)
+    features_in: set = set()
+    user_cut_crs = cut_crs
 
     with tempfile.TemporaryDirectory(suffix=".parquet") as tmpdir:
-        with TqdmCallback(desc="Spatially partitioning"):
-            ddf.to_parquet(tmpdir, overwrite=True)
+        fid_offset = 0
+        part = 0
+        pbar = tqdm(total=total, desc="Ingesting", unit="feature")
+        for batch in _read_batches(
+            input_file, layer, con, keep_attributes, id_field, geom_col, total
+        ):
+            pbar.update(len(batch))
+            if batch.crs is None:
+                raise ValueError(
+                    "Input has no CRS, which is required for indexing. "
+                    "Provide a dataset with a defined CRS."
+                )
+            batch, cut_crs, cut_threshold = bisection_preparation(
+                batch, dggs, resolution, user_cut_crs, cut_threshold
+            )
+            batch = _prepare_dataframe(
+                batch, id_field, keep_attributes, fid_offset=fid_offset
+            )
+            fid_offset += len(batch)
+            features_in.update(batch.index)
+            blade_segment = _blade_segment(indexer, dggs, resolution, cut_crs)
+            batch = _run_bisection(batch, cut_threshold, processes, blade_segment)
+            batch = _clean_geometries(batch, indexer)
+            for start in range(0, len(batch), rows_per_file):
+                batch.iloc[start : start + rows_per_file].to_parquet(
+                    PurePath(tmpdir, f"part-{part:06}.parquet")
+                )
+                part += 1
+        pbar.close()
         filepaths = [f.absolute() for f in Path(tmpdir).glob("*")]
 
         with tempfile.TemporaryDirectory(suffix=".parquet") as tmpdir2:
