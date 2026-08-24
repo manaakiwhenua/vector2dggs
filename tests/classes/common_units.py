@@ -1,8 +1,11 @@
+import math
 import tempfile
 from pathlib import Path
-from unittest import TestCase
+from unittest import TestCase, mock
 
+import geopandas as gpd
 import pandas as pd
+from shapely.geometry import box
 
 import vector2dggs.constants as const
 from vector2dggs import common
@@ -58,6 +61,73 @@ class TestWritePartitionGuards(TestCase):
             n = common.write_partition(df, None, Path(d), "p", "c", "snappy")
             self.assertEqual(n, 0)
             self.assertFalse(list(Path(d).iterdir()))
+
+
+class TestStagedFileChunks(TestCase):
+    """
+    _staged_file_chunks bounds staged files by estimated cell output, not
+    just row count (see issue #179: row-count-only sizing let a run of
+    similarly huge bisected features concentrate enough cells in one worker
+    task to exhaust memory).
+
+    A fake dggs with a 1 m^2 "cell" is registered so bbox area (in an
+    unset/planar CRS, i.e. no degree conversion) maps 1:1 to estimated cell
+    count, making test geometries exact rather than approximate.
+    """
+
+    def setUp(self):
+        self.area_patch = mock.patch.dict(
+            const.DGGS_CELL_AREA_M2_BY_RES, {"testdggs": lambda res: 1.0}
+        )
+        self.area_patch.start()
+        self.addCleanup(self.area_patch.stop)
+
+    def _chunks(self, sizes, max_rows, budget):
+        # sizes[i] is the desired estimated-cell count (== bbox area, m^2)
+        # of row i
+        geoms = [box(0, 0, math.sqrt(s), math.sqrt(s)) for s in sizes]
+        df = gpd.GeoDataFrame({"geometry": geoms})
+        with mock.patch.object(const, "MAX_CELLS_PER_STAGED_FILE", budget):
+            return list(common._staged_file_chunks(df, "testdggs", 1, max_rows))
+
+    def test_small_uniform_batch_stays_in_one_chunk(self):
+        chunks = self._chunks([1] * 1000, max_rows=2000, budget=500_000)
+        self.assertEqual(chunks, [(0, 1000)])
+
+    def test_row_count_backstop_still_applies_under_budget(self):
+        # cell budget is nowhere near reached; only the row-count cap should
+        # split this into two files
+        chunks = self._chunks([1] * 1000, max_rows=500, budget=500_000)
+        self.assertEqual(chunks, [(0, 500), (500, 1000)])
+
+    def test_large_rows_split_by_cell_budget_despite_low_row_count(self):
+        # three rows of 300 "cells" each; budget of 500 means no two can
+        # share a file, even though max_rows would allow it
+        chunks = self._chunks([300, 300, 300], max_rows=100, budget=500)
+        self.assertEqual(chunks, [(0, 1), (1, 2), (2, 3)])
+
+    def test_single_oversized_row_still_gets_its_own_chunk(self):
+        # a single row far exceeding the budget must not be dropped or loop
+        # forever -- it gets a (degenerate) chunk of its own
+        chunks = self._chunks([10_000], max_rows=100, budget=500)
+        self.assertEqual(chunks, [(0, 1)])
+
+    def test_empty_batch_yields_no_chunks(self):
+        df = gpd.GeoDataFrame({"geometry": []})
+        chunks = list(common._staged_file_chunks(df, "testdggs", 1, 100))
+        self.assertEqual(chunks, [])
+
+    def test_geographic_crs_converts_degrees_before_estimating(self):
+        # ~1 degree square at the equator is ~(111km)^2, not ~1 m^2. With
+        # the conversion, two such rows blow a budget of 1000 "cells" and
+        # must split; without it, raw degree^2 area (~1 each) would stay
+        # well under budget and wrongly stay in one file.
+        df = gpd.GeoDataFrame(
+            {"geometry": [box(0, 0, 1, 1), box(2, 0, 3, 1)]}, crs="EPSG:4326"
+        )
+        with mock.patch.object(const, "MAX_CELLS_PER_STAGED_FILE", 1000):
+            chunks = list(common._staged_file_chunks(df, "testdggs", 1, 100))
+        self.assertEqual(chunks, [(0, 1), (1, 2)])
 
 
 class TestCommitOutput(TestCase):

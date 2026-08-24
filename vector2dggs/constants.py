@@ -184,6 +184,14 @@ INGEST_MAX_BATCH_ROWS = 1_000_000
 STAGED_FILES_PER_WORKER = 5
 STAGED_FILE_MAX_ROWS = 5000
 
+# Backstop on estimated total cell output (from bounding-box area) bundled
+# into one staged file, hence one _polyfill() worker task. Row count alone
+# is not a safe proxy: bisection targets ~DEFAULT_CUT_CELLS_PER_PIECE cells
+# per piece, but a run of similarly large/complex features stored
+# contiguously in the source (e.g. one land-cover class) can otherwise
+# concentrate thousands of near-maximum-size pieces in a single task.
+MAX_CELLS_PER_STAGED_FILE = 500_000
+
 
 # Default bisection granularity: pieces sized to roughly this many cells of
 # the target resolution. Benchmarked on national-scale coastline data: flat

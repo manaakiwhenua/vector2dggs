@@ -4,6 +4,7 @@ import math
 import multiprocessing
 import shutil
 import tempfile
+from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from pathlib import Path, PurePath
 from types import ModuleType
@@ -851,6 +852,44 @@ def _clean_geometries(df: gpd.GeoDataFrame, indexer: VectorIndexer) -> gpd.GeoDa
     return df
 
 
+def _staged_file_chunks(
+    batch: gpd.GeoDataFrame, dggs: str, resolution: int, max_rows: int
+) -> Iterator[tuple[int, int]]:
+    """
+    Yield (start, end) row-position ranges bundling batch into successive
+    staged files (and therefore _polyfill() worker tasks), so that no one
+    file's estimated total cell output much exceeds
+    const.MAX_CELLS_PER_STAGED_FILE, in addition to the max_rows backstop.
+
+    Per-row cell counts are estimated from bounding-box area -- the same
+    approximation bisection itself uses to size cut pieces -- converting
+    degrees to an approximate metre scale when the CRS is geographic. This
+    is only a heuristic bound: an exact count would mean running polyfill
+    itself, which is the expensive step this is sizing work for.
+    """
+    bounds = batch.geometry.bounds
+    bbox_area = (bounds["maxx"] - bounds["minx"]) * (bounds["maxy"] - bounds["miny"])
+    if batch.crs is not None and batch.crs.is_geographic:
+        axis = batch.crs.axis_info[0]
+        metres_per_unit = axis.unit_conversion_factor * const.EARTH_MEAN_RADIUS_M
+        bbox_area = bbox_area * metres_per_unit**2
+    cell_area_m2 = const.DGGS_CELL_AREA_M2_BY_RES[dggs](resolution)
+    est_cells = np.maximum(1.0, bbox_area.to_numpy() / cell_area_m2)
+
+    start = 0
+    running = 0.0
+    for i, cells in enumerate(est_cells):
+        if i > start and (
+            running + cells > const.MAX_CELLS_PER_STAGED_FILE or i - start >= max_rows
+        ):
+            yield start, i
+            start = i
+            running = 0.0
+        running += cells
+    if start < len(est_cells):
+        yield start, len(est_cells)
+
+
 def _mp_context() -> multiprocessing.context.BaseContext:
     """Never fork: the parent is multi-threaded by the time the pool starts."""
     methods = multiprocessing.get_all_start_methods()
@@ -988,8 +1027,10 @@ def _index(
         )
         return
 
-    # a handful of staged files per worker balances the pool; row count
-    # per file is clamped so worker memory stays bounded
+    # a handful of staged files per worker balances the pool; row count is
+    # a backstop cap, but _staged_file_chunks additionally bounds files by
+    # estimated cell output, since row count alone isn't a safe proxy for
+    # worker memory (see const.MAX_CELLS_PER_STAGED_FILE)
     rows_per_file = min(
         const.STAGED_FILE_MAX_ROWS,
         max(
@@ -1025,8 +1066,10 @@ def _index(
             blade_segment = _blade_segment(indexer, dggs, resolution, cut_crs)
             batch = _run_bisection(batch, cut_threshold, processes, blade_segment)
             batch = _clean_geometries(batch, indexer)
-            for start in range(0, len(batch), rows_per_file):
-                batch.iloc[start : start + rows_per_file].to_parquet(
+            for start, end in _staged_file_chunks(
+                batch, dggs, resolution, rows_per_file
+            ):
+                batch.iloc[start:end].to_parquet(
                     PurePath(tmpdir, f"part-{part:06}.parquet")
                 )
                 part += 1
