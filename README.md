@@ -80,10 +80,6 @@ Options:
                                   create an output that only includes H3 cell ID
                                   and the ID given by the -id field (or the
                                   default index ID).
-  -ch, --chunksize INTEGER RANGE  The number of rows per index partition to use
-                                  when spatially partitioning. Adjusting this
-                                  number will trade off memory use and time.
-                                  [default: 50; x>=1; required]
   -crs, --cut_crs INTEGER         Set the coordinate reference system (CRS) used
                                   for cutting large geometries (see
                                   `--cut_threshold`). Defaults to the same CRS

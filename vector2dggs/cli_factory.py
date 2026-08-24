@@ -56,15 +56,6 @@ def make_dggs_command(
         help=f"Retain attributes in output. The default is to create an output that only includes {display_name} cell ID and the ID given by the -id field (or the default index ID).",
     )
     @click.option(
-        "-ch",
-        "--chunksize",
-        required=True,
-        type=click.IntRange(min=1),
-        default=const.DEFAULTS["ch"],
-        help="The number of rows per index partition to use when spatially partitioning. Adjusting this number will trade off memory use and time.",
-        nargs=1,
-    )
-    @click.option(
         "-crs",
         "--cut_crs",
         required=False,
@@ -150,7 +141,6 @@ def make_dggs_command(
         parent_res: str,
         id_field: str,
         keep_attributes: bool,
-        chunksize: int,
         cut_crs: int,
         cut_threshold: float,
         threads: int,
@@ -184,7 +174,6 @@ def make_dggs_command(
             int(resolution),
             parent_res,
             keep_attributes,
-            chunksize,
             cut_threshold,
             threads,
             compression=compression,

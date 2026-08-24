@@ -170,6 +170,16 @@ DGGS_CELL_AREA_M2_BY_RES = {
 }
 
 
+# Features per ingest batch: bounds peak memory of the read -> bisect ->
+# clean front half; everything downstream streams from staged parquet.
+INGEST_BATCH_ROWS = 100_000
+
+# Staged worker files per worker across a run (load-balance sweet spot);
+# file row count is derived from the feature count and clamped.
+STAGED_FILES_PER_WORKER = 5
+STAGED_FILE_MAX_ROWS = 5000
+
+
 # Default bisection granularity: pieces sized to roughly this many cells of
 # the target resolution. Benchmarked on national-scale coastline data: flat
 # optimum between ~2k and ~10k, degrading sharply below ~500 (per-piece
@@ -185,7 +195,6 @@ def DEFAULT_AREA_THRESHOLD_M2(dggs, resolution):
 DEFAULTS = {
     "id": None,
     "k": False,
-    "ch": 50,
     "crs": None,
     "c": None,
     "t": max(1, multiprocessing.cpu_count() - 1),
