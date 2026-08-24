@@ -84,9 +84,6 @@ Options:
                                   when spatially partitioning. Adjusting this
                                   number will trade off memory use and time.
                                   [default: 50; x>=1; required]
-  -s, --spatial_sorting [hilbert|morton|geohash|none]
-                                  Spatial sorting method when performing spatial
-                                  partitioning.  [default: none]
   -crs, --cut_crs INTEGER         Set the coordinate reference system (CRS) used
                                   for cutting large geometries (see
                                   `--cut_threshold`). Defaults to the same CRS

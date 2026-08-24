@@ -476,7 +476,6 @@ def _parent_partitioning(
 def _polyfill(
     indexer: VectorIndexer,
     pq_in: Path,
-    spatial_sort_col: str,
     resolution: int,
     parent_res: int,
     output_directory: str,
@@ -490,8 +489,6 @@ def _polyfill(
     produced at least one cell.
     """
     df = gpd.read_parquet(pq_in).reset_index()
-    if spatial_sort_col != "none":
-        df = df.drop(columns=[spatial_sort_col])
     if df.empty:
         return np.array([])
 
@@ -798,7 +795,6 @@ def _mp_context() -> multiprocessing.context.BaseContext:
 def _run_dggs_indexing(
     indexer: VectorIndexer,
     filepaths: list,
-    spatial_sort_col: str,
     resolution: int,
     parent_res: int,
     output_dir: str,
@@ -811,7 +807,6 @@ def _run_dggs_indexing(
         (
             indexer,
             filepath,
-            spatial_sort_col,
             resolution,
             parent_res,
             output_dir,
@@ -844,7 +839,6 @@ def index(
     parent_res: None | str | int,
     keep_attributes: bool,
     chunksize: int,
-    spatial_sorting: str,
     cut_threshold: None | float,
     processes: int,
     compression: str = "snappy",
@@ -878,7 +872,6 @@ def index(
             parent_res,
             keep_attributes,
             chunksize,
-            spatial_sorting,
             cut_threshold,
             processes,
             compression,
@@ -904,7 +897,6 @@ def _index(
     parent_res: None | str | int,
     keep_attributes: bool,
     chunksize: int,
-    spatial_sorting: str,
     cut_threshold: None | float,
     processes: int,
     compression: str,
@@ -943,14 +935,6 @@ def _index(
     df = _clean_geometries(df, indexer)
 
     ddf = dgpd.from_geopandas(df, chunksize=max(1, chunksize), sort=True)
-    if spatial_sorting != "none":
-        LOGGER.debug("Spatially sorting and partitioning (%s)", spatial_sorting)
-        ddf = ddf.spatial_shuffle(by=spatial_sorting)
-    spatial_sort_col = (
-        spatial_sorting
-        if spatial_sorting in ("geohash", "none")
-        else f"{spatial_sorting}_distance"
-    )
 
     with tempfile.TemporaryDirectory(suffix=".parquet") as tmpdir:
         with TqdmCallback(desc="Spatially partitioning"):
@@ -961,7 +945,6 @@ def _index(
             indexed_ids = _run_dggs_indexing(
                 indexer,
                 filepaths,
-                spatial_sort_col,
                 resolution,
                 parent_res,
                 tmpdir2,

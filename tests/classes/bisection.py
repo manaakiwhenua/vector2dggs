@@ -126,7 +126,6 @@ class TestDroppedFeatureReport(TestCase):
                     None,
                     False,
                     50,
-                    "none",
                     0.0,
                     1,
                     layer="x",

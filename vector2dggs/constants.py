@@ -16,17 +16,6 @@ MAX_OPEN_FILES_PER_TASK = 64
 
 
 @unique
-class SpatialSortingMethod(StrEnum):
-    HILBERT = "hilbert"
-    MORTON = "morton"
-    GEOHASH = "geohash"
-    NONE = "none"
-
-
-SPATIAL_SORTING_METHODS = tuple(mode.value for mode in SpatialSortingMethod)
-
-
-@unique
 class GeoOutputMode(StrEnum):
     NONE = "none"
     POINT = "point"
@@ -197,7 +186,6 @@ DEFAULTS = {
     "id": None,
     "k": False,
     "ch": 50,
-    "s": SpatialSortingMethod.NONE.value,
     "crs": None,
     "c": None,
     "t": max(1, multiprocessing.cpu_count() - 1),
