@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
-from uuid import uuid4
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 from shapely.geometry import Point, Polygon
 
@@ -171,31 +171,33 @@ class VectorIndexer(ABC):
             for id in feature_cell_groups
         }
 
-        # Get rows that cannot be compressed
-        mask = pd.Series([False] * len(df), index=df.index)
-        for key, value_set in uncompressable.items():
-            mask |= (df[id_field] == key) & (df[dggs_col].isin(value_set))
-        uncompressable_df = df[mask].set_index(dggs_col)
+        pairs = pd.MultiIndex.from_arrays([df[id_field], df[dggs_col]])
 
-        # Get rows that can be compressed; replace fine cell with its compacted parent
+        # Rows kept as-is: their (id, cell) survived compaction unchanged
+        keep = [(id, cell) for id, cells in uncompressable.items() for cell in cells]
+        keep_mask = pairs.isin(keep) if keep else np.zeros(len(df), dtype=bool)
+        uncompressable_df = df[keep_mask].set_index(dggs_col)
+
+        # Rows compressed: one representative child row per compacted cell,
+        # with the fine cell replaced by its compacted parent
         compression_mapping = {
             (id, cell_to_child_func(cell, res)): cell
             for id, cells in compressable.items()
             if cells
             for cell in cells
         }
-        mask = pd.Series([False] * len(df), index=df.index)
-        composite_key = f"composite_key_{uuid4()}"
-
-        def get_composite_key(row):
-            return (row[id_field], row[dggs_col])
-
-        df[composite_key] = df.apply(get_composite_key, axis=1)
-        mask |= df[composite_key].isin(compression_mapping)
-        compressable_df = df[mask].copy()
-        compressable_df[dggs_col] = compressable_df[composite_key].map(
-            compression_mapping
-        )
-        compressable_df = compressable_df.set_index(dggs_col)
+        if compression_mapping:
+            parent_for_pair = pd.Series(
+                list(compression_mapping.values()),
+                index=pd.MultiIndex.from_tuples(list(compression_mapping.keys())),
+            )
+            sel = pairs.isin(parent_for_pair.index)
+            compressable_df = (
+                df[sel]
+                .assign(**{dggs_col: parent_for_pair.reindex(pairs[sel]).to_numpy()})
+                .set_index(dggs_col)
+            )
+        else:
+            compressable_df = df.iloc[0:0].set_index(dggs_col)
 
         return pd.concat([compressable_df, uncompressable_df])[col_order]
