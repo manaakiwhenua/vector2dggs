@@ -192,9 +192,11 @@ class VectorIndexer(ABC):
                 index=pd.MultiIndex.from_tuples(list(compression_mapping.keys())),
             )
             sel = pairs.isin(parent_for_pair.index)
-            compressable_df = df[sel].copy()
-            compressable_df[dggs_col] = parent_for_pair.reindex(pairs[sel]).to_numpy()
-            compressable_df = compressable_df.set_index(dggs_col)
+            compressable_df = (
+                df[sel]
+                .assign(**{dggs_col: parent_for_pair.reindex(pairs[sel]).to_numpy()})
+                .set_index(dggs_col)
+            )
         else:
             compressable_df = df.iloc[0:0].set_index(dggs_col)
 
