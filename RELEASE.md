@@ -4,7 +4,7 @@ Releases are published to [PyPI](https://pypi.org/project/vector2dggs/) automati
 
 ## Making a release
 
-1. **Bump the version** — run the bump script, which updates `pyproject.toml`, `poetry.lock`, and `CITATION.cff` atomically and commits:
+1. **Bump the version** — run the bump script, which updates `pyproject.toml`, `poetry.lock`, and `CITATION.cff` atomically, commits, pushes, and drafts a GitHub Release (tag + auto-generated notes from merged PRs since the last release):
 
    ```bash
    scripts/bump.sh patch   # 0.13.1 → 0.13.2
@@ -14,19 +14,14 @@ Releases are published to [PyPI](https://pypi.org/project/vector2dggs/) automati
    scripts/bump.sh major   # 0.13.1 → 1.0.0
    ```
 
-2. **Push:**
-
-   ```bash
-   git push
-   ```
-
-3. **Create a GitHub Release:**
-   - Go to the repository on GitHub → Releases → **Draft a new release**
-   - Create a new tag matching the version: `v0.9.1` (the tag is created at this point — do not push it manually beforehand)
-   - Write release notes summarising changes
+2. **Review and publish the draft release:**
+   - Go to the repository on GitHub → Releases, and open the draft the script created
+   - Check the auto-generated notes, editing if needed
    - Click **Publish release**
 
-4. The [`publish.yml`](.github/workflows/publish.yml) workflow triggers automatically, builds the distributions, and uploads them to PyPI. No further action is required.
+3. The [`publish.yml`](.github/workflows/publish.yml) workflow triggers automatically, builds the distributions, and uploads them to PyPI. No further action is required.
+
+The release is left as a draft deliberately: `publish.yml` only triggers on a *published* release, so this is the checkpoint before the (irreversible) PyPI upload. To publish from the command line instead of the UI: `gh release edit vX.Y.Z --draft=false`.
 
 ## How it works
 
