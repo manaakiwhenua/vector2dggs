@@ -62,6 +62,16 @@ class TestWritePartitionGuards(TestCase):
             self.assertEqual(n, 0)
             self.assertFalse(list(Path(d).iterdir()))
 
+    def test_mutates_input_in_place(self):
+        # See issue #182: write_partition no longer defensively copies its
+        # input (the caller, _polyfill(), computes what it needs from the
+        # original before calling this). Locking in the "may mutate"
+        # contract here so a defensive copy doesn't silently creep back in.
+        df = pd.DataFrame({"c": ["a", "b"], "p": [1, 2]})
+        with tempfile.TemporaryDirectory() as d:
+            common.write_partition(df, None, Path(d), "p", "c", "snappy")
+        self.assertEqual(df["p"].dtype, "string")
+
 
 class TestStagedFileChunks(TestCase):
     """

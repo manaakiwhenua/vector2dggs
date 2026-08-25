@@ -216,6 +216,10 @@ def write_partition(
     """
     Hive-partitioned parquet write of one dataframe; GeoParquet when
     geo_serialisation_method (cell -> shapely geometry) is given.
+
+    May mutate partition_df in place (columns added/retyped, rows dropped,
+    row order changed) -- callers that need the original afterward must
+    copy it themselves first.
     """
     if partition_df.empty:
         return 0
@@ -242,19 +246,18 @@ def write_partition(
     if not bool(valid_cell_mask.any()):
         return 0
     if not bool(valid_cell_mask.all()):
-        partition_df = partition_df.loc[valid_cell_mask].copy()
+        partition_df = partition_df.loc[valid_cell_mask]
         cell_ids = cell_ids.loc[valid_cell_mask]
 
-    pdf = partition_df.copy()
-    pdf[partition_col] = pdf[partition_col].astype("string")
+    partition_df[partition_col] = partition_df[partition_col].astype("string")
     if geo_serialisation_method is not None:
-        pdf["geometry"] = shapely.to_wkb(
+        partition_df["geometry"] = shapely.to_wkb(
             cell_ids.map(geo_serialisation_method), hex=False
         )
     # sorted by partition value: one file per parent cell, no writer churn
-    pdf = pdf.sort_values(partition_col, kind="stable")
+    partition_df.sort_values(partition_col, kind="stable", inplace=True)
 
-    table = pa.Table.from_pandas(pdf, preserve_index=True)
+    table = pa.Table.from_pandas(partition_df, preserve_index=True)
     if geo_serialisation_method is not None:
         table = _with_geoparquet_metadata(table)
 
@@ -274,10 +277,10 @@ def write_partition(
         max_open_files=const.MAX_OPEN_FILES_PER_TASK,
         # pyarrow's default max_partitions (1024) is a safety valve; this
         # batch's true partition count is known, so pass it exactly
-        max_partitions=max(1, int(pdf[partition_col].nunique())),
+        max_partitions=max(1, int(partition_df[partition_col].nunique())),
     )
 
-    return int(len(pdf.index) > 0)
+    return int(len(partition_df.index) > 0)
 
 
 def _with_geoparquet_metadata(table: pa.Table) -> pa.Table:
@@ -509,6 +512,9 @@ def _polyfill(
     # Secondary (parent) index, used for hive partitioning
     df = indexer.secondary_index(df, parent_res)
 
+    # Computed before write_partition, which may mutate/filter df in place
+    indexed_ids = df[id_col].unique()
+
     # With compaction, geometry is serialised after compacting (merge step)
     geom_fn = None if compact else _geom_fn(indexer, geo)
     write_partition(
@@ -519,7 +525,7 @@ def _polyfill(
         f"{indexer.dggs}_{resolution:02}",
         compression,
     )
-    return df[id_col].unique()
+    return indexed_ids
 
 
 def _polyfill_star(args) -> np.ndarray:
