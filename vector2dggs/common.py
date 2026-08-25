@@ -687,6 +687,32 @@ def _read_batches(
         rows = _next_batch_rows(batch)
 
 
+def _dictionary_encode_attributes(df: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """
+    Cast string attribute columns (object-dtype or pandas' newer StringDtype)
+    to pandas' category dtype.
+
+    Attribute values are attached once per input feature here, then
+    duplicated onto every cell that feature explodes into by polyfill() --
+    so a column's distinct-value count is bounded by feature count, while
+    its row count downstream is bounded by (much larger) cell count.
+    Dictionary encoding turns that duplication into small integer codes
+    referencing one shared dictionary instead of independent string copies.
+    This is preserved through the rest of the pipeline (explode, boolean
+    subsetting, Arrow conversion) as long as frames built from genuinely
+    different sources are combined via pyarrow rather than pandas -- pandas'
+    own concat silently drops dictionary encoding when inputs don't share
+    the same categories object.
+    """
+    geom_col = df.geometry.name
+    string_cols = [
+        c for c in df.columns if c != geom_col and pd.api.types.is_string_dtype(df[c])
+    ]
+    if string_cols:
+        df = df.astype(dict.fromkeys(string_cols, "category"))
+    return df
+
+
 def _prepare_dataframe(
     df: gpd.GeoDataFrame,
     id_field: str | None,
@@ -700,6 +726,8 @@ def _prepare_dataframe(
         df.index = pd.RangeIndex(fid_offset, fid_offset + len(df), name="fid")
     if not keep_attributes:
         df = df.loc[:, ["geometry"]]
+    else:
+        df = _dictionary_encode_attributes(df)
     return df
 
 
