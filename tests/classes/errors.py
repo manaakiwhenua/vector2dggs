@@ -114,6 +114,22 @@ class TestErrors(TestRunthrough):
         with self.assertRaises(ValueError):
             indexer_instance("not_a_real_dggs")
 
+    def test_unknown_keep_attribute_raises(self):
+        with self.assertRaises(common.UnknownAttributeError):
+            h3(
+                [
+                    TEST_FILE_PATH,
+                    str(self.output_path),
+                    "--layer",
+                    TEST_LAYER_NAME,
+                    "-r",
+                    "8",
+                    "-ka",
+                    "not_a_real_column",
+                ],
+                standalone_mode=False,
+            )
+
 
 class TestIndexCompactionDefaults(TestCase):
     """Library API: index() must validate compaction requirements itself."""

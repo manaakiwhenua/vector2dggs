@@ -80,6 +80,9 @@ Options:
                                   create an output that only includes H3 cell ID
                                   and the ID given by the -id field (or the
                                   default index ID).
+  -ka, --keep_attribute TEXT      Retain only this attribute in output; repeat
+                                  for multiple. Takes precedence over
+                                  -k/--keep_attributes.
   -crs, --cut_crs INTEGER         Set the coordinate reference system (CRS) used
                                   for cutting large geometries (see
                                   `--cut_threshold`). Defaults to the same CRS

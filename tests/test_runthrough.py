@@ -38,6 +38,10 @@ with contextlib.suppress(ImportError):
 with contextlib.suppress(ImportError):
     from .classes.common_units import TestAvailableMemoryMb as TestAvailableMemoryMb
 with contextlib.suppress(ImportError):
+    from .classes.common_units import (
+        TestCheckRequestedAttributes as TestCheckRequestedAttributes,
+    )
+with contextlib.suppress(ImportError):
     from .classes.common_units import TestCommitOutput as TestCommitOutput
 with contextlib.suppress(ImportError):
     from .classes.common_units import (
@@ -51,6 +55,14 @@ with contextlib.suppress(ImportError):
     from .classes.common_units import TestGetParentRes as TestGetParentRes
 with contextlib.suppress(ImportError):
     from .classes.common_units import TestStagedFileChunks as TestStagedFileChunks
+with contextlib.suppress(ImportError):
+    from .classes.common_units import (
+        TestPrepareDataframeKeepAttribute as TestPrepareDataframeKeepAttribute,
+    )
+with contextlib.suppress(ImportError):
+    from .classes.common_units import (
+        TestReadBatchesColumnSelection as TestReadBatchesColumnSelection,
+    )
 with contextlib.suppress(ImportError):
     from .classes.common_units import (
         TestWritePartitionGuards as TestWritePartitionGuards,

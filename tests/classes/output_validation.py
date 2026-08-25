@@ -90,3 +90,24 @@ class TestOutputValidation(TestRunthrough):
         table = pq.read_table(self._parquet_files()[0])
         self.assertIn("Name_2018", table.schema.names)
         self.assertIn("LCDB_UID", table.schema.names)
+
+    def test_keep_attribute_restricts_to_named_columns(self):
+        """-ka limits output to exactly the requested attribute columns."""
+        self._run_h3(("-ka", "LCDB_UID"))
+        table = pq.read_table(self._parquet_files()[0])
+        self.assertIn("LCDB_UID", table.schema.names)
+        self.assertNotIn("Name_2018", table.schema.names)
+
+    def test_keep_attribute_repeated_for_multiple_columns(self):
+        """-ka can be repeated to keep several specific columns."""
+        self._run_h3(("-ka", "LCDB_UID", "-ka", "Name_2018"))
+        table = pq.read_table(self._parquet_files()[0])
+        self.assertIn("LCDB_UID", table.schema.names)
+        self.assertIn("Name_2018", table.schema.names)
+
+    def test_keep_attribute_overrides_keep_attributes_flag(self):
+        """-ka takes precedence over -k when both are given."""
+        self._run_h3(("-k", "-ka", "LCDB_UID"))
+        table = pq.read_table(self._parquet_files()[0])
+        self.assertIn("LCDB_UID", table.schema.names)
+        self.assertNotIn("Name_2018", table.schema.names)
