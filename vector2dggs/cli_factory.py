@@ -78,7 +78,7 @@ def make_dggs_command(
         "--threads",
         required=False,
         default=const.DEFAULTS["t"],
-        show_default="CPU count - 1",
+        show_default="CPU count - 1, capped by available memory",
         type=click.IntRange(min=1),
         help="Amount of threads used for operation",
         nargs=1,

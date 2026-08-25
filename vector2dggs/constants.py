@@ -205,12 +205,62 @@ def DEFAULT_AREA_THRESHOLD_M2(dggs, resolution):
     return DEFAULT_CUT_CELLS_PER_PIECE * DGGS_CELL_AREA_M2_BY_RES[dggs](resolution)
 
 
+# Conservative per-worker memory reservation for the default --threads cap.
+# Deliberately not tuned to the lightest case (bare cell indexing uses far
+# less) nor tailored per dataset/resolution/--keep_attributes -- it's a
+# single default meant to keep concurrency from overcommitting a
+# memory-thin machine without needlessly throttling a well-provisioned one.
+# Set well above the measured per-worker peak RSS (~122MB import baseline +
+# up to ~370MB task data, so ~490MB, on a fine-resolution --keep_attributes
+# run): available memory is sampled once at startup and this default holds
+# for the whole run, so it needs headroom for other processes on the same
+# machine growing in the meantime, not just this run's own peak.
+RESERVED_MB_PER_WORKER = 768
+
+# Only this fraction of currently-available memory is treated as usable for
+# the --threads cap above, for the same reason: a live reading taken once
+# at startup, held for a run that can last many minutes, on a machine other
+# processes also use.
+AVAILABLE_MEMORY_BUDGET_FRACTION = 0.7
+
+
+def _available_memory_mb(meminfo_path: str = "/proc/meminfo") -> int | None:
+    """
+    Currently available system memory in MB, from /proc/meminfo's
+    MemAvailable (already accounts for reclaimable cache, unlike raw
+    "free"). Returns None if it can't be determined (non-Linux, or a
+    missing/malformed file), so callers can fall back to a CPU-only default.
+    """
+    try:
+        with open(meminfo_path) as f:
+            for line in f:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) // 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
+def default_threads() -> int:
+    """
+    CPU count - 1, further capped by a budget of available memory /
+    RESERVED_MB_PER_WORKER when available memory can be determined, so a
+    memory-thin machine doesn't overcommit concurrency by CPU count alone.
+    """
+    cpu_based = max(1, multiprocessing.cpu_count() - 1)
+    available_mb = _available_memory_mb()
+    if available_mb is None:
+        return cpu_based
+    budget_mb = available_mb * AVAILABLE_MEMORY_BUDGET_FRACTION
+    return max(1, min(cpu_based, int(budget_mb // RESERVED_MB_PER_WORKER)))
+
+
 DEFAULTS = {
     "id": None,
     "k": False,
     "crs": None,
     "c": None,
-    "t": max(1, multiprocessing.cpu_count() - 1),
+    "t": default_threads(),
     "cp": "snappy",
     "lyr": None,
     "g": "geom",
