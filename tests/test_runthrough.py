@@ -38,6 +38,10 @@ with contextlib.suppress(ImportError):
 with contextlib.suppress(ImportError):
     from .classes.common_units import TestCommitOutput as TestCommitOutput
 with contextlib.suppress(ImportError):
+    from .classes.common_units import (
+        TestDictionaryEncodeAttributes as TestDictionaryEncodeAttributes,
+    )
+with contextlib.suppress(ImportError):
     from .classes.common_units import TestDropCondition as TestDropCondition
 with contextlib.suppress(ImportError):
     from .classes.common_units import TestGetParentRes as TestGetParentRes
