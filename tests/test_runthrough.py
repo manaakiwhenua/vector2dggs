@@ -36,7 +36,11 @@ with contextlib.suppress(ImportError):
 with contextlib.suppress(ImportError):
     from .classes.compaction import TestS2CompactionBounds as TestS2CompactionBounds
 with contextlib.suppress(ImportError):
+    from .classes.common_units import TestAvailableMemoryMb as TestAvailableMemoryMb
+with contextlib.suppress(ImportError):
     from .classes.common_units import TestCommitOutput as TestCommitOutput
+with contextlib.suppress(ImportError):
+    from .classes.common_units import TestDefaultThreads as TestDefaultThreads
 with contextlib.suppress(ImportError):
     from .classes.common_units import TestDropCondition as TestDropCondition
 with contextlib.suppress(ImportError):
