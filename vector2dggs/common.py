@@ -59,6 +59,12 @@ class IdFieldError(ValueError):
     pass
 
 
+class UnknownAttributeError(ValueError):
+    """Raised when -ka/--keep_attribute names a column not in the input."""
+
+    pass
+
+
 def check_resolutions(resolution: str | int, parent_res: None | str | int) -> None:
     if parent_res is not None and not int(parent_res) < int(resolution):
         raise ParentResolutionException(
@@ -70,6 +76,27 @@ def check_compaction_requirements(compact: bool, id_field: str | None) -> None:
     if compact and not id_field:
         raise IdFieldError(
             "An id_field is required for compaction, in order to handle the potential for overlapping features"
+        )
+
+
+def check_requested_attributes(
+    keep_attribute: tuple[str, ...],
+    input_file: Path | str,
+    layer: str | None,
+    con: SQLConnectionType | None,
+) -> None:
+    if not keep_attribute:
+        return
+    if layer and con:
+        with con.connect() as connection:
+            available = set(_db_table(connection, layer).columns.keys())
+    else:
+        available = set(pyogrio.read_info(str(input_file), layer=layer)["fields"])
+    unknown = [c for c in keep_attribute if c not in available]
+    if unknown:
+        raise UnknownAttributeError(
+            f"Unknown attribute(s) for -ka/--keep_attribute: {', '.join(unknown)}. "
+            f"Available: {', '.join(sorted(available))}"
         )
 
 
@@ -652,6 +679,7 @@ def _read_batches(
     id_field: str | None,
     geom_col: str,
     total: int,
+    keep_attribute: tuple[str, ...] = (),
 ):
     """
     Yield the input in GeoDataFrame batches, so peak memory is bounded by
@@ -659,14 +687,22 @@ def _read_batches(
     observed bytes-per-feature: a probe batch first, then batches sized to
     const.TARGET_BATCH_BYTES from each previous batch's footprint — so
     vertex-heavy features get proportionally smaller batches.
+
+    Only the columns actually needed (id_field, geometry, and whichever of
+    keep_attributes/keep_attribute apply) are read from the source.
     """
     rows = max(1, const.INGEST_PROBE_ROWS)
     if layer and con:
         with con.connect() as connection:
             tbl = _db_table(connection, layer)
-            if keep_attributes:
+            if keep_attribute:
+                cols = dict.fromkeys(
+                    [geom_col, *([id_field] if id_field else []), *keep_attribute]
+                )
+                stmt = sqlalchemy.select(*(tbl.c[c] for c in cols))
+            elif keep_attributes:
                 stmt = tbl.select()
-            elif id_field and not keep_attributes:
+            elif id_field:
                 stmt = sqlalchemy.select(tbl.c[id_field], tbl.c[geom_col])
             else:
                 stmt = sqlalchemy.select(tbl.c[geom_col])
@@ -683,10 +719,22 @@ def _read_batches(
                 offset += len(result)
                 rows = _next_batch_rows(result)
         return
+    if keep_attribute:
+        columns = list(
+            dict.fromkeys([*keep_attribute, *([id_field] if id_field else [])])
+        )
+    elif keep_attributes:
+        columns = None
+    else:
+        columns = [id_field] if id_field else []
     offset = 0
     while offset < total:
         batch = gpd.read_file(
-            input_file, layer=layer, skip_features=offset, max_features=rows
+            input_file,
+            layer=layer,
+            skip_features=offset,
+            max_features=rows,
+            columns=columns,
         )
         yield batch
         offset += len(batch)
@@ -723,6 +771,7 @@ def _prepare_dataframe(
     df: gpd.GeoDataFrame,
     id_field: str | None,
     keep_attributes: bool,
+    keep_attribute: tuple[str, ...] = (),
     fid_offset: int = 0,
 ) -> gpd.GeoDataFrame:
     if id_field:
@@ -730,10 +779,13 @@ def _prepare_dataframe(
     else:
         df = df.reset_index(drop=True)
         df.index = pd.RangeIndex(fid_offset, fid_offset + len(df), name="fid")
-    if not keep_attributes:
-        df = df.loc[:, ["geometry"]]
-    else:
+    if keep_attribute:
+        df = df.loc[:, [c for c in keep_attribute if c in df.columns] + ["geometry"]]
         df = _dictionary_encode_attributes(df)
+    elif keep_attributes:
+        df = _dictionary_encode_attributes(df)
+    else:
+        df = df.loc[:, ["geometry"]]
     return df
 
 
@@ -993,6 +1045,7 @@ def index(
     geo: str = const.GeoOutputMode.NONE.value,
     overwrite: bool = False,
     compact: bool = False,
+    keep_attribute: tuple[str, ...] = (),
 ) -> Path | str:
     """
     Performs multi-threaded DGGS indexing on geometries (including multipart and collections).
@@ -1024,6 +1077,7 @@ def index(
             geom_col,
             geo,
             compact,
+            keep_attribute,
         )
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
@@ -1048,6 +1102,7 @@ def _index(
     geom_col: str,
     geo: str,
     compact: bool,
+    keep_attribute: tuple[str, ...] = (),
 ) -> None:
     check_compaction_requirements(compact, id_field)
     indexer = idxfactory.indexer_instance(dggs)
@@ -1081,7 +1136,14 @@ def _index(
         part = 0
         pbar = tqdm(total=total, desc="Ingesting", unit="feature")
         for batch in _read_batches(
-            input_file, layer, con, keep_attributes, id_field, geom_col, total
+            input_file,
+            layer,
+            con,
+            keep_attributes,
+            id_field,
+            geom_col,
+            total,
+            keep_attribute,
         ):
             pbar.update(len(batch))
             if batch.crs is None:
@@ -1093,7 +1155,7 @@ def _index(
                 batch, dggs, resolution, user_cut_crs, cut_threshold
             )
             batch = _prepare_dataframe(
-                batch, id_field, keep_attributes, fid_offset=fid_offset
+                batch, id_field, keep_attributes, keep_attribute, fid_offset=fid_offset
             )
             fid_offset += len(batch)
             features_in.update(batch.index)

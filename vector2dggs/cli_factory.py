@@ -56,6 +56,14 @@ def make_dggs_command(
         help=f"Retain attributes in output. The default is to create an output that only includes {display_name} cell ID and the ID given by the -id field (or the default index ID).",
     )
     @click.option(
+        "-ka",
+        "--keep_attribute",
+        multiple=True,
+        default=(),
+        type=str,
+        help="Retain only this attribute in output; repeat for multiple. Takes precedence over -k/--keep_attributes.",
+    )
+    @click.option(
         "-crs",
         "--cut_crs",
         required=False,
@@ -141,6 +149,7 @@ def make_dggs_command(
         parent_res: str,
         id_field: str,
         keep_attributes: bool,
+        keep_attribute: tuple[str, ...],
         cut_crs: int,
         cut_threshold: float,
         threads: int,
@@ -162,6 +171,7 @@ def make_dggs_command(
 
         con, vector_input = common.db_conn_and_input_path(vector_input)
         output_directory = common.resolve_output_path(output_directory, overwrite)
+        common.check_requested_attributes(keep_attribute, vector_input, layer, con)
 
         cut_crs_obj: pyproj.CRS | None = None
         if cut_crs is not None:
@@ -185,6 +195,7 @@ def make_dggs_command(
             geo=geo,
             overwrite=overwrite,
             compact=compact,
+            keep_attribute=keep_attribute,
         )
 
     command.help = (

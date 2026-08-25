@@ -10,6 +10,8 @@ from shapely.geometry import Point, box
 import vector2dggs.constants as const
 from vector2dggs import common
 
+from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME
+
 
 class TestGetParentRes(TestCase):
     def test_explicit_parent_passes_through(self):
@@ -95,6 +97,74 @@ class TestDefaultThreads(TestCase):
             mock.patch.object(const, "RESERVED_MB_PER_WORKER", 512),
         ):
             self.assertEqual(const.default_threads(), 3)
+
+
+class TestCheckRequestedAttributes(TestCase):
+    def test_no_attributes_requested_is_a_noop(self):
+        common.check_requested_attributes((), "/no/such/file.gpkg", None, None)
+
+    def test_known_column_passes(self):
+        common.check_requested_attributes(
+            ("LCDB_UID",), TEST_FILE_PATH, TEST_LAYER_NAME, None
+        )
+
+    def test_unknown_column_raises(self):
+        with self.assertRaises(common.UnknownAttributeError):
+            common.check_requested_attributes(
+                ("not_a_real_column",), TEST_FILE_PATH, TEST_LAYER_NAME, None
+            )
+
+
+class TestPrepareDataframeKeepAttribute(TestCase):
+    def test_keep_attribute_overrides_keep_attributes_false(self):
+        gdf = gpd.GeoDataFrame({"geometry": [Point(0, 0)], "a": [1], "b": [2]})
+        result = common._prepare_dataframe(gdf, None, False, keep_attribute=("a",))
+        self.assertEqual(sorted(result.columns), ["a", "geometry"])
+
+    def test_keep_attribute_ignores_columns_not_present(self):
+        gdf = gpd.GeoDataFrame({"geometry": [Point(0, 0)], "a": [1]})
+        result = common._prepare_dataframe(
+            gdf, None, False, keep_attribute=("a", "missing")
+        )
+        self.assertEqual(sorted(result.columns), ["a", "geometry"])
+
+    def test_no_keep_attribute_falls_back_to_boolean(self):
+        gdf = gpd.GeoDataFrame({"geometry": [Point(0, 0)], "a": [1]})
+        kept_all = common._prepare_dataframe(gdf.copy(), None, True)
+        self.assertIn("a", kept_all.columns)
+        kept_none = common._prepare_dataframe(gdf.copy(), None, False)
+        self.assertNotIn("a", kept_none.columns)
+
+    def test_keep_attribute_columns_are_dictionary_encoded(self):
+        gdf = gpd.GeoDataFrame({"geometry": [Point(0, 0)], "a": ["x"], "b": ["y"]})
+        result = common._prepare_dataframe(gdf, None, False, keep_attribute=("a",))
+        self.assertEqual(result["a"].dtype, "category")
+
+
+class TestReadBatchesColumnSelection(TestCase):
+    def test_keep_attribute_limits_columns_read(self):
+        batch = next(
+            common._read_batches(
+                TEST_FILE_PATH,
+                TEST_LAYER_NAME,
+                None,
+                False,
+                None,
+                "geometry",
+                10,
+                keep_attribute=("LCDB_UID",),
+            )
+        )
+        self.assertIn("LCDB_UID", batch.columns)
+        self.assertNotIn("Name_2018", batch.columns)
+
+    def test_default_keep_attributes_false_only_reads_geometry(self):
+        batch = next(
+            common._read_batches(
+                TEST_FILE_PATH, TEST_LAYER_NAME, None, False, None, "geometry", 10
+            )
+        )
+        self.assertEqual(list(batch.columns), ["geometry"])
 
 
 class TestDropCondition(TestCase):
