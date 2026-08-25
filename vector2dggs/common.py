@@ -794,7 +794,12 @@ def _run_bisection(
     cut_threshold: None | float,
     processes: int,
     blade_segment: None | float = None,
+    pbar: tqdm | None = None,
 ) -> gpd.GeoDataFrame:
+    """
+    pbar, if given, is a shared bar whose total grows by this call's
+    oversized-feature count; otherwise a local bar is created and closed.
+    """
     LOGGER.debug("Bisecting large geometries")
     if cut_threshold is not None and cut_threshold > 0:
         # katana's own early exit is exactly this bbox-area check; computing
@@ -817,23 +822,35 @@ def _run_bisection(
         )
         if len(oversized_positions):
             geometry_loc = df.columns.get_loc("geometry")
-            with ThreadPoolExecutor(max_workers=max(1, processes)) as executor:
-                futures = [
-                    (
-                        pos,
-                        executor.submit(
-                            bisect_geometry,
-                            df.geometry.iloc[pos],
-                            cut_threshold,
-                            blade_segment,
-                        ),
-                    )
-                    for pos in oversized_positions
-                ]
-                with tqdm(total=len(futures), desc="Bisection") as pbar:
+            owns_pbar = pbar is None
+            active_pbar: tqdm = (
+                pbar
+                if pbar is not None
+                else tqdm(total=len(oversized_positions), desc="Bisection")
+            )
+            if not owns_pbar:
+                active_pbar.total = (active_pbar.total or 0) + len(oversized_positions)
+                active_pbar.refresh()
+            try:
+                with ThreadPoolExecutor(max_workers=max(1, processes)) as executor:
+                    futures = [
+                        (
+                            pos,
+                            executor.submit(
+                                bisect_geometry,
+                                df.geometry.iloc[pos],
+                                cut_threshold,
+                                blade_segment,
+                            ),
+                        )
+                        for pos in oversized_positions
+                    ]
                     for pos, future in futures:
                         df.iloc[pos, geometry_loc] = future.result()
-                        pbar.update(1)
+                        active_pbar.update(1)
+            finally:
+                if owns_pbar:
+                    active_pbar.close()
     else:
         LOGGER.debug("No bisection applied to input.")
     return df
@@ -1135,6 +1152,7 @@ def _index(
         fid_offset = 0
         part = 0
         pbar = tqdm(total=total, desc="Ingesting", unit="feature")
+        bisection_pbar = tqdm(total=0, desc="Bisection", unit="feature")
         for batch in _read_batches(
             input_file,
             layer,
@@ -1160,7 +1178,9 @@ def _index(
             fid_offset += len(batch)
             features_in.update(batch.index)
             blade_segment = _blade_segment(indexer, dggs, resolution, cut_crs)
-            batch = _run_bisection(batch, cut_threshold, processes, blade_segment)
+            batch = _run_bisection(
+                batch, cut_threshold, processes, blade_segment, bisection_pbar
+            )
             batch = _clean_geometries(batch, indexer)
             for start, end in _staged_file_chunks(
                 batch, dggs, resolution, rows_per_file
@@ -1170,6 +1190,9 @@ def _index(
                 )
                 part += 1
         pbar.close()
+        if bisection_pbar.n == 0:  # nothing bisected: don't leave an empty bar
+            bisection_pbar.leave = False
+        bisection_pbar.close()
         filepaths = [f.absolute() for f in Path(tmpdir).glob("*")]
 
         indexed_ids = _run_dggs_indexing(

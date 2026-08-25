@@ -24,6 +24,10 @@ with contextlib.suppress(ImportError):
 with contextlib.suppress(ImportError):
     from .classes.bisection import TestGeodesicCutEdges as TestGeodesicCutEdges
 with contextlib.suppress(ImportError):
+    from .classes.bisection import (
+        TestSharedBisectionProgress as TestSharedBisectionProgress,
+    )
+with contextlib.suppress(ImportError):
     from .classes.compaction import TestA5CompactionBounds as TestA5CompactionBounds
 with contextlib.suppress(ImportError):
     from .classes.compaction import (

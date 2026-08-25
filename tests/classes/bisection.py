@@ -1,8 +1,10 @@
+import io
 from unittest import TestCase
 
 import geopandas as gpd
 import pyproj
 from shapely.geometry import Polygon
+from tqdm import tqdm
 
 from vector2dggs import common
 from vector2dggs import constants as const
@@ -45,6 +47,48 @@ class TestBisection(TestCase):
         self.assertAlmostEqual(result.geometry.iloc[1].area, square_b.area, places=6)
         # The two rows were bisected independently and must not be identical
         self.assertFalse(result.geometry.iloc[0].equals(result.geometry.iloc[1]))
+
+
+class TestSharedBisectionProgress(TestCase):
+    """
+    A pbar passed into _run_bisection is shared across calls: its total
+    grows and updates accumulate onto the same bar.
+    """
+
+    SQUARE = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
+
+    @staticmethod
+    def _silent_pbar():
+        # disable=True would make update() a no-op; redirect output instead.
+        return tqdm(total=0, file=io.StringIO())
+
+    def test_shared_pbar_accumulates_total_and_count_across_calls(self):
+        df1 = gpd.GeoDataFrame({"geometry": [self.SQUARE]}, crs=2193)
+        df2 = gpd.GeoDataFrame({"geometry": [self.SQUARE, self.SQUARE]}, crs=2193)
+        pbar = self._silent_pbar()
+
+        _run_bisection(df1.copy(), 5.0, 1, pbar=pbar)
+        self.assertEqual(pbar.total, 1)
+        self.assertEqual(pbar.n, 1)
+
+        _run_bisection(df2.copy(), 5.0, 1, pbar=pbar)
+        self.assertEqual(pbar.total, 3)
+        self.assertEqual(pbar.n, 3)
+        pbar.close()
+
+    def test_caller_retains_ownership_of_shared_pbar(self):
+        # close() sets disable=True; staying False confirms the shared bar
+        # wasn't closed by _run_bisection itself.
+        df = gpd.GeoDataFrame({"geometry": [self.SQUARE]}, crs=2193)
+        pbar = self._silent_pbar()
+        _run_bisection(df.copy(), 5.0, 1, pbar=pbar)
+        self.assertFalse(pbar.disable)
+        pbar.close()
+
+    def test_no_pbar_given_falls_back_to_per_call_bar(self):
+        df = gpd.GeoDataFrame({"geometry": [self.SQUARE]}, crs=2193)
+        result = _run_bisection(df.copy(), 5.0, 1)
+        self.assertAlmostEqual(result.geometry.iloc[0].area, self.SQUARE.area, places=6)
 
 
 class TestBisectionPreparation(TestCase):
