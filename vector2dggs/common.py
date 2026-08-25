@@ -4,6 +4,7 @@ import math
 import multiprocessing
 import shutil
 import tempfile
+from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from pathlib import Path, PurePath
 from types import ModuleType
@@ -215,6 +216,10 @@ def write_partition(
     """
     Hive-partitioned parquet write of one dataframe; GeoParquet when
     geo_serialisation_method (cell -> shapely geometry) is given.
+
+    May mutate partition_df in place (columns added/retyped, rows dropped,
+    row order changed) -- callers that need the original afterward must
+    copy it themselves first.
     """
     if partition_df.empty:
         return 0
@@ -241,19 +246,18 @@ def write_partition(
     if not bool(valid_cell_mask.any()):
         return 0
     if not bool(valid_cell_mask.all()):
-        partition_df = partition_df.loc[valid_cell_mask].copy()
+        partition_df = partition_df.loc[valid_cell_mask]
         cell_ids = cell_ids.loc[valid_cell_mask]
 
-    pdf = partition_df.copy()
-    pdf[partition_col] = pdf[partition_col].astype("string")
+    partition_df[partition_col] = partition_df[partition_col].astype("string")
     if geo_serialisation_method is not None:
-        pdf["geometry"] = shapely.to_wkb(
+        partition_df["geometry"] = shapely.to_wkb(
             cell_ids.map(geo_serialisation_method), hex=False
         )
     # sorted by partition value: one file per parent cell, no writer churn
-    pdf = pdf.sort_values(partition_col, kind="stable")
+    partition_df.sort_values(partition_col, kind="stable", inplace=True)
 
-    table = pa.Table.from_pandas(pdf, preserve_index=True)
+    table = pa.Table.from_pandas(partition_df, preserve_index=True)
     if geo_serialisation_method is not None:
         table = _with_geoparquet_metadata(table)
 
@@ -273,10 +277,10 @@ def write_partition(
         max_open_files=const.MAX_OPEN_FILES_PER_TASK,
         # pyarrow's default max_partitions (1024) is a safety valve; this
         # batch's true partition count is known, so pass it exactly
-        max_partitions=max(1, int(pdf[partition_col].nunique())),
+        max_partitions=max(1, int(partition_df[partition_col].nunique())),
     )
 
-    return int(len(pdf.index) > 0)
+    return int(len(partition_df.index) > 0)
 
 
 def _with_geoparquet_metadata(table: pa.Table) -> pa.Table:
@@ -508,6 +512,9 @@ def _polyfill(
     # Secondary (parent) index, used for hive partitioning
     df = indexer.secondary_index(df, parent_res)
 
+    # Computed before write_partition, which may mutate/filter df in place
+    indexed_ids = df[id_col].unique()
+
     # With compaction, geometry is serialised after compacting (merge step)
     geom_fn = None if compact else _geom_fn(indexer, geo)
     write_partition(
@@ -518,7 +525,7 @@ def _polyfill(
         f"{indexer.dggs}_{resolution:02}",
         compression,
     )
-    return df[id_col].unique()
+    return indexed_ids
 
 
 def _polyfill_star(args) -> np.ndarray:
@@ -686,6 +693,32 @@ def _read_batches(
         rows = _next_batch_rows(batch)
 
 
+def _dictionary_encode_attributes(df: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """
+    Cast string attribute columns (object-dtype or pandas' newer StringDtype)
+    to pandas' category dtype.
+
+    Attribute values are attached once per input feature here, then
+    duplicated onto every cell that feature explodes into by polyfill() --
+    so a column's distinct-value count is bounded by feature count, while
+    its row count downstream is bounded by (much larger) cell count.
+    Dictionary encoding turns that duplication into small integer codes
+    referencing one shared dictionary instead of independent string copies.
+    This is preserved through the rest of the pipeline (explode, boolean
+    subsetting, Arrow conversion) as long as frames built from genuinely
+    different sources are combined via pyarrow rather than pandas -- pandas'
+    own concat silently drops dictionary encoding when inputs don't share
+    the same categories object.
+    """
+    geom_col = df.geometry.name
+    string_cols = [
+        c for c in df.columns if c != geom_col and pd.api.types.is_string_dtype(df[c])
+    ]
+    if string_cols:
+        df = df.astype(dict.fromkeys(string_cols, "category"))
+    return df
+
+
 def _prepare_dataframe(
     df: gpd.GeoDataFrame,
     id_field: str | None,
@@ -699,6 +732,8 @@ def _prepare_dataframe(
         df.index = pd.RangeIndex(fid_offset, fid_offset + len(df), name="fid")
     if not keep_attributes:
         df = df.loc[:, ["geometry"]]
+    else:
+        df = _dictionary_encode_attributes(df)
     return df
 
 
@@ -851,6 +886,44 @@ def _clean_geometries(df: gpd.GeoDataFrame, indexer: VectorIndexer) -> gpd.GeoDa
     return df
 
 
+def _staged_file_chunks(
+    batch: gpd.GeoDataFrame, dggs: str, resolution: int, max_rows: int
+) -> Iterator[tuple[int, int]]:
+    """
+    Yield (start, end) row-position ranges bundling batch into successive
+    staged files (and therefore _polyfill() worker tasks), so that no one
+    file's estimated total cell output much exceeds
+    const.MAX_CELLS_PER_STAGED_FILE, in addition to the max_rows backstop.
+
+    Per-row cell counts are estimated from bounding-box area -- the same
+    approximation bisection itself uses to size cut pieces -- converting
+    degrees to an approximate metre scale when the CRS is geographic. This
+    is only a heuristic bound: an exact count would mean running polyfill
+    itself, which is the expensive step this is sizing work for.
+    """
+    bounds = batch.geometry.bounds
+    bbox_area = (bounds["maxx"] - bounds["minx"]) * (bounds["maxy"] - bounds["miny"])
+    if batch.crs is not None and batch.crs.is_geographic:
+        axis = batch.crs.axis_info[0]
+        metres_per_unit = axis.unit_conversion_factor * const.EARTH_MEAN_RADIUS_M
+        bbox_area = bbox_area * metres_per_unit**2
+    cell_area_m2 = const.DGGS_CELL_AREA_M2_BY_RES[dggs](resolution)
+    est_cells = np.maximum(1.0, bbox_area.to_numpy() / cell_area_m2)
+
+    start = 0
+    running = 0.0
+    for i, cells in enumerate(est_cells):
+        if i > start and (
+            running + cells > const.MAX_CELLS_PER_STAGED_FILE or i - start >= max_rows
+        ):
+            yield start, i
+            start = i
+            running = 0.0
+        running += cells
+    if start < len(est_cells):
+        yield start, len(est_cells)
+
+
 def _mp_context() -> multiprocessing.context.BaseContext:
     """Never fork: the parent is multi-threaded by the time the pool starts."""
     methods = multiprocessing.get_all_start_methods()
@@ -988,8 +1061,10 @@ def _index(
         )
         return
 
-    # a handful of staged files per worker balances the pool; row count
-    # per file is clamped so worker memory stays bounded
+    # a handful of staged files per worker balances the pool; row count is
+    # a backstop cap, but _staged_file_chunks additionally bounds files by
+    # estimated cell output, since row count alone isn't a safe proxy for
+    # worker memory (see const.MAX_CELLS_PER_STAGED_FILE)
     rows_per_file = min(
         const.STAGED_FILE_MAX_ROWS,
         max(
@@ -1025,8 +1100,10 @@ def _index(
             blade_segment = _blade_segment(indexer, dggs, resolution, cut_crs)
             batch = _run_bisection(batch, cut_threshold, processes, blade_segment)
             batch = _clean_geometries(batch, indexer)
-            for start in range(0, len(batch), rows_per_file):
-                batch.iloc[start : start + rows_per_file].to_parquet(
+            for start, end in _staged_file_chunks(
+                batch, dggs, resolution, rows_per_file
+            ):
+                batch.iloc[start:end].to_parquet(
                     PurePath(tmpdir, f"part-{part:06}.parquet")
                 )
                 part += 1
