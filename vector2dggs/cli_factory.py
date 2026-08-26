@@ -138,7 +138,7 @@ def make_dggs_command(
         "-co",
         "--compact",
         is_flag=True,
-        help=f"Compact the {display_name} cells up to the parent resolution. Compaction requires an id_field.",
+        help=f"Compact the {display_name} cells up to the parent resolution, grouping by id_field (explicit, auto-detected, or the default 0...n sequence).",
     )
     @click.option("-o", "--overwrite", is_flag=True)
     @click.version_option(version=__version__)

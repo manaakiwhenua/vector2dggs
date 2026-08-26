@@ -5,6 +5,7 @@ from unittest import TestCase
 
 import click
 import geopandas as gpd
+import pyarrow.parquet as pq
 from pyogrio.errors import DataLayerError
 from shapely.geometry import Polygon
 
@@ -112,20 +113,22 @@ class TestErrors(TestRunthrough):
         )
         self.assertTrue(any(Path(self.output_path).rglob("*.parquet")))
 
-    def test_compact_without_any_usable_id_raises(self):
+    def test_compact_without_any_usable_id_uses_synthetic_fid(self):
         """A format with no physically-stored FID (e.g. Shapefile) and no
-        -id given: compaction still has no real id_field to fall back on."""
+        -id given: compaction still proceeds, grouped by the synthetic fid
+        (stable across runs of this same file, just not a real identity)."""
         with tempfile.TemporaryDirectory() as tmp:
             shp = f"{tmp}/no_fid.shp"
             gdf = gpd.read_file(TEST_FILE_PATH, layer=TEST_LAYER_NAME)
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 gdf.to_file(shp)
-            with self.assertRaises(common.IdFieldError):
-                h3(
-                    [shp, str(self.output_path), "-r", "8", "-co"],
-                    standalone_mode=False,
-                )
+            h3(
+                [shp, str(self.output_path), "-r", "8", "-co"],
+                standalone_mode=False,
+            )
+        table = pq.read_table(next(Path(self.output_path).rglob("*.parquet")))
+        self.assertIn("fid", table.schema.names)
 
     def test_unknown_dggs_raises(self):
         with self.assertRaises(ValueError):
@@ -192,9 +195,9 @@ class TestIndexCompactionDefaults(TestCase):
         out = self._index(compact=True)
         self.assertTrue(any(Path(out).rglob("*.parquet")))
 
-    def test_compact_without_any_usable_id_raises_idfielderror(self):
+    def test_compact_without_any_usable_id_uses_synthetic_fid(self):
         """A format with no physically-stored FID (e.g. Shapefile) and no
-        id_field: index() itself must still refuse compact, not just the CLI."""
+        id_field: index() still compacts, grouped by the synthetic fid."""
         shp = f"{self._tmp.name}/in.shp"
         df = gpd.GeoDataFrame(
             {
@@ -207,18 +210,18 @@ class TestIndexCompactionDefaults(TestCase):
             crs=4326,
         )
         df.to_file(shp)
-        with self.assertRaises(common.IdFieldError):
-            common.index(
-                "h3",
-                shp,
-                f"{self._tmp.name}/out2.pq",
-                7,
-                None,
-                False,
-                0.0,
-                1,
-                compact=True,
-            )
+        out = common.index(
+            "h3",
+            shp,
+            f"{self._tmp.name}/out2.pq",
+            7,
+            None,
+            False,
+            0.0,
+            1,
+            compact=True,
+        )
+        self.assertTrue(any(Path(out).rglob("*.parquet")))
 
     def test_compaction_defaults_off(self):
         out = self._index()
