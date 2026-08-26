@@ -72,13 +72,6 @@ def check_resolutions(resolution: str | int, parent_res: None | str | int) -> No
         )
 
 
-def check_compaction_requirements(compact: bool, id_field: str | None) -> None:
-    if compact and not id_field:
-        raise IdFieldError(
-            "An id_field is required for compaction, in order to handle the potential for overlapping features"
-        )
-
-
 def check_requested_attributes(
     keep_attribute: tuple[str, ...],
     input_file: Path | str,
@@ -129,6 +122,37 @@ def check_id_field(
             f"Unknown -id/--id_field '{id_field}'. "
             f"Available: {', '.join(sorted(c for c in available if c))}"
         )
+
+
+def resolve_default_id_field(
+    input_file: Path | str,
+    layer: str | None,
+    con: SQLConnectionType | None,
+) -> str | None:
+    """
+    When -id/--id_field isn't given, prefer a real internal ID over a
+    constructed 0...n sequence: a file's physically-stored FID column, or
+    a DB table's single-column primary key. Falls back to None (the
+    caller's synthetic-sequence path) with a warning when neither is
+    available, e.g. Shapefile, or a composite/missing DB primary key.
+    """
+    if layer and con:
+        with con.connect() as connection:
+            pk_cols = list(_db_table(connection, layer).primary_key.columns)
+        if len(pk_cols) == 1:
+            return pk_cols[0].name
+    else:
+        fid_col = _fid_column(input_file, layer)
+        if fid_col:
+            return fid_col
+    LOGGER.warning(
+        "No internal ID found (no physically-stored FID column, or no "
+        "single-column primary key); using a constructed 0...n index tied "
+        "to row position in the read order, which won't match a different "
+        "export/copy of this data. Pass -id/--id_field to use a specific "
+        "field instead."
+    )
+    return None
 
 
 def validate_compression(ctx, param, value: str) -> str:
@@ -554,7 +578,11 @@ def _polyfill(
     cells hive-partitioned by parent cell directly into the output
     directory. Returns the ids of features that produced at least one cell.
     """
-    df = gpd.read_parquet(pq_in).reset_index()
+    # id_col is already a plain column by this point (_clean_geometries put
+    # it there), so no reset_index() here: the staged file's own index is a
+    # meaningless post-explode position, and materialising it would leak a
+    # stray "index" column into every output row.
+    df = gpd.read_parquet(pq_in)
     if df.empty:
         return np.array([])
 
@@ -1162,7 +1190,7 @@ def _index(
     compact: bool,
     keep_attribute: tuple[str, ...] = (),
 ) -> None:
-    check_compaction_requirements(compact, id_field)
+    id_field = id_field or resolve_default_id_field(input_file, layer, con)
     indexer = idxfactory.indexer_instance(dggs)
     parent_res = get_parent_res(dggs, parent_res, resolution)
 
@@ -1268,7 +1296,7 @@ def _index(
             output_directory,
             resolution,
             parent_res,
-            id_field,
+            id_field or "fid",
             compact,
             geo,
             compression,

@@ -264,6 +264,38 @@ class TestFidColumnIdField(TestCase):
         self.assertEqual(result.index.name, "facility_id")
         self.assertEqual(sorted(result.index), [101, 102, 103])
 
+    def test_resolve_default_id_field_uses_fid_column(self):
+        self.assertEqual(
+            common.resolve_default_id_field(self.gpkg_path, "facilities", None),
+            "facility_id",
+        )
+
+
+class TestResolveDefaultIdFieldNoFid(TestCase):
+    """
+    Formats without a physically-stored FID (e.g. Shapefile) have nothing
+    for resolve_default_id_field to auto-detect: it falls back to None
+    (the caller's synthetic-sequence path), with a warning logged so
+    users understand IDs won't be stable across runs.
+    """
+
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.shp_path = str(Path(self._tmpdir.name) / "no_fid.shp")
+        gdf = gpd.GeoDataFrame(
+            {"name": ["a", "b"], "geometry": [Point(0, 0), Point(1, 1)]},
+            crs="EPSG:4326",
+        )
+        gdf.to_file(self.shp_path)
+
+    def tearDown(self):
+        self._tmpdir.cleanup()
+
+    def test_falls_back_to_none(self):
+        with self.assertLogs(common.LOGGER, level="WARNING"):
+            result = common.resolve_default_id_field(self.shp_path, None, None)
+        self.assertIsNone(result)
+
 
 class TestDropCondition(TestCase):
     def test_small_drop_logs_info(self):
