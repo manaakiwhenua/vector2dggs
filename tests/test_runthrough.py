@@ -71,6 +71,10 @@ with contextlib.suppress(ImportError):
     )
 with contextlib.suppress(ImportError):
     from .classes.common_units import (
+        TestResolveDefaultIdFieldNoFid as TestResolveDefaultIdFieldNoFid,
+    )
+with contextlib.suppress(ImportError):
+    from .classes.common_units import (
         TestWritePartitionGuards as TestWritePartitionGuards,
     )
 with contextlib.suppress(ImportError):

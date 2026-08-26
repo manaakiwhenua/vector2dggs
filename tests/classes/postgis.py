@@ -120,3 +120,83 @@ class TestPostGIS(TestRunthrough):
         table = pq.read_table(files[0])
         self.assertIn("LCDB_UID", table.schema.names)
         self.assertNotIn("Name_2018", table.schema.names)
+
+    def _table_with_primary_key(
+        self, table_name: str, extra_pk_columns: tuple[str, ...] = ()
+    ) -> None:
+        """
+        Writes the fixture with its pandas RangeIndex as a "row_pk" column
+        (genuinely unique by construction, unlike LCDB_UID: several source
+        rows legitimately share one feature id), then makes that column
+        (plus any extra_pk_columns, for a composite key) the table's PK.
+        """
+        engine = sqlalchemy.create_engine(self.connection_url)
+        try:
+            gdf = gpd.read_file(TEST_FILE_PATH, layer=TEST_LAYER_NAME)
+            gdf.to_postgis(
+                table_name,
+                engine,
+                if_exists="replace",
+                index=True,
+                index_label="row_pk",
+            )
+            cols = ", ".join(f'"{c}"' for c in ("row_pk", *extra_pk_columns))
+            with engine.begin() as connection:
+                connection.execute(
+                    sqlalchemy.text(
+                        f'ALTER TABLE "{table_name}" ADD PRIMARY KEY ({cols})'
+                    )
+                )
+        finally:
+            engine.dispose()
+
+    def test_postgis_default_id_uses_primary_key(self):
+        """No -id given, but the table has a single-column PK: auto-detected
+        and used, rather than falling back to a synthetic fid."""
+        table_name = "vector2dggs_test_pk_table"
+        self._table_with_primary_key(table_name)
+        h3(
+            [
+                self.connection_url,
+                str(self.output_path),
+                "--layer",
+                table_name,
+                "-g",
+                "geometry",
+                "-r",
+                "8",
+                "-t",
+                "1",
+            ],
+            standalone_mode=False,
+        )
+        files = sorted(self.output_path.rglob("*.parquet"))
+        self.assertTrue(files, "No parquet files written from PostGIS input")
+        table = pq.read_table(files[0])
+        self.assertIn("row_pk", table.schema.names)
+        self.assertNotIn("fid", table.schema.names)
+
+    def test_postgis_composite_primary_key_falls_back_to_synthetic(self):
+        """A composite PK isn't auto-detected (out of scope for #193, see
+        #194); falls back to the synthetic fid, same as no PK at all."""
+        table_name = "vector2dggs_test_composite_pk_table"
+        self._table_with_primary_key(table_name, extra_pk_columns=("LCDB_UID",))
+        h3(
+            [
+                self.connection_url,
+                str(self.output_path),
+                "--layer",
+                table_name,
+                "-g",
+                "geometry",
+                "-r",
+                "8",
+                "-t",
+                "1",
+            ],
+            standalone_mode=False,
+        )
+        files = sorted(self.output_path.rglob("*.parquet"))
+        self.assertTrue(files, "No parquet files written from PostGIS input")
+        table = pq.read_table(files[0])
+        self.assertIn("fid", table.schema.names)

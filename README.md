@@ -50,8 +50,8 @@ vector2dggs <dggs> [OPTIONS] VECTOR_INPUT OUTPUT_DIRECTORY
 
 - `-r`/`--resolution`: the target DGGS resolution. Each output row is one (feature, cell) pair; a cell is included when its centre falls inside the feature, uniformly across all backends.
 - `-pr`/`--parent_res`: a coarser resolution used to partition the output (hive directories such as `h3_03=…`); defaults to a fixed offset below the target resolution.
-- `-id`/`--id_field`: the feature identifier carried into the output; defaults to a synthetic index. Rows sharing an id are treated as one feature.
-- `-co`/`--compact` (requires `-id`): merges complete sets of sibling cells belonging to one feature, to no coarser than the parent resolution. Compacted output expands back to exactly the full-resolution result.
+- `-id`/`--id_field`: the feature identifier carried into the output. Defaults to the input's own internal ID where one exists (a GPKG's FID column, or a DB table's single-column primary key); otherwise falls back to a synthetic index, which is not stable across runs. Rows sharing an id are treated as one feature.
+- `-co`/`--compact` (requires an id, explicit or auto-detected): merges complete sets of sibling cells belonging to one feature, to no coarser than the parent resolution. Compacted output expands back to exactly the full-resolution result.
 - `--geo`: plain Parquet by default; `point` or `polygon` writes GeoParquet (v1.1.0) cell geometries instead.
 
 The full reference (`vector2dggs h3 --help`; the other commands differ only in their resolution ranges):
@@ -73,8 +73,11 @@ Options:
   -pr, --parent_res [0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15]
                                   H3 parent resolution for the output partition.
                                   Defaults to resolution - 6
-  -id, --id_field TEXT            Field to use as an ID; defaults to a
-                                  constructed single 0...n index on the original
+  -id, --id_field TEXT            Field to use as an ID; defaults to the input's
+                                  own internal ID if it has one (e.g. a GPKG's
+                                  FID column, or a DB table's single-column
+                                  primary key), otherwise falls back to a
+                                  constructed 0...n index on the original
                                   feature order.
   -k, --keep_attributes           Retain attributes in output. The default is to
                                   create an output that only includes H3 cell ID
