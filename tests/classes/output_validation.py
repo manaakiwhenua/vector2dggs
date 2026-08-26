@@ -111,3 +111,27 @@ class TestOutputValidation(TestRunthrough):
         table = pq.read_table(self._parquet_files()[0])
         self.assertIn("LCDB_UID", table.schema.names)
         self.assertNotIn("Name_2018", table.schema.names)
+
+    def test_no_stray_index_column(self):
+        """No leaked "index" column, with or without an explicit id_field."""
+        self._run_h3()
+        self.assertNotIn("index", pq.read_table(self._parquet_files()[0]).schema.names)
+        self._run_h3(("-id", "LCDB_UID", "-o"))
+        self.assertNotIn("index", pq.read_table(self._parquet_files()[0]).schema.names)
+
+    def test_default_id_uses_real_fid_not_synthetic(self):
+        """
+        No -id given, but the GPKG has a physically-stored FID column:
+        auto-detected and used, rather than a fresh 0...n sequence. The
+        fixture's real FIDs start at 1 (never 0).
+        """
+        self._run_h3()
+        df = pq.read_table(self._parquet_files()[0]).to_pandas()
+        self.assertIn("fid", df.columns)
+        self.assertNotIn(0, set(df["fid"]))
+
+    def test_compaction_without_explicit_id_uses_autodetected_fid(self):
+        """-co works without -id, since a real FID is auto-detected to satisfy it."""
+        self._run_h3(("-co",))
+        table = pq.read_table(self._parquet_files()[0])
+        self.assertIn("fid", table.schema.names)

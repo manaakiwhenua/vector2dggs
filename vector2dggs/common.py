@@ -131,6 +131,36 @@ def check_id_field(
         )
 
 
+def resolve_default_id_field(
+    input_file: Path | str,
+    layer: str | None,
+    con: SQLConnectionType | None,
+) -> str | None:
+    """
+    When -id/--id_field isn't given, prefer a real internal ID over a
+    constructed 0...n sequence: a file's physically-stored FID column, or
+    a DB table's single-column primary key. Falls back to None (the
+    caller's synthetic-sequence path) with a warning when neither is
+    available, e.g. Shapefile, or a composite/missing DB primary key.
+    """
+    if layer and con:
+        with con.connect() as connection:
+            pk_cols = list(_db_table(connection, layer).primary_key.columns)
+        if len(pk_cols) == 1:
+            return pk_cols[0].name
+    else:
+        fid_col = _fid_column(input_file, layer)
+        if fid_col:
+            return fid_col
+    LOGGER.warning(
+        "No internal ID found (no physically-stored FID column, or no "
+        "single-column primary key); using a constructed 0...n index, "
+        "which is not stable across runs. Pass -id/--id_field to use a "
+        "specific field instead."
+    )
+    return None
+
+
 def validate_compression(ctx, param, value: str) -> str:
     """
     Click callback that fails fast on an unsupported Parquet compression
@@ -554,7 +584,11 @@ def _polyfill(
     cells hive-partitioned by parent cell directly into the output
     directory. Returns the ids of features that produced at least one cell.
     """
-    df = gpd.read_parquet(pq_in).reset_index()
+    # id_col is already a plain column by this point (_clean_geometries put
+    # it there), so no reset_index() here: the staged file's own index is a
+    # meaningless post-explode position, and materialising it would leak a
+    # stray "index" column into every output row.
+    df = gpd.read_parquet(pq_in)
     if df.empty:
         return np.array([])
 
@@ -1162,6 +1196,7 @@ def _index(
     compact: bool,
     keep_attribute: tuple[str, ...] = (),
 ) -> None:
+    id_field = id_field or resolve_default_id_field(input_file, layer, con)
     check_compaction_requirements(compact, id_field)
     indexer = idxfactory.indexer_instance(dggs)
     parent_res = get_parent_res(dggs, parent_res, resolution)

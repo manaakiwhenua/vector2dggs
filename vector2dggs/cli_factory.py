@@ -44,7 +44,7 @@ def make_dggs_command(
         required=False,
         default=const.DEFAULTS["id"],
         type=str,
-        help="Field to use as an ID; defaults to a constructed single 0...n index on the original feature order.",
+        help="Field to use as an ID; defaults to the input's own internal ID if it has one (e.g. a GPKG's FID column, or a DB table's single-column primary key), otherwise falls back to a constructed 0...n index on the original feature order.",
         nargs=1,
     )
     @click.option(
@@ -147,7 +147,7 @@ def make_dggs_command(
         output_directory: str | Path,
         resolution: str,
         parent_res: str,
-        id_field: str,
+        id_field: str | None,
         keep_attributes: bool,
         keep_attribute: tuple[str, ...],
         cut_crs: int,
@@ -165,7 +165,6 @@ def make_dggs_command(
         common.raise_rlimit_nofile()
 
         common.check_resolutions(resolution, parent_res)
-        common.check_compaction_requirements(compact, id_field)
 
         geo = const.GeoOutputMode(geo).value
 
