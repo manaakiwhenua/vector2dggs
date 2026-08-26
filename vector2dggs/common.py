@@ -100,6 +100,37 @@ def check_requested_attributes(
         )
 
 
+def _fid_column(input_file: Path | str, layer: str | None) -> str | None:
+    """
+    The name of the file's FID/primary-key slot, e.g. "fid" for a plain
+    GPKG, or a dataset-specific name for a Kart working copy that promotes
+    its own PK there. Returns None if the format has no FID concept, or
+    the file has none set.
+    """
+    return pyogrio.read_info(str(input_file), layer=layer).get("fid_column") or None
+
+
+def check_id_field(
+    id_field: str | None,
+    input_file: Path | str,
+    layer: str | None,
+    con: SQLConnectionType | None,
+) -> None:
+    if not id_field:
+        return
+    if layer and con:
+        with con.connect() as connection:
+            available = set(_db_table(connection, layer).columns.keys())
+    else:
+        info = pyogrio.read_info(str(input_file), layer=layer)
+        available = set(info["fields"]) | {info.get("fid_column")}
+    if id_field not in available:
+        raise IdFieldError(
+            f"Unknown -id/--id_field '{id_field}'. "
+            f"Available: {', '.join(sorted(c for c in available if c))}"
+        )
+
+
 def validate_compression(ctx, param, value: str) -> str:
     """
     Click callback that fails fast on an unsupported Parquet compression
@@ -689,7 +720,11 @@ def _read_batches(
     vertex-heavy features get proportionally smaller batches.
 
     Only the columns actually needed (id_field, geometry, and whichever of
-    keep_attributes/keep_attribute apply) are read from the source.
+    keep_attributes/keep_attribute apply) are read from the source. When
+    id_field names the file's FID/primary-key slot (e.g. Kart working
+    copies, which promote the dataset PK there) rather than a regular
+    field, it's read via fid_as_index instead of columns=, since a FID
+    slot never appears in either.
     """
     rows = max(1, const.INGEST_PROBE_ROWS)
     if layer and con:
@@ -719,14 +754,17 @@ def _read_batches(
                 offset += len(result)
                 rows = _next_batch_rows(result)
         return
+    id_is_fid = bool(id_field) and id_field == _fid_column(input_file, layer)
     if keep_attribute:
         columns = list(
-            dict.fromkeys([*keep_attribute, *([id_field] if id_field else [])])
+            dict.fromkeys(
+                [*keep_attribute, *([id_field] if id_field and not id_is_fid else [])]
+            )
         )
     elif keep_attributes:
         columns = None
     else:
-        columns = [id_field] if id_field else []
+        columns = [id_field] if id_field and not id_is_fid else []
     offset = 0
     while offset < total:
         batch = gpd.read_file(
@@ -735,7 +773,10 @@ def _read_batches(
             skip_features=offset,
             max_features=rows,
             columns=columns,
+            fid_as_index=id_is_fid,
         )
+        if id_is_fid:
+            batch = batch.rename_axis(id_field).reset_index()
         yield batch
         offset += len(batch)
         rows = _next_batch_rows(batch)

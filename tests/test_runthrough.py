@@ -56,6 +56,8 @@ with contextlib.suppress(ImportError):
 with contextlib.suppress(ImportError):
     from .classes.common_units import TestDropCondition as TestDropCondition
 with contextlib.suppress(ImportError):
+    from .classes.common_units import TestFidColumnIdField as TestFidColumnIdField
+with contextlib.suppress(ImportError):
     from .classes.common_units import TestGetParentRes as TestGetParentRes
 with contextlib.suppress(ImportError):
     from .classes.common_units import TestStagedFileChunks as TestStagedFileChunks

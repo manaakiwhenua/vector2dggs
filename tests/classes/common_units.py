@@ -5,6 +5,7 @@ from unittest import TestCase, mock
 
 import geopandas as gpd
 import pandas as pd
+import pyogrio
 from shapely.geometry import Point, box
 
 import vector2dggs.constants as const
@@ -165,6 +166,103 @@ class TestReadBatchesColumnSelection(TestCase):
             )
         )
         self.assertEqual(list(batch.columns), ["geometry"])
+
+
+class TestFidColumnIdField(TestCase):
+    """
+    Reproduces issue #191: Kart working copies (and any GPKG built with a
+    custom FID column name) promote the dataset's own PK to the GPKG
+    FID slot rather than exposing it as a regular field. -id/--id_field
+    pointing at that slot needs fid_as_index, since it's absent from both
+    pyogrio's "fields" list and a plain columns= read.
+    """
+
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.gpkg_path = str(Path(self._tmpdir.name) / "kart_style.gpkg")
+        gdf = gpd.GeoDataFrame(
+            {
+                "facility_id": [101, 102, 103],
+                "name": ["a", "b", "c"],
+                "geometry": [Point(0, 0), Point(1, 1), Point(2, 2)],
+            },
+            crs="EPSG:4326",
+        )
+        pyogrio.write_dataframe(
+            gdf,
+            self.gpkg_path,
+            layer="facilities",
+            layer_options={"FID": "facility_id"},
+        )
+
+    def tearDown(self):
+        self._tmpdir.cleanup()
+
+    def test_fid_column_is_detected(self):
+        self.assertEqual(
+            common._fid_column(self.gpkg_path, "facilities"), "facility_id"
+        )
+
+    def test_fid_column_excluded_from_fields(self):
+        info = pyogrio.read_info(self.gpkg_path, layer="facilities")
+        self.assertNotIn("facility_id", info["fields"])
+
+    def test_check_id_field_accepts_fid_column(self):
+        common.check_id_field("facility_id", self.gpkg_path, "facilities", None)
+
+    def test_check_id_field_accepts_regular_field(self):
+        common.check_id_field("name", self.gpkg_path, "facilities", None)
+
+    def test_check_id_field_rejects_unknown_field(self):
+        with self.assertRaises(common.IdFieldError):
+            common.check_id_field(
+                "not_a_real_column", self.gpkg_path, "facilities", None
+            )
+
+    def test_read_batches_recovers_fid_column_values(self):
+        batch = next(
+            common._read_batches(
+                self.gpkg_path,
+                "facilities",
+                None,
+                False,
+                "facility_id",
+                "geometry",
+                3,
+            )
+        )
+        self.assertIn("facility_id", batch.columns)
+        self.assertEqual(sorted(batch["facility_id"]), [101, 102, 103])
+
+    def test_read_batches_regular_id_field_unaffected(self):
+        batch = next(
+            common._read_batches(
+                self.gpkg_path,
+                "facilities",
+                None,
+                False,
+                "name",
+                "geometry",
+                3,
+            )
+        )
+        self.assertIn("name", batch.columns)
+
+    def test_prepare_dataframe_indexes_by_recovered_fid(self):
+        batch = next(
+            common._read_batches(
+                self.gpkg_path,
+                "facilities",
+                None,
+                False,
+                "facility_id",
+                "geometry",
+                3,
+            )
+        )
+        result = common._prepare_dataframe(batch, "facility_id", False)
+        self.assertEqual(result.index.name, "facility_id")
+        self.assertEqual(sorted(result.index), [101, 102, 103])
 
 
 class TestDropCondition(TestCase):
