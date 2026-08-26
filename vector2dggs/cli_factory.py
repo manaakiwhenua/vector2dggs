@@ -172,6 +172,7 @@ def make_dggs_command(
         con, vector_input = common.db_conn_and_input_path(vector_input)
         output_directory = common.resolve_output_path(output_directory, overwrite)
         common.check_requested_attributes(keep_attribute, vector_input, layer, con)
+        common.check_id_field(id_field, vector_input, layer, con)
 
         cut_crs_obj: pyproj.CRS | None = None
         if cut_crs is not None:
