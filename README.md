@@ -50,8 +50,8 @@ vector2dggs <dggs> [OPTIONS] VECTOR_INPUT OUTPUT_DIRECTORY
 
 - `-r`/`--resolution`: the target DGGS resolution. Each output row is one (feature, cell) pair; a cell is included when its centre falls inside the feature, uniformly across all backends.
 - `-pr`/`--parent_res`: a coarser resolution used to partition the output (hive directories such as `h3_03=…`); defaults to a fixed offset below the target resolution.
-- `-id`/`--id_field`: the feature identifier carried into the output. Defaults to the input's own internal ID where one exists (a GPKG's FID column, or a DB table's single-column primary key); otherwise falls back to a synthetic index, which is not stable across runs. Rows sharing an id are treated as one feature.
-- `-co`/`--compact` (requires an id, explicit or auto-detected): merges complete sets of sibling cells belonging to one feature, to no coarser than the parent resolution. Compacted output expands back to exactly the full-resolution result.
+- `-id`/`--id_field`: the feature identifier carried into the output. Defaults to the input's own internal ID where one exists (a GPKG's FID column, or a DB table's single-column primary key); otherwise falls back to a synthetic index tied to row position in the read order — stable across repeated runs of the same unchanged input, but not portable to a different export/copy of the same data. Rows sharing an id are treated as one feature.
+- `-co`/`--compact`: merges complete sets of sibling cells belonging to one feature (grouped by whichever id_field is in play, explicit, auto-detected, or synthetic), to no coarser than the parent resolution. Compacted output expands back to exactly the full-resolution result.
 - `--geo`: plain Parquet by default; `point` or `polygon` writes GeoParquet (v1.1.0) cell geometries instead.
 
 The full reference (`vector2dggs h3 --help`; the other commands differ only in their resolution ranges):
@@ -124,7 +124,8 @@ Options:
                                   control where this data will be written.
                                   [default: (system temp dir)]
   -co, --compact                  Compact the H3 cells up to the parent
-                                  resolution. Compaction requires an id_field.
+                                  resolution, grouping by id_field (explicit,
+                                  auto-detected, or the default 0...n sequence).
   -o, --overwrite
   --version                       Show the version and exit.
   --help                          Show this message and exit.

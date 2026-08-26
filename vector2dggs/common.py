@@ -72,13 +72,6 @@ def check_resolutions(resolution: str | int, parent_res: None | str | int) -> No
         )
 
 
-def check_compaction_requirements(compact: bool, id_field: str | None) -> None:
-    if compact and not id_field:
-        raise IdFieldError(
-            "An id_field is required for compaction, in order to handle the potential for overlapping features"
-        )
-
-
 def check_requested_attributes(
     keep_attribute: tuple[str, ...],
     input_file: Path | str,
@@ -154,9 +147,10 @@ def resolve_default_id_field(
             return fid_col
     LOGGER.warning(
         "No internal ID found (no physically-stored FID column, or no "
-        "single-column primary key); using a constructed 0...n index, "
-        "which is not stable across runs. Pass -id/--id_field to use a "
-        "specific field instead."
+        "single-column primary key); using a constructed 0...n index tied "
+        "to row position in the read order, which won't match a different "
+        "export/copy of this data. Pass -id/--id_field to use a specific "
+        "field instead."
     )
     return None
 
@@ -1197,7 +1191,6 @@ def _index(
     keep_attribute: tuple[str, ...] = (),
 ) -> None:
     id_field = id_field or resolve_default_id_field(input_file, layer, con)
-    check_compaction_requirements(compact, id_field)
     indexer = idxfactory.indexer_instance(dggs)
     parent_res = get_parent_res(dggs, parent_res, resolution)
 
@@ -1303,7 +1296,7 @@ def _index(
             output_directory,
             resolution,
             parent_res,
-            id_field,
+            id_field or "fid",
             compact,
             geo,
             compression,
