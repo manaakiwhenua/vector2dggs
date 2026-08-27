@@ -28,6 +28,8 @@ with contextlib.suppress(ImportError):
         TestSharedBisectionProgress as TestSharedBisectionProgress,
     )
 with contextlib.suppress(ImportError):
+    from .classes.cell_id_mode import TestA5CellIdUint64 as TestA5CellIdUint64
+with contextlib.suppress(ImportError):
     from .classes.compaction import TestA5CompactionBounds as TestA5CompactionBounds
 with contextlib.suppress(ImportError):
     from .classes.compaction import (

@@ -4,6 +4,7 @@ from collections.abc import Callable, Iterable
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 from shapely.geometry import Point, Polygon
 
 
@@ -18,8 +19,26 @@ class VectorIndexer(ABC):
     # whether or not they've been pre-split; a planar one does not.
     GEODESIC_POLYFILL: bool = False
 
+    # This backend's native cell-id form, worked in unconditionally
+    # throughout the pipeline. pa.string() (the default) means cell IDs are
+    # already their own canonical string form; a backend with a native
+    # integer form (e.g. pa.uint64()) overrides this and cells_to_string
+    # below, so -id/--cell-id uint64 can request that form at the output
+    # boundary instead of the default one-time string conversion there.
+    CELL_ARROW_TYPE: pa.DataType = pa.string()
+
     def __init__(self, dggs: str):
         self.dggs = dggs
+
+    @staticmethod
+    def cells_to_string(cells: Iterable) -> list:
+        """
+        Renders this backend's working cell-id form as its canonical string
+        form. The default is a passthrough, since CELL_ARROW_TYPE == string
+        backends already work in that form; a backend overriding
+        CELL_ARROW_TYPE overrides this too.
+        """
+        return list(cells)
 
     def polyfill(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
         """
@@ -73,47 +92,50 @@ class VectorIndexer(ABC):
 
     @staticmethod
     @abstractmethod
-    def cell_to_point(cell: str) -> Point: ...
+    def cell_to_point(cell: str | int) -> Point: ...
 
     @staticmethod
     @abstractmethod
-    def cell_to_polygon(cell: str) -> Polygon: ...
+    def cell_to_polygon(cell: str | int) -> Polygon: ...
 
     @staticmethod
     @abstractmethod
-    def get_resolution(cell: str) -> int: ...
+    def get_resolution(cell: str | int) -> int: ...
 
     @staticmethod
     @abstractmethod
-    def children_at_res(cell: str, target_res: int) -> Iterable[str]: ...
+    def children_at_res(cell: str | int, target_res: int) -> Iterable[str | int]: ...
 
-    @staticmethod
     def _geo_to_cells(
-        df: gpd.GeoDataFrame, resolution: int, cell_fn, geom_col: str
+        self, df: gpd.GeoDataFrame, resolution: int, cell_fn, geom_col: str
     ) -> pd.DataFrame:
-        return (
+        result = (
             df.assign(
                 __cells__=df[geom_col].apply(lambda geom: cell_fn(geom, resolution))
             )
             .drop(columns=[geom_col])
             .explode("__cells__")
             .dropna(subset=["__cells__"])
-            .set_index("__cells__")
-            .rename_axis(None)
         )
+        if pa.string() != self.CELL_ARROW_TYPE:
+            # .explode() alone leaves an object column of boxed Python ints;
+            # this is the only place a fresh cell-id column gets created
+            # from scratch, so it's where the native dtype has to be pinned.
+            result = result.astype({"__cells__": "uint64"})
+        return result.set_index("__cells__").rename_axis(None)
 
     @staticmethod
     def _enforce_resolution_floor(
-        cells: Iterable[str],
+        cells: Iterable[str | int],
         parent_res: int,
-        get_resolution_func: Callable[[str], int],
-        children_at_res_func: Callable[[str, int], Iterable[str]],
-    ) -> set[str]:
+        get_resolution_func: Callable[[str | int], int],
+        children_at_res_func: Callable[[str | int, int], Iterable[str | int]],
+    ) -> set[str | int]:
         """
         Break up any cell coarser than parent_res into its children at
         parent_res, so that no cell in the result is coarser than parent_res.
         """
-        result: set[str] = set()
+        result: set[str | int] = set()
         for cell in cells:
             if get_resolution_func(cell) < parent_res:
                 result.update(children_at_res_func(cell, parent_res))
@@ -128,11 +150,11 @@ class VectorIndexer(ABC):
         id_field: str,
         col_order: list[str],
         dggs_col: str,
-        compact_func: Callable[[Iterable[str]], Iterable[str]],
-        cell_to_child_func: Callable[[str, int], str],
+        compact_func: Callable[[Iterable[str | int]], Iterable[str | int]],
+        cell_to_child_func: Callable[[str | int, int], str | int],
         parent_res: int,
-        get_resolution_func: Callable[[str], int],
-        children_at_res_func: Callable[[str, int], Iterable[str]],
+        get_resolution_func: Callable[[str | int], int],
+        children_at_res_func: Callable[[str | int, int], Iterable[str | int]],
     ):
         """
         Compacts a dataframe up to a given low resolution (parent_res), from an existing maximum resolution (res).

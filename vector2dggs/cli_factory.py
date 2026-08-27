@@ -16,6 +16,7 @@ def make_dggs_command(
     display_name: str,
     min_res: int,
     max_res: int,
+    int_cells: bool = False,
 ) -> click.Command:
     res_choices = list(map(str, range(min_res, max_res + 1)))
 
@@ -128,6 +129,22 @@ def make_dggs_command(
         nargs=1,
     )
     @click.option(
+        "--cell-id",
+        required=False,
+        default=const.DEFAULTS["cell_id"],
+        type=click.Choice(
+            const.CELL_ID_MODES if int_cells else [const.CellIdMode.STRING.value]
+        ),
+        help=(
+            "Cell ID output form: 'string' (default) or 'uint64' (unsigned 64-bit "
+            "integer; e.g. for DuckDB interop)."
+            if int_cells
+            else f"Cell ID output form. {display_name} cell IDs are strings with no "
+            "integer form, so only 'string' is available."
+        ),
+        nargs=1,
+    )
+    @click.option(
         "--tempdir",
         default=const.DEFAULTS["tempdir"],
         show_default="system temp dir",
@@ -157,6 +174,7 @@ def make_dggs_command(
         layer: str,
         geom_col: str,
         geo: str,
+        cell_id: str,
         tempdir: str | Path,
         compact: bool,
         overwrite: bool,
@@ -167,6 +185,7 @@ def make_dggs_command(
         common.check_resolutions(resolution, parent_res)
 
         geo = const.GeoOutputMode(geo).value
+        cell_id = const.CellIdMode(cell_id).value
 
         con, vector_input = common.db_conn_and_input_path(vector_input)
         output_directory = common.resolve_output_path(output_directory, overwrite)
@@ -196,6 +215,7 @@ def make_dggs_command(
             overwrite=overwrite,
             compact=compact,
             keep_attribute=keep_attribute,
+            cell_id=cell_id,
         )
 
     command.help = (

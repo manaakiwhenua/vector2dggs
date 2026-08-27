@@ -65,6 +65,23 @@ class UnknownAttributeError(ValueError):
     pass
 
 
+class CellIdError(ValueError):
+    """Raised when --cell-id uint64 is requested for a string-only DGGS."""
+
+    pass
+
+
+def check_cell_id(cell_id: str, indexer: VectorIndexer) -> None:
+    if (
+        cell_id == const.CellIdMode.UINT64.value
+        and pa.string() == indexer.CELL_ARROW_TYPE
+    ):
+        raise CellIdError(
+            f"--cell-id uint64 is not supported for '{indexer.dggs}': its cell IDs "
+            "are strings with no integer form. Only 'string' is available."
+        )
+
+
 def check_resolutions(resolution: str | int, parent_res: None | str | int) -> None:
     if parent_res is not None and not int(parent_res) < int(resolution):
         raise ParentResolutionException(
@@ -294,6 +311,9 @@ def write_partition(
     partition_col: str,
     dggs_col: str,
     compression: str,
+    indexer: VectorIndexer,
+    cell_id: str,
+    compact: bool,
 ) -> int:
     """
     Hive-partitioned parquet write of one dataframe; GeoParquet when
@@ -331,23 +351,57 @@ def write_partition(
         partition_df = partition_df.loc[valid_cell_mask]
         cell_ids = cell_ids.loc[valid_cell_mask]
 
-    partition_df[partition_col] = partition_df[partition_col].astype("string")
+    # Geometry is built from the working (native, for capable backends) cell
+    # form, before any string conversion below.
     if geo_serialisation_method is not None:
         partition_df["geometry"] = shapely.to_wkb(
             cell_ids.map(geo_serialisation_method), hex=False
         )
-    # sorted by partition value: one file per parent cell, no writer churn
+
+    # The parent/partition column decides the hive directory name, created
+    # permanently by this write - even under compaction, the later merge
+    # step only rewrites file contents within an existing directory, never
+    # directory names - so it always follows the final requested cell_id
+    # mode, regardless of compact.
+    emit_string = cell_id == const.CellIdMode.STRING.value
+    if emit_string and pa.string() != indexer.CELL_ARROW_TYPE:
+        partition_df[partition_col] = indexer.cells_to_string(
+            partition_df[partition_col]
+        )
+    partition_arrow_type = pa.string() if emit_string else indexer.CELL_ARROW_TYPE
+    partition_df[partition_col] = partition_df[partition_col].astype(
+        "string" if emit_string else "uint64"
+    )
+
+    # The fine cell column/index defers to the merge step under compaction
+    # (mirroring geo_serialisation_method's own compact-gating in _polyfill):
+    # compaction needs the native form to correctly group sibling cells, so
+    # no conversion happens here when compacting.
+    if not compact and emit_string and pa.string() != indexer.CELL_ARROW_TYPE:
+        if dggs_col in partition_df.columns:
+            partition_df[dggs_col] = indexer.cells_to_string(partition_df[dggs_col])
+        else:
+            partition_df.index = pd.Index(
+                indexer.cells_to_string(partition_df.index),
+                name=partition_df.index.name,
+            )
+
+    # sorted by partition value: one file per parent cell, no writer churn.
+    # Sorting the native form when possible (rather than after string
+    # conversion) is a cheap numeric sort instead of a string one; either
+    # achieves the same churn-avoidance property, which only needs equal
+    # values to end up contiguous, not any particular relative order.
     partition_df.sort_values(partition_col, kind="stable", inplace=True)
 
     table = pa.Table.from_pandas(partition_df, preserve_index=True)
     if geo_serialisation_method is not None:
         table = _with_geoparquet_metadata(table)
 
-    # Explicitly type the partition column as string so that Hive directory values
-    # like "204" (valid geohash) or "9983180000000000" (A5 cell ID) are not
-    # inferred as integers by PyArrow readers.
+    # Explicitly type the partition column - never let PyArrow infer it from
+    # the directory name text, which would misread e.g. a numeric-looking
+    # geohash ("204") or a decimal uint64 parent id as some other type.
     partitioning = pa_ds.partitioning(
-        pa.schema([(partition_col, pa.string())]), flavor="hive"
+        pa.schema([(partition_col, partition_arrow_type)]), flavor="hive"
     )
     pq.write_to_dataset(
         table,
@@ -425,6 +479,7 @@ def _merge_partition_files(
     parent_res: int | None = None,
     id_field: str | None = None,
     geo: str | None = None,
+    cell_id: str = const.CellIdMode.STRING.value,
 ) -> None:
     """
     Merges all Parquet files within a single hive partition directory into one
@@ -520,6 +575,16 @@ def _merge_partition_files(
         if geom_fn is not None:
             cells = df.index.to_series(index=df.index)
             df = df.assign(geometry=shapely.to_wkb(cells.map(geom_fn), hex=False))
+
+        # Compaction and geometry reconstruction both need the working
+        # (native, for capable backends) cell form; string output - the
+        # final, one-time conversion - only happens here, after both.
+        if (
+            cell_id == const.CellIdMode.STRING.value
+            and pa.string() != indexer.CELL_ARROW_TYPE
+        ):
+            df.index = pd.Index(indexer.cells_to_string(df.index), name=df.index.name)
+
         table = pa.Table.from_pandas(df, preserve_index=True)
         if geom_fn is not None:
             table = _with_geoparquet_metadata(table)
@@ -540,6 +605,7 @@ def _merge_output(
     geo: str,
     compression: str,
     processes: int,
+    cell_id: str,
 ) -> None:
     """
     Consolidate each hive partition directory to a single file (aggregating
@@ -562,7 +628,12 @@ def _merge_output(
                 _merge_partition_files,
                 d,
                 compression,
-                *((indexer, resolution, parent_res, id_field, geo) if compact else ()),
+                indexer=indexer if compact else None,
+                resolution=resolution if compact else None,
+                parent_res=parent_res if compact else None,
+                id_field=id_field if compact else None,
+                geo=geo if compact else None,
+                cell_id=cell_id,
             )
             for d in dirs
         ]
@@ -582,6 +653,7 @@ def _polyfill(
     id_col: str,
     geo: str,
     compact: bool,
+    cell_id: str,
 ) -> np.ndarray:
     """
     Reads a geoparquet piece file, performs polyfilling (for Polygon),
@@ -621,6 +693,9 @@ def _polyfill(
         f"{indexer.dggs}_{parent_res:02}",
         f"{indexer.dggs}_{resolution:02}",
         compression,
+        indexer,
+        cell_id,
+        compact,
     )
     return indexed_ids
 
@@ -1092,6 +1167,7 @@ def _run_dggs_indexing(
     id_col: str,
     geo: str,
     compact: bool,
+    cell_id: str,
 ) -> set:
     LOGGER.debug("DGGS indexing by spatial partitions with resolution: %d", resolution)
     args = [
@@ -1105,6 +1181,7 @@ def _run_dggs_indexing(
             id_col,
             geo,
             compact,
+            cell_id,
         )
         for filepath in filepaths
     ]
@@ -1143,6 +1220,7 @@ def index(
     overwrite: bool = False,
     compact: bool = False,
     keep_attribute: tuple[str, ...] = (),
+    cell_id: str = const.CellIdMode.STRING.value,
 ) -> Path | str:
     """
     Performs multi-threaded DGGS indexing on geometries (including multipart and collections).
@@ -1175,6 +1253,7 @@ def index(
             geo,
             compact,
             keep_attribute,
+            cell_id,
         )
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
@@ -1200,9 +1279,11 @@ def _index(
     geo: str,
     compact: bool,
     keep_attribute: tuple[str, ...] = (),
+    cell_id: str = const.CellIdMode.STRING.value,
 ) -> None:
     id_field = id_field or resolve_default_id_field(input_file, layer, con)
     indexer = idxfactory.indexer_instance(dggs)
+    check_cell_id(cell_id, indexer)
     parent_res = get_parent_res(dggs, parent_res, resolution)
 
     total = _feature_count(input_file, layer, con)
@@ -1286,6 +1367,7 @@ def _index(
             id_field or "fid",
             geo,
             compact,
+            cell_id,
         )
         dropped = features_in - indexed_ids
         if dropped:
@@ -1312,4 +1394,5 @@ def _index(
             geo,
             compression,
             processes,
+            cell_id,
         )
