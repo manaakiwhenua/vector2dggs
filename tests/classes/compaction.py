@@ -10,6 +10,7 @@ from .base import skip_unless_backend
 
 try:
     import h3
+    from h3.api import basic_int as h3int
 
     from vector2dggs.indexers.h3vectorindexer import H3VectorIndexer
 except ImportError:
@@ -43,6 +44,10 @@ class TestH3CompactionBounds(TestCase):
     Compaction must never produce cells coarser (lower resolution) than
     parent_res, even when a feature's cells fully cover an ancestor that is
     coarser than parent_res.
+
+    H3 works natively in int throughout (issue #199); its string token
+    form is now purely an output-boundary rendering (cells_to_string), not
+    something get_resolution/children_at_res/compaction accept as input.
     """
 
     def setUp(self):
@@ -50,26 +55,29 @@ class TestH3CompactionBounds(TestCase):
         self.parent_res = 5
         # An ancestor one level coarser than parent_res, fully covered by all
         # of its grandchildren at parent_res + 1.
-        self.ancestor = h3.latlng_to_cell(-41.0, 174.0, self.parent_res - 1)
+        self.ancestor = h3int.latlng_to_cell(-41.0, 174.0, self.parent_res - 1)
         self.res = self.parent_res + 1
-        self.cells = set(h3.cell_to_children(self.ancestor, self.res))
+        self.cells = set(h3int.cell_to_children(self.ancestor, self.res))
 
     def test_unbounded_compaction_would_exceed_parent_res(self):
         # Demonstrates the underlying behaviour that necessitates the floor:
         # h3.compact_cells has no resolution floor and will compact past
         # parent_res whenever the cells fully cover a coarser ancestor.
-        unbounded = set(h3.compact_cells(self.cells))
+        unbounded = set(h3int.compact_cells(self.cells))
         self.assertEqual(unbounded, {self.ancestor})
-        self.assertLess(h3.get_resolution(self.ancestor), self.parent_res)
+        self.assertLess(h3int.get_resolution(self.ancestor), self.parent_res)
 
     def test_enforce_resolution_floor_breaks_up_coarse_cells(self):
         result = VectorIndexer._enforce_resolution_floor(
-            {self.ancestor}, self.parent_res, h3.get_resolution, h3.cell_to_children
+            {self.ancestor},
+            self.parent_res,
+            h3int.get_resolution,
+            h3int.cell_to_children,
         )
 
-        self.assertTrue(all(h3.get_resolution(c) >= self.parent_res for c in result))
+        self.assertTrue(all(h3int.get_resolution(c) >= self.parent_res for c in result))
         self.assertEqual(
-            result, set(h3.cell_to_children(self.ancestor, self.parent_res))
+            result, set(h3int.cell_to_children(self.ancestor, self.parent_res))
         )
 
     def test_compaction_respects_parent_res(self):
@@ -79,7 +87,7 @@ class TestH3CompactionBounds(TestCase):
             {
                 "id": [1] * len(self.cells),
                 "attr": range(len(self.cells)),
-                dggs_col: list(self.cells),
+                dggs_col: pd.array(list(self.cells), dtype="uint64"),
             }
         )
 
@@ -88,8 +96,16 @@ class TestH3CompactionBounds(TestCase):
         )
 
         self.assertTrue(
-            all(h3.get_resolution(c) >= self.parent_res for c in result.index)
+            all(h3int.get_resolution(c) >= self.parent_res for c in result.index)
         )
+        self.assertEqual(result.index.dtype, np.dtype("uint64"))
+
+    def test_cells_to_string_round_trips_exactly(self):
+        indexer = H3VectorIndexer(dggs="h3")
+        strings = indexer.cells_to_string(self.cells)
+        self.assertEqual(len(set(strings)), len(self.cells))
+        self.assertTrue(all(isinstance(s, str) for s in strings))
+        self.assertEqual({h3.str_to_int(s) for s in strings}, self.cells)
 
 
 class TestGeohashCompactionBounds(TestCase):

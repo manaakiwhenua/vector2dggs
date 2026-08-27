@@ -12,9 +12,10 @@ from shapely.geometry import Polygon
 from vector2dggs import common
 from vector2dggs.h3 import h3
 from vector2dggs.indexerfactory import indexer_instance
+from vector2dggs.rHP import rhp
 
 from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME
-from .base import TestRunthrough
+from .base import TestRunthrough, skip_unless_backend
 
 
 class TestErrors(TestRunthrough):
@@ -151,11 +152,12 @@ class TestErrors(TestRunthrough):
             )
 
     def test_cell_id_uint64_rejected_for_string_only_backend(self):
-        """H3 has no --cell-id uint64 support until #199: rejected by the
-        CLI's own dynamically-restricted --cell-id choices, before any of
-        our own validation runs."""
+        """rHEALPix has no integer cell form (unlike H3/S2/A5): rejected by
+        the CLI's own dynamically-restricted --cell-id choices, before any
+        of our own validation runs."""
+        skip_unless_backend("rhp")
         with self.assertRaises(click.BadParameter):
-            h3(
+            rhp(
                 [
                     TEST_FILE_PATH,
                     str(self.output_path),
@@ -172,7 +174,8 @@ class TestErrors(TestRunthrough):
     def test_check_cell_id_rejects_string_only_backend(self):
         """The library-API guard (common.check_cell_id), independent of the
         CLI's own Click-level restriction."""
-        indexer = indexer_instance("h3")
+        skip_unless_backend("rhp")
+        indexer = indexer_instance("rhp")
         with self.assertRaises(common.CellIdError):
             common.check_cell_id("uint64", indexer)
 
