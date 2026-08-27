@@ -355,7 +355,9 @@ class TestWritePartitionGuards(TestCase):
         # input (the caller, _polyfill(), computes what it needs from the
         # original before calling this). Locking in the "may mutate"
         # contract here so a defensive copy doesn't silently creep back in.
-        df = pd.DataFrame({"c": ["a", "b"], "p": [1, 2]})
+        # H3 is int-native (#199): placeholder ints, not real cells - this
+        # only checks the generic mutation contract, not H3 correctness.
+        df = pd.DataFrame({"c": [10, 20], "p": [1, 2]})
         with tempfile.TemporaryDirectory() as d:
             common.write_partition(
                 df, None, Path(d), "p", "c", "snappy", self.INDEXER, "string", False

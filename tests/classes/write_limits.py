@@ -2,8 +2,8 @@ import tempfile
 from pathlib import Path
 from unittest import TestCase, mock, skipIf
 
-import h3 as h3lib
 import pandas as pd
+from h3.api import basic_int as h3lib
 
 from vector2dggs import common
 from vector2dggs.indexers.h3vectorindexer import H3VectorIndexer
