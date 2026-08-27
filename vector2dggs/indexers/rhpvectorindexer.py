@@ -94,7 +94,7 @@ class RHPVectorIndexer(VectorIndexer):
             self.children_at_res,
         )
 
-    def compact_cells(self, cells: Iterable[str]) -> set[str]:
+    def compact_cells(self, cells: Iterable[str | int]) -> set[str | int]:
         """
         Compact a set of rHEALPix DGGS cells.
         Cells must be at the same resolution.
@@ -111,7 +111,7 @@ class RHPVectorIndexer(VectorIndexer):
         return previous_result
 
     @staticmethod
-    def get_resolution(cell: str) -> int:
+    def get_resolution(cell: str | int) -> int:
         """
         Returns the resolution of a cell.
 
@@ -120,12 +120,13 @@ class RHPVectorIndexer(VectorIndexer):
         return rhp_get_resolution(cell)
 
     @staticmethod
-    def children_at_res(cell: str, target_res: int) -> list[str]:
+    def children_at_res(cell: str | int, target_res: int) -> list[str]:
         """
         Return all descendants of cell at resolution target_res.
 
         Not a part of the interface provided by VectorIndexer.
         """
+        assert isinstance(cell, str)  # rHEALPix has no integer cell form
         current_res = rhp_get_resolution(cell)
         if target_res <= current_res:
             return [cell]
@@ -136,11 +137,13 @@ class RHPVectorIndexer(VectorIndexer):
         ]
 
     @staticmethod
-    def cell_to_point(cell: str) -> Point:
+    def cell_to_point(cell: str | int) -> Point:
+        assert isinstance(cell, str)  # rHEALPix has no integer cell form
         return Point(rhp_to_geo(cell, plane=False, dggs=WGS84_003))
 
     @staticmethod
-    def cell_to_polygon(cell: str) -> Polygon:
+    def cell_to_polygon(cell: str | int) -> Polygon:
+        assert isinstance(cell, str)  # rHEALPix has no integer cell form
         return Polygon(
             tuple(
                 coord

@@ -109,14 +109,14 @@ class GeohashVectorIndexer(VectorIndexer):
             self.children_at_res,
         )
 
-    def compact(self, cells: Iterable[str]) -> set[str]:
+    def compact(self, cells: Iterable[str | int]) -> set[str | int]:
         """
         Compact a set of geohash cells.
         Cells must be at the same resolution.
 
         Not a part of the interface provided by VectorIndexer.
         """
-        current_set = set(cells)
+        current_set: set[str] = set(cells)  # type: ignore[arg-type]
         # Discard any null values
         current_set = {c for c in current_set if pd.notna(c)}
         while True:
@@ -138,24 +138,25 @@ class GeohashVectorIndexer(VectorIndexer):
                 break
             current_set = next_set
 
-        return current_set
+        return current_set  # type: ignore[return-value]
 
     @staticmethod
-    def get_resolution(cell: str) -> int:
+    def get_resolution(cell: str | int) -> int:
         """
         Returns the resolution (length) of a geohash.
 
         Not a part of the interface provided by VectorIndexer.
         """
-        return len(cell)
+        return len(cell)  # type: ignore[arg-type]
 
     @staticmethod
-    def children_at_res(geohash: str, target_res: int) -> list[str]:
+    def children_at_res(geohash: str | int, target_res: int) -> list[str | int]:
         """
         Return all descendants of geohash at length target_res.
 
         Not a part of the interface provided by VectorIndexer.
         """
+        assert isinstance(geohash, str)  # geohash has no integer cell form
         if target_res <= len(geohash):
             return [geohash]
         chars = sorted(GeohashVectorIndexer.GEOHASH_BASE32_SET)
@@ -164,7 +165,9 @@ class GeohashVectorIndexer(VectorIndexer):
             for suffix in product(chars, repeat=target_res - len(geohash))
         ]
 
-    def get_child_geohash(self, geohash: str, desired_length: int, child: str = "0"):
+    def get_child_geohash(
+        self, geohash: str | int, desired_length: int, child: str = "0"
+    ):
         """
         Get a child geohash of the specified length by extending the input geohash.
 
@@ -174,6 +177,7 @@ class GeohashVectorIndexer(VectorIndexer):
             raise ValueError(
                 f"Invalid child character '{child}'. Must be one of {''.join(self.GEOHASH_BASE32_SET)}."
             )
+        assert isinstance(geohash, str)  # geohash has no integer cell form
 
         if len(geohash) >= desired_length:
             return geohash
@@ -204,13 +208,13 @@ class GeohashVectorIndexer(VectorIndexer):
         return edge | inner
 
     @staticmethod
-    def cell_to_point(cell: str) -> Point:
-        lat, lon, _, _ = decode_exactly(cell)
+    def cell_to_point(cell: str | int) -> Point:
+        lat, lon, _, _ = decode_exactly(cell)  # type: ignore[arg-type]
         return Point(lon, lat)
 
     @staticmethod
-    def cell_to_polygon(cell: str) -> Polygon:
-        lat, lon, lat_err, lon_err = decode_exactly(cell)
+    def cell_to_polygon(cell: str | int) -> Polygon:
+        lat, lon, lat_err, lon_err = decode_exactly(cell)  # type: ignore[arg-type]
         return box(
             lon - lon_err,
             lat - lat_err,

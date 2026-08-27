@@ -158,7 +158,7 @@ class S2VectorIndexer(VectorIndexer):
         latlng = S2.S2LatLng.FromDegrees(geom.y, geom.x)
         return S2.S2CellId(latlng).parent(level).ToToken()
 
-    def compact_tokens(self, tokens: Iterable[str]) -> set[str]:
+    def compact_tokens(self, tokens: Iterable[str | int]) -> set[str]:
         """
         Compact a set of S2 DGGS cells.
         Cells must be at the same resolution.
@@ -173,7 +173,7 @@ class S2VectorIndexer(VectorIndexer):
         return {c.ToToken() for c in cell_union.cell_ids()}
 
     @staticmethod
-    def get_resolution(token: str) -> int:
+    def get_resolution(token: str | int) -> int:
         """
         Returns the level of a cell (represented as a string token).
 
@@ -182,7 +182,7 @@ class S2VectorIndexer(VectorIndexer):
         return S2.S2CellId.FromToken(token).level()
 
     @staticmethod
-    def children_at_res(token: str, target_level: int) -> list[str]:
+    def children_at_res(token: str | int, target_level: int) -> list[str | int]:
         """
         Return all descendants of a cell (represented as a string token) at
         target_level.
@@ -200,7 +200,7 @@ class S2VectorIndexer(VectorIndexer):
             cur = cur.next()
         return tokens
 
-    def token_to_child_token(self, token: str, level: int) -> str:
+    def token_to_child_token(self, token: str | int, level: int) -> str:
         """
         Returns first child (as string token) of a cell (also represented as a
         string token) at a specific level.
@@ -216,13 +216,13 @@ class S2VectorIndexer(VectorIndexer):
         return cell.child_begin(level).ToToken()
 
     @staticmethod
-    def cell_to_point(cell: str) -> Point:
+    def cell_to_point(cell: str | int) -> Point:
         cell_id = S2.S2CellId.FromToken(cell)
         latlng = cell_id.ToLatLng()
         return Point(latlng.lng().degrees(), latlng.lat().degrees())
 
     @staticmethod
-    def cell_to_polygon(cell: str) -> Polygon:
+    def cell_to_polygon(cell: str | int) -> Polygon:
         s2_cell = S2.S2Cell(S2.S2CellId.FromToken(cell))
         return Polygon(
             tuple(
