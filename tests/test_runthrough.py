@@ -32,6 +32,12 @@ with contextlib.suppress(ImportError):
 with contextlib.suppress(ImportError):
     from .classes.cell_id_mode import TestH3CellIdUint64 as TestH3CellIdUint64
 with contextlib.suppress(ImportError):
+    from .classes.cell_id_mode import TestS2CellIdUint64 as TestS2CellIdUint64
+with contextlib.suppress(ImportError):
+    from .classes.cell_id_mode import (
+        TestS2Face5CellIdSurvivesRoundTrip as TestS2Face5CellIdSurvivesRoundTrip,
+    )
+with contextlib.suppress(ImportError):
     from .classes.compaction import TestA5CompactionBounds as TestA5CompactionBounds
 with contextlib.suppress(ImportError):
     from .classes.compaction import (
