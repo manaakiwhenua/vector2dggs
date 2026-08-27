@@ -16,9 +16,9 @@ HOLE_RES = {"h3": 10, "s2": 15, "a5": 18, "rhp": 9, "geohash": 7}
 class TestPolyfillTokenContract(TestCase):
     """
     polyfill() must index by each backend's own working cell-id form: str
-    for backends with CELL_ARROW_TYPE == string (all of them, until #199/
-    #200 land), int for a backend with a native form (#198: A5). This is
-    always the working form, never mode-dependent - string is a one-time
+    for backends with CELL_ARROW_TYPE == string (rHEALPix, Geohash), int
+    for a backend with a native form (A5, H3, S2). This is always the
+    working form, never mode-dependent - string is a one-time
     output-boundary rendering, not something polyfill() itself produces.
     """
 

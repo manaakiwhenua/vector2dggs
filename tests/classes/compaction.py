@@ -231,6 +231,10 @@ class TestS2CompactionBounds(TestCase):
     Compaction must never produce cells coarser (lower level) than
     parent_res, even when a feature's cells fully cover an ancestor that is
     coarser than parent_res.
+
+    S2 works natively in uint64 throughout (issue #200); its token string
+    form is now purely an output-boundary rendering (cells_to_string), not
+    something get_resolution/children_at_res/compaction accept as input.
     """
 
     def setUp(self):
@@ -240,7 +244,7 @@ class TestS2CompactionBounds(TestCase):
         # of its grandchildren at parent_res + 1.
         latlng = S2.S2LatLng.FromDegrees(-41.0, 174.0)
         self.ancestor_id = S2.S2CellId(latlng).parent(self.parent_res - 1)
-        self.ancestor = self.ancestor_id.ToToken()
+        self.ancestor = self.ancestor_id.id()
         self.res = self.parent_res + 1
         self.indexer = S2VectorIndexer(dggs="s2")
         self.cells = self._descendants(self.ancestor_id, self.res)
@@ -252,19 +256,19 @@ class TestS2CompactionBounds(TestCase):
         cells = set()
         cur = begin
         while cur != end:
-            cells.add(cur.ToToken())
+            cells.add(cur.id())
             cur = cur.next()
         return cells
 
     @staticmethod
-    def _get_resolution(token):
-        return S2.S2CellId.FromToken(token).level()
+    def _get_resolution(cell):
+        return S2.S2CellId(cell).level()
 
     def test_unbounded_compaction_would_exceed_parent_res(self):
         # Demonstrates the underlying behaviour that necessitates the floor:
-        # compact_tokens has no level floor and will compact past parent_res
+        # compact_cells has no level floor and will compact past parent_res
         # whenever the cells fully cover a coarser ancestor.
-        unbounded = self.indexer.compact_tokens(self.cells)
+        unbounded = self.indexer.compact_cells(self.cells)
         self.assertEqual(unbounded, {self.ancestor})
         self.assertLess(self._get_resolution(self.ancestor), self.parent_res)
 
@@ -293,7 +297,7 @@ class TestS2CompactionBounds(TestCase):
             {
                 "id": [1] * len(self.cells),
                 "attr": range(len(self.cells)),
-                dggs_col: list(self.cells),
+                dggs_col: pd.array(list(self.cells), dtype="uint64"),
             }
         )
 
@@ -304,6 +308,13 @@ class TestS2CompactionBounds(TestCase):
         self.assertTrue(
             all(self._get_resolution(c) >= self.parent_res for c in result.index)
         )
+        self.assertEqual(result.index.dtype, np.dtype("uint64"))
+
+    def test_cells_to_string_round_trips_exactly(self):
+        strings = self.indexer.cells_to_string(self.cells)
+        self.assertEqual(len(set(strings)), len(self.cells))
+        self.assertTrue(all(isinstance(s, str) for s in strings))
+        self.assertEqual({S2.S2CellId.FromToken(s).id() for s in strings}, self.cells)
 
 
 class TestA5CompactionBounds(TestCase):

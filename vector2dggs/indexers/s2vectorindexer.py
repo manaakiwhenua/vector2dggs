@@ -2,6 +2,7 @@ from collections.abc import Iterable
 
 import geopandas as gpd
 import pandas as pd
+import pyarrow as pa
 import s2geometry as S2
 from shapely import force_2d
 from shapely.geometry import LineString, Point, Polygon
@@ -9,26 +10,50 @@ from shapely.geometry import LineString, Point, Polygon
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 
 
-class S2VectorIndexer(VectorIndexer[str]):
+def _cell_from(cell: str | int) -> S2.S2CellId:
+    """
+    Accepts either form: the working native uint64 (from within the
+    pipeline), or the token string (e.g. reading a --cell-id string output
+    file back and using these methods as a standalone convenience, the way
+    tests do against the pipeline's own default output).
+    """
+    return (
+        S2.S2CellId.FromToken(cell) if isinstance(cell, str) else S2.S2CellId(int(cell))
+    )
+
+
+def _cell_id(cell: S2.S2CellId) -> int:
+    return cell.id()
+
+
+class S2VectorIndexer(VectorIndexer[str | int]):
     """
     Provides integration for Google's S2 DGGS.
+
+    S2CellId is natively uint64; the token (hex string) form is produced
+    only at the output boundary via cells_to_string.
     """
 
     GEODESIC_POLYFILL = True
+    CELL_ARROW_TYPE: pa.DataType = pa.uint64()
+
+    @staticmethod
+    def cells_to_string(cells: Iterable[str | int]) -> list[str]:
+        return [S2.S2CellId(int(c)).ToToken() for c in cells]
 
     def _polyfill_polygons(self, df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
-        return self._geo_to_cells(df, level, self.tokens_from_polygon, df.geometry.name)
+        return self._geo_to_cells(df, level, self.cells_from_polygon, df.geometry.name)
 
     def _polyfill_linestrings(self, df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
         return self._geo_to_cells(
-            df, level, self.tokens_from_linestring, df.geometry.name
+            df, level, self.cells_from_linestring, df.geometry.name
         )
 
     def _polyfill_points(self, df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
         return self._geo_to_cells(
             df,
             level,
-            lambda geom, lvl: [self.token_from_point(geom, lvl)],
+            lambda geom, lvl: [self.cell_from_point(geom, lvl)],
             df.geometry.name,
         )
 
@@ -36,8 +61,10 @@ class S2VectorIndexer(VectorIndexer[str]):
         """
         Implementation of abstract function.
         """
-        df[f"s2_{parent_level:02}"] = df.index.to_series().map(
-            lambda token: S2.S2CellId.FromToken(token).parent(parent_level).ToToken()
+        df[f"s2_{parent_level:02}"] = (
+            df.index.to_series()
+            .map(lambda cell: _cell_from(cell).parent(parent_level).id())
+            .astype("uint64")
         )
         return df
 
@@ -62,16 +89,16 @@ class S2VectorIndexer(VectorIndexer[str]):
             id_field,
             col_order,
             dggs_col,
-            self.compact_tokens,
-            self.token_to_child_token,
+            self.compact_cells,
+            self.cell_to_child_cell,
             parent_res,
             self.get_resolution,
             self.children_at_res,
         )
 
-    def tokens_from_polygon(
+    def cells_from_polygon(
         self, geom: Polygon, level: int, centroid_inside: bool = True
-    ) -> set[str]:
+    ) -> set[int]:
         """
         Not a part of the interface provided by VectorIndexer.
         """
@@ -121,7 +148,7 @@ class S2VectorIndexer(VectorIndexer[str]):
         else:
             covering = set(raw_covering)
 
-        return {cell.ToToken() for cell in covering}
+        return {_cell_id(cell) for cell in covering}
 
     def cell_center_is_inside_polygon(
         self, cell: S2.S2CellId, polygon: S2.S2Polygon
@@ -134,7 +161,7 @@ class S2VectorIndexer(VectorIndexer[str]):
         cell_center = S2.S2Cell(cell).GetCenter()
         return polygon.Contains(cell_center)
 
-    def tokens_from_linestring(self, linestring: LineString, level: int) -> list[str]:
+    def cells_from_linestring(self, linestring: LineString, level: int) -> list[int]:
         """
         Not a part of the interface provided by VectorIndexer.
         """
@@ -147,83 +174,83 @@ class S2VectorIndexer(VectorIndexer[str]):
         coverer.set_min_level(level)
         coverer.set_max_level(level)
 
-        return [cell.ToToken() for cell in coverer.GetCovering(polyline)]
+        return [_cell_id(cell) for cell in coverer.GetCovering(polyline)]
 
-    def token_from_point(self, geom: Point, level: int) -> str:
+    def cell_from_point(self, geom: Point, level: int) -> int:
         """
-        Convert a point geometry to an S2 cell token at the specified level.
+        Convert a point geometry to an S2 cell ID at the specified level.
 
         Not a part of the interface provided by VectorIndexer.
         """
         latlng = S2.S2LatLng.FromDegrees(geom.y, geom.x)
-        return S2.S2CellId(latlng).parent(level).ToToken()
+        return _cell_id(S2.S2CellId(latlng).parent(level))
 
-    def compact_tokens(self, tokens: Iterable[str]) -> set[str]:
+    def compact_cells(self, cells: Iterable[str | int]) -> set[int]:
         """
         Compact a set of S2 DGGS cells.
         Cells must be at the same resolution.
 
         Not a part of the interface provided by VectorIndexer.
         """
-        cell_ids: list[S2.S2CellId] = [S2.S2CellId.FromToken(token) for token in tokens]
+        cell_ids: list[S2.S2CellId] = [_cell_from(cell) for cell in cells]
         cell_union: S2.S2CellUnion = S2.S2CellUnion(
             cell_ids
         )  # Vector of sorted, non-overlapping S2CellId
         cell_union.NormalizeS2CellUnion()  # Mutates; 'normalize' == 'compact'
-        return {c.ToToken() for c in cell_union.cell_ids()}
+        return {_cell_id(c) for c in cell_union.cell_ids()}
 
     @staticmethod
-    def get_resolution(token: str) -> int:
+    def get_resolution(cell: str | int) -> int:
         """
-        Returns the level of a cell (represented as a string token).
+        Returns the level of a cell (native uint64, or token string).
 
         Not a part of the interface provided by VectorIndexer.
         """
-        return S2.S2CellId.FromToken(token).level()
+        return _cell_from(cell).level()
 
     @staticmethod
-    def children_at_res(token: str, target_level: int) -> list[str]:
+    def children_at_res(cell: str | int, target_level: int) -> list[int]:
         """
-        Return all descendants of a cell (represented as a string token) at
+        Return all descendants of a cell (native uint64, or token string) at
         target_level.
 
         Not a part of the interface provided by VectorIndexer.
         """
-        cell: S2.S2CellId = S2.S2CellId.FromToken(token)
-        if target_level <= cell.level():
-            return [token]
-        end = cell.child_end(target_level)
-        tokens = []
-        cur = cell.child_begin(target_level)
+        cell_id: S2.S2CellId = _cell_from(cell)
+        if target_level <= cell_id.level():
+            return [_cell_id(cell_id)]
+        end = cell_id.child_end(target_level)
+        ids = []
+        cur = cell_id.child_begin(target_level)
         while cur != end:
-            tokens.append(cur.ToToken())
+            ids.append(_cell_id(cur))
             cur = cur.next()
-        return tokens
+        return ids
 
-    def token_to_child_token(self, token: str, level: int) -> str:
+    def cell_to_child_cell(self, cell: str | int, level: int) -> int:
         """
-        Returns first child (as string token) of a cell (also represented as a
-        string token) at a specific level.
+        Returns first child (native uint64) of a cell (native uint64, or
+        token string) at a specific level.
 
         Not a part of the interface provided by VectorIndexer.
         """
-        cell: S2.S2CellId = S2.S2CellId.FromToken(token)
-        if level <= cell.level():
+        cell_id: S2.S2CellId = _cell_from(cell)
+        if level <= cell_id.level():
             raise ValueError(
                 "Level must be greater than the current level of the cell."
             )
         # Get the child cell iterator
-        return cell.child_begin(level).ToToken()
+        return _cell_id(cell_id.child_begin(level))
 
     @staticmethod
-    def cell_to_point(cell: str) -> Point:
-        cell_id = S2.S2CellId.FromToken(cell)
+    def cell_to_point(cell: str | int) -> Point:
+        cell_id = _cell_from(cell)
         latlng = cell_id.ToLatLng()
         return Point(latlng.lng().degrees(), latlng.lat().degrees())
 
     @staticmethod
-    def cell_to_polygon(cell: str) -> Polygon:
-        s2_cell = S2.S2Cell(S2.S2CellId.FromToken(cell))
+    def cell_to_polygon(cell: str | int) -> Polygon:
+        s2_cell = S2.S2Cell(_cell_from(cell))
         return Polygon(
             tuple(
                 (

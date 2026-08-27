@@ -218,22 +218,26 @@ class TestGeodesicCutEdges(TestCase):
         from .base import skip_unless_backend
 
         skip_unless_backend("s2")
+        import s2geometry as S2
         import shapely
 
         from vector2dggs.indexerfactory import indexer_instance
 
         indexer = indexer_instance("s2")
+        # cells_from_polygon returns the native uint64 form; MISSING_CELL is
+        # recorded as a token above for readability, so convert it once here.
+        missing_cell = S2.S2CellId.FromToken(self.MISSING_CELL).id()
 
-        def union_tokens(geoms):
-            tokens: set = set()
+        def union_cells(geoms):
+            cells: set = set()
             for geom in geoms:
-                tokens |= indexer.tokens_from_polygon(geom, 15)
-            return tokens
+                cells |= indexer.cells_from_polygon(geom, 15)
+            return cells
 
         sparse = self._pieces()
-        self.assertNotIn(self.MISSING_CELL, union_tokens(sparse))
+        self.assertNotIn(missing_cell, union_cells(sparse))
         dense = (shapely.segmentize(g, self.EPS_DEG) for g in sparse)
-        self.assertIn(self.MISSING_CELL, union_tokens(dense))
+        self.assertIn(missing_cell, union_cells(dense))
 
     def test_bisection_caps_cut_edge_spacing(self):
         # axis-aligned square: any piece boundary segment not on the outer
