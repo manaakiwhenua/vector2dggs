@@ -6,7 +6,7 @@ from shapely.geometry import Point, Polygon, mapping
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 
 
-class H3VectorIndexer(VectorIndexer):
+class H3VectorIndexer(VectorIndexer[str]):
     """
     Provides integration for Uber's H3 DGGS.
     """
@@ -58,15 +58,15 @@ class H3VectorIndexer(VectorIndexer):
             id_field,
             col_order,
             dggs_col,
-            h3.compact_cells,  # type: ignore[arg-type]
-            h3.cell_to_center_child,  # type: ignore[arg-type]
+            h3.compact_cells,
+            h3.cell_to_center_child,
             parent_res,
             self.get_resolution,
             self.children_at_res,
         )
 
     @staticmethod
-    def get_resolution(cell: str | int) -> int:
+    def get_resolution(cell: str) -> int:
         """
         Returns the resolution of a cell.
 
@@ -75,7 +75,7 @@ class H3VectorIndexer(VectorIndexer):
         return h3.get_resolution(cell)
 
     @staticmethod
-    def children_at_res(cell: str | int, target_res: int) -> list[str]:
+    def children_at_res(cell: str, target_res: int) -> list[str]:
         """
         Return all descendants of cell at resolution target_res.
 
@@ -84,9 +84,9 @@ class H3VectorIndexer(VectorIndexer):
         return h3.cell_to_children(cell, target_res)
 
     @staticmethod
-    def cell_to_point(cell: str | int) -> Point:
+    def cell_to_point(cell: str) -> Point:
         return Point(h3.cell_to_latlng(cell)[::-1])
 
     @staticmethod
-    def cell_to_polygon(cell: str | int) -> Polygon:
+    def cell_to_polygon(cell: str) -> Polygon:
         return Polygon(tuple(coord[::-1] for coord in h3.cell_to_boundary(cell)))

@@ -19,7 +19,7 @@ def _as_u64(cell: str | int) -> int:
     return a5.hex_to_u64(cell) if isinstance(cell, str) else int(cell)
 
 
-class A5VectorIndexer(VectorIndexer):
+class A5VectorIndexer(VectorIndexer[str | int]):
     """
     Provides integration for the A5 pentagonal DGGS.
 

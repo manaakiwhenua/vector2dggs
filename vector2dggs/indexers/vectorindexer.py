@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
+from typing import Generic, TypeVar
 
 import geopandas as gpd
 import numpy as np
@@ -7,10 +8,19 @@ import pandas as pd
 import pyarrow as pa
 from shapely.geometry import Point, Polygon
 
+# Unconstrained (not TypeVar("CellId", str, int)), so a subclass genuinely
+# accepting either form per-call (e.g. A5, which also reads back its own
+# string output as a convenience) can bind VectorIndexer[str | int] - a
+# union - which a constrained TypeVar disallows as a binding.
+CellId = TypeVar("CellId")
 
-class VectorIndexer(ABC):
+
+class VectorIndexer(ABC, Generic[CellId]):
     """
-    Abstract base class and interface for all DGGS indexers.
+    Abstract base class and interface for all DGGS indexers. Generic over
+    each backend's own working cell-id form (CellId): str for backends with
+    no native integer form, str | int for one that also accepts reading
+    back its own string output as a convenience (see A5VectorIndexer).
     """
 
     # Whether this backend's polyfill does its point-in-polygon containment
@@ -31,7 +41,7 @@ class VectorIndexer(ABC):
         self.dggs = dggs
 
     @staticmethod
-    def cells_to_string(cells: Iterable[str | int]) -> list[str]:
+    def cells_to_string(cells: Iterable[CellId]) -> list[str]:
         """
         Renders this backend's working cell-id form as its canonical string
         form. The default is a no-op passthrough, since CELL_ARROW_TYPE ==
@@ -92,19 +102,19 @@ class VectorIndexer(ABC):
 
     @staticmethod
     @abstractmethod
-    def cell_to_point(cell: str | int) -> Point: ...
+    def cell_to_point(cell: CellId) -> Point: ...
 
     @staticmethod
     @abstractmethod
-    def cell_to_polygon(cell: str | int) -> Polygon: ...
+    def cell_to_polygon(cell: CellId) -> Polygon: ...
 
     @staticmethod
     @abstractmethod
-    def get_resolution(cell: str | int) -> int: ...
+    def get_resolution(cell: CellId) -> int: ...
 
     @staticmethod
     @abstractmethod
-    def children_at_res(cell: str | int, target_res: int) -> Iterable[str | int]: ...
+    def children_at_res(cell: CellId, target_res: int) -> Iterable[CellId]: ...
 
     def _geo_to_cells(
         self, df: gpd.GeoDataFrame, resolution: int, cell_fn, geom_col: str
@@ -126,16 +136,16 @@ class VectorIndexer(ABC):
 
     @staticmethod
     def _enforce_resolution_floor(
-        cells: Iterable[str | int],
+        cells: Iterable[CellId],
         parent_res: int,
-        get_resolution_func: Callable[[str | int], int],
-        children_at_res_func: Callable[[str | int, int], Iterable[str | int]],
-    ) -> set[str | int]:
+        get_resolution_func: Callable[[CellId], int],
+        children_at_res_func: Callable[[CellId, int], Iterable[CellId]],
+    ) -> set[CellId]:
         """
         Break up any cell coarser than parent_res into its children at
         parent_res, so that no cell in the result is coarser than parent_res.
         """
-        result: set[str | int] = set()
+        result: set[CellId] = set()
         for cell in cells:
             if get_resolution_func(cell) < parent_res:
                 result.update(children_at_res_func(cell, parent_res))
@@ -150,11 +160,11 @@ class VectorIndexer(ABC):
         id_field: str,
         col_order: list[str],
         dggs_col: str,
-        compact_func: Callable[[Iterable[str | int]], Iterable[str | int]],
-        cell_to_child_func: Callable[[str | int, int], str | int],
+        compact_func: Callable[[Iterable[CellId]], Iterable[CellId]],
+        cell_to_child_func: Callable[[CellId, int], CellId],
         parent_res: int,
-        get_resolution_func: Callable[[str | int], int],
-        children_at_res_func: Callable[[str | int, int], Iterable[str | int]],
+        get_resolution_func: Callable[[CellId], int],
+        children_at_res_func: Callable[[CellId, int], Iterable[CellId]],
     ):
         """
         Compacts a dataframe up to a given low resolution (parent_res), from an existing maximum resolution (res).
