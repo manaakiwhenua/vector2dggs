@@ -5,6 +5,8 @@ from unittest import TestCase, mock
 
 import geopandas as gpd
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 import pyogrio
 from shapely.geometry import Point, box
 
@@ -477,3 +479,37 @@ class TestCommitOutput(TestCase):
             result = common._commit_output(staging, target, overwrite=True)
             self.assertEqual([p.name for p in Path(result).iterdir()], ["new.parquet"])
             self.assertFalse(staging.exists())
+
+
+class TestMergePartitionFilesDtypeSafety(TestCase):
+    """
+    _merge_partition_files's schema-unification step normalises string vs
+    large_string mismatches across part files, but left an equivalent gap
+    for numeric cell-id dtype mismatches: pyarrow's own "permissive" schema
+    unification silently picks int64 over uint64 for a mismatched field,
+    which would corrupt a genuine uint64 cell ID above 2**63-1 on cast.
+    Reproduced here with synthetic part files, ahead of any real backend
+    adopting a native int cell-id form.
+    """
+
+    def test_int64_uint64_mismatch_unifies_to_uint64_not_silently_narrowed(self):
+        with tempfile.TemporaryDirectory() as d:
+            partition_dir = Path(d)
+            pq.write_table(
+                pa.table({"cell": pa.array([1, 2, 3], type=pa.uint64())}),
+                partition_dir / "part-0.parquet",
+            )
+            pq.write_table(
+                pa.table({"cell": pa.array([4, 5, 6], type=pa.int64())}),
+                partition_dir / "part-1.parquet",
+            )
+
+            common._merge_partition_files(partition_dir, compression="snappy")
+
+            merged = list(partition_dir.glob("*.parquet"))
+            self.assertEqual(len(merged), 1)
+            table = pq.read_table(merged[0])
+            self.assertEqual(table.schema.field("cell").type, pa.uint64())
+            self.assertEqual(
+                sorted(table.column("cell").to_pylist()), [1, 2, 3, 4, 5, 6]
+            )

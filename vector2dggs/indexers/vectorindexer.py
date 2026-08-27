@@ -142,6 +142,14 @@ class VectorIndexer(ABC):
         a cell coarser than parent_res.
         """
         df = df.reset_index(drop=False)
+        # Captured before any construction below, so a fresh pd.Series built
+        # from a plain Python list of cell IDs (e.g. parent_for_pair below)
+        # can be pinned to it explicitly. Left to inference, pandas picks
+        # int64 or uint64 per list based on whether any value exceeds
+        # 2**63-1 - inconsistently with the source column, whose dtype this
+        # sidesteps entirely - and concatenating mismatched int64/uint64
+        # frames silently upcasts the result to float64, corrupting cell IDs.
+        cell_dtype = df[dggs_col].dtype
 
         if df.empty:
             # e.g. an empty partition after a shuffle; the mask logic below
@@ -190,6 +198,7 @@ class VectorIndexer(ABC):
             parent_for_pair = pd.Series(
                 list(compression_mapping.values()),
                 index=pd.MultiIndex.from_tuples(list(compression_mapping.keys())),
+                dtype=cell_dtype,
             )
             sel = pairs.isin(parent_for_pair.index)
             compressable_df = (

@@ -459,18 +459,29 @@ def _merge_partition_files(
                 all_bboxes.append(col["bbox"])
             all_geometry_types.update(col.get("geometry_types", []))
 
-    # Build a unified schema: for each field, prefer large_string over string so
-    # that all partitions (which may have written either variant) can be cast cleanly.
+    # Build a unified schema: for each field, prefer the wider/safer variant so
+    # that all partitions (which may disagree) can be cast cleanly without
+    # loss - large_string over string, and uint64 over int64 (a non-negative
+    # int64 value always fits losslessly in uint64, not vice versa; pyarrow's
+    # own "permissive" unification silently picks int64 for this exact
+    # mismatch, which would corrupt a genuine uint64 cell ID above 2**63-1).
+    per_field_types: dict[str, set[pa.DataType]] = {}
+    for t in tables:
+        for field in t.schema:
+            per_field_types.setdefault(field.name, set()).add(field.type)
+
     unified_schema = tables[0].schema
     for t in tables[1:]:
         unified_schema = pa.unify_schemas(
             [unified_schema, t.schema], promote_options="permissive"
         )
-    # Normalise string / large_string mismatches to large_string
     unified_fields = []
     for field in unified_schema:
+        seen = per_field_types.get(field.name, set())
         if pa.types.is_string(field.type):
             unified_fields.append(field.with_type(pa.large_utf8()))
+        elif {pa.int64(), pa.uint64()} <= seen:
+            unified_fields.append(field.with_type(pa.uint64()))
         else:
             unified_fields.append(field)
     unified_schema = pa.schema(unified_fields, metadata=unified_schema.metadata)
