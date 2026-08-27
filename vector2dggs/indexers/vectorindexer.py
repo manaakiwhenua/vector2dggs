@@ -31,14 +31,14 @@ class VectorIndexer(ABC):
         self.dggs = dggs
 
     @staticmethod
-    def cells_to_string(cells: Iterable) -> list:
+    def cells_to_string(cells: Iterable[str | int]) -> list[str]:
         """
         Renders this backend's working cell-id form as its canonical string
-        form. The default is a passthrough, since CELL_ARROW_TYPE == string
-        backends already work in that form; a backend overriding
+        form. The default is a no-op passthrough, since CELL_ARROW_TYPE ==
+        string backends already work in that form; a backend overriding
         CELL_ARROW_TYPE overrides this too.
         """
-        return list(cells)
+        return [str(c) for c in cells]
 
     def polyfill(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
         """

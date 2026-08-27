@@ -1,3 +1,5 @@
+from collections.abc import Iterable
+
 import a5
 import geopandas as gpd
 import pandas as pd
@@ -7,7 +9,7 @@ from shapely.geometry import Point, Polygon
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 
 
-def _as_u64(cell) -> int:
+def _as_u64(cell: str | int) -> int:
     """
     Accepts either form: the working native uint64 (from within the
     pipeline), or the hex string (e.g. reading a --cell-id string output
@@ -29,7 +31,7 @@ class A5VectorIndexer(VectorIndexer):
     CELL_ARROW_TYPE: pa.DataType = pa.uint64()
 
     @staticmethod
-    def cells_to_string(cells) -> list:
+    def cells_to_string(cells: Iterable[str | int]) -> list[str]:
         return [a5.u64_to_hex(int(c)) for c in cells]
 
     @staticmethod
@@ -94,7 +96,7 @@ class A5VectorIndexer(VectorIndexer):
         )
 
     @staticmethod
-    def get_resolution(cell) -> int:
+    def get_resolution(cell: str | int) -> int:
         """
         Returns the resolution of a cell (native uint64, or hex string).
 
@@ -103,23 +105,23 @@ class A5VectorIndexer(VectorIndexer):
         return a5.get_resolution(_as_u64(cell))
 
     @staticmethod
-    def children_at_res(cell, target_res: int) -> list:
+    def children_at_res(cell: str | int, target_res: int) -> list[int]:
         """
         Return all descendants of a cell (native uint64, or hex string) at
         target_res.
 
         Not a part of the interface provided by VectorIndexer.
         """
-        cell = _as_u64(cell)
-        if a5.get_resolution(cell) >= target_res:
-            return [cell]
-        return list(a5.cell_to_children(cell, target_res))
+        cell_u64 = _as_u64(cell)
+        if a5.get_resolution(cell_u64) >= target_res:
+            return [cell_u64]
+        return list(a5.cell_to_children(cell_u64, target_res))
 
     @staticmethod
-    def cell_to_point(cell) -> Point:
+    def cell_to_point(cell: str | int) -> Point:
         lon, lat = a5.cell_to_lonlat(_as_u64(cell))
         return Point(lon, lat)
 
     @staticmethod
-    def cell_to_polygon(cell) -> Polygon:
+    def cell_to_polygon(cell: str | int) -> Polygon:
         return Polygon(a5.cell_to_boundary(_as_u64(cell)))
