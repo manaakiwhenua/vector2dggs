@@ -24,6 +24,15 @@ class GeoOutputMode(StrEnum):
 
 GEOM_TYPES = tuple(mode.value for mode in GeoOutputMode)
 
+
+@unique
+class CellIdMode(StrEnum):
+    STRING = "string"
+    UINT64 = "uint64"
+
+
+CELL_ID_MODES = tuple(mode.value for mode in CellIdMode)
+
 DEFAULT_DGGS_PARENT_RES = {
     "h3": lambda resolution: max(MIN_H3, (resolution - DEFAULT_PARENT_OFFSET)),
     "rhp": lambda resolution: max(MIN_RHP, (resolution - DEFAULT_PARENT_OFFSET)),
@@ -266,4 +275,5 @@ DEFAULTS = {
     "g": "geom",
     "tempdir": None,
     "geo": GeoOutputMode.NONE.value,
+    "cell_id": CellIdMode.STRING.value,
 }

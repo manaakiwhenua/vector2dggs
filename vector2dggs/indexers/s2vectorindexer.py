@@ -9,7 +9,7 @@ from shapely.geometry import LineString, Point, Polygon
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 
 
-class S2VectorIndexer(VectorIndexer):
+class S2VectorIndexer(VectorIndexer[str]):
     """
     Provides integration for Google's S2 DGGS.
     """

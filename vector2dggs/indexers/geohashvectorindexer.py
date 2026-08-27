@@ -11,7 +11,7 @@ from vector2dggs.indexers.geohash import traversal as geohash_traversal
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 
 
-class GeohashVectorIndexer(VectorIndexer):
+class GeohashVectorIndexer(VectorIndexer[str]):
     """
     Provides integration for the Geohash geocode system.
     """

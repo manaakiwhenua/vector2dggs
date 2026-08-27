@@ -1,6 +1,7 @@
 from unittest import TestCase
 
 import geopandas as gpd
+import pyarrow as pa
 from shapely.geometry import LineString, Point, Polygon
 
 from vector2dggs.indexerfactory import indexer_instance
@@ -13,9 +14,15 @@ HOLE_RES = {"h3": 10, "s2": 15, "a5": 18, "rhp": 9, "geohash": 7}
 
 
 class TestPolyfillTokenContract(TestCase):
-    """polyfill() must index by string cell ids for every backend."""
+    """
+    polyfill() must index by each backend's own working cell-id form: str
+    for backends with CELL_ARROW_TYPE == string (all of them, until #199/
+    #200 land), int for a backend with a native form (#198: A5). This is
+    always the working form, never mode-dependent - string is a one-time
+    output-boundary rendering, not something polyfill() itself produces.
+    """
 
-    def _assert_str_index(self, dggs):
+    def _assert_native_index(self, dggs):
         skip_unless_backend(dggs)
         # matches the shape polyfill() receives in the pipeline: feature id
         # as a column, plain RangeIndex
@@ -37,10 +44,14 @@ class TestPolyfillTokenContract(TestCase):
             },
             crs=4326,
         )
-        result = indexer_instance(dggs).polyfill(df, RES[dggs])
+        indexer = indexer_instance(dggs)
+        result = indexer.polyfill(df, RES[dggs])
         self.assertGreater(len(result), 0)
-        non_str = {type(c).__name__ for c in result.index if not isinstance(c, str)}
-        self.assertFalse(non_str, f"non-str cell ids in index: {non_str}")
+        expected_type = str if pa.string() == indexer.CELL_ARROW_TYPE else int
+        wrong = {
+            type(c).__name__ for c in result.index if not isinstance(c, expected_type)
+        }
+        self.assertFalse(wrong, f"unexpected cell id type in index: {wrong}")
 
     def _assert_hole_respected(self, dggs):
         skip_unless_backend(dggs)
@@ -60,21 +71,21 @@ class TestPolyfillTokenContract(TestCase):
         self.assertFalse(leaked, f"cells with centres inside the hole: {leaked[:5]}")
 
     def test_h3(self):
-        self._assert_str_index("h3")
+        self._assert_native_index("h3")
         self._assert_hole_respected("h3")
 
     def test_s2(self):
-        self._assert_str_index("s2")
+        self._assert_native_index("s2")
         self._assert_hole_respected("s2")
 
     def test_a5(self):
-        self._assert_str_index("a5")
+        self._assert_native_index("a5")
         self._assert_hole_respected("a5")
 
     def test_rhp(self):
-        self._assert_str_index("rhp")
+        self._assert_native_index("rhp")
         self._assert_hole_respected("rhp")
 
     def test_geohash(self):
-        self._assert_str_index("geohash")
+        self._assert_native_index("geohash")
         self._assert_hole_respected("geohash")

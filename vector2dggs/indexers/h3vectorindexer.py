@@ -6,7 +6,7 @@ from shapely.geometry import Point, Polygon, mapping
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 
 
-class H3VectorIndexer(VectorIndexer):
+class H3VectorIndexer(VectorIndexer[str]):
     """
     Provides integration for Uber's H3 DGGS.
     """

@@ -56,6 +56,9 @@ class TestSortedHiveWrite(TestCase):
                 "h3_08",
                 "h3_12",
                 "snappy",
+                H3VectorIndexer(dggs="h3"),
+                "string",
+                False,
             )
             counts = [
                 len(list(d.glob("*.parquet")))
@@ -90,6 +93,9 @@ class TestSortedHiveWrite(TestCase):
                 "h3_08",
                 "h3_09",
                 "snappy",
+                H3VectorIndexer(dggs="h3"),
+                "string",
+                False,
             )
             dirs = [d for d in Path(out).iterdir() if d.is_dir()]
             self.assertEqual(len(dirs), len(parents))

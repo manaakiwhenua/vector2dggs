@@ -53,6 +53,7 @@ vector2dggs <dggs> [OPTIONS] VECTOR_INPUT OUTPUT_DIRECTORY
 - `-id`/`--id_field`: the feature identifier carried into the output. Defaults to the input's own internal ID where one exists (a GPKG's FID column, or a DB table's single-column primary key); otherwise falls back to a synthetic index tied to row position in the read order — stable across repeated runs of the same unchanged input, but not portable to a different export/copy of the same data. Rows sharing an id are treated as one feature.
 - `-co`/`--compact`: merges complete sets of sibling cells belonging to one feature (grouped by whichever id_field is in play, explicit, auto-detected, or synthetic), to no coarser than the parent resolution. Compacted output expands back to exactly the full-resolution result.
 - `--geo`: plain Parquet by default; `point` or `polygon` writes GeoParquet (v1.1.0) cell geometries instead.
+- `--cell-id`: `string` (default) or `uint64`. DGGS with a native integer cell form (A5 currently; H3 and S2 to follow) can write cell IDs as unsigned 64-bit integers instead of text — useful where downstream tools take integer cell IDs directly (e.g. DuckDB's `h3` extension). Cell IDs are worked in the native form internally regardless of this flag; it only controls the final output rendering. String-only DGGS (rHEALPix, Geohash) reject `--cell-id uint64`.
 
 The full reference (`vector2dggs h3 --help`; the other commands differ only in their resolution ranges):
 
@@ -119,6 +120,9 @@ Options:
                                   metadata), or 'point'/'polygon' to write
                                   GeoParquet (v1.1.0) with the corresponding
                                   geometry type.  [default: none]
+  --cell-id [string]              Cell ID output form. H3 cell IDs are strings
+                                  with no integer form, so only 'string' is
+                                  available.  [default: string]
   --tempdir PATH                  Temporary data is created during the execution
                                   of this program. This parameter allows you to
                                   control where this data will be written.

@@ -24,7 +24,7 @@ warnings.filterwarnings(
 )
 
 
-class RHPVectorIndexer(VectorIndexer):
+class RHPVectorIndexer(VectorIndexer[str]):
     """
     Provides integration for MWLR's rHEALPix DGGS.
     """

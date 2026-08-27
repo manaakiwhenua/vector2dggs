@@ -295,6 +295,10 @@ class TestA5CompactionBounds(TestCase):
     Compaction must never produce cells coarser (lower resolution) than
     parent_res, even when a feature's cells fully cover an ancestor that is
     coarser than parent_res.
+
+    A5 works natively in uint64 throughout (issue #198); its hex string
+    form is now purely an output-boundary rendering (cells_to_string), not
+    something get_resolution/children_at_res/compaction accept as input.
     """
 
     def setUp(self):
@@ -302,21 +306,16 @@ class TestA5CompactionBounds(TestCase):
         self.parent_res = 2
         # An ancestor one level coarser than parent_res, fully covered by all
         # of its grandchildren at parent_res + 1.
-        ancestor_u64 = a5.cell_to_parent(a5.get_res0_cells()[0], self.parent_res - 1)
-        self.ancestor = a5.u64_to_hex(ancestor_u64)
+        self.ancestor = a5.cell_to_parent(a5.get_res0_cells()[0], self.parent_res - 1)
         self.res = self.parent_res + 1
         self.indexer = A5VectorIndexer(dggs="a5")
-        self.cells = {
-            a5.u64_to_hex(c) for c in a5.cell_to_children(ancestor_u64, self.res)
-        }
+        self.cells = set(a5.cell_to_children(self.ancestor, self.res))
 
     def test_unbounded_compaction_would_exceed_parent_res(self):
         # Demonstrates the underlying behaviour that necessitates the floor:
         # a5.compact has no resolution floor and will compact past
         # parent_res whenever the cells fully cover a coarser ancestor.
-        unbounded = {
-            a5.u64_to_hex(c) for c in a5.compact([a5.hex_to_u64(c) for c in self.cells])
-        }
+        unbounded = set(a5.compact(list(self.cells)))
         self.assertEqual(unbounded, {self.ancestor})
         self.assertLess(A5VectorIndexer.get_resolution(self.ancestor), self.parent_res)
 
@@ -324,13 +323,7 @@ class TestA5CompactionBounds(TestCase):
         result = self.indexer.children_at_res(self.ancestor, self.parent_res)
 
         self.assertEqual(
-            set(result),
-            {
-                a5.u64_to_hex(c)
-                for c in a5.cell_to_children(
-                    a5.hex_to_u64(self.ancestor), self.parent_res
-                )
-            },
+            set(result), set(a5.cell_to_children(self.ancestor, self.parent_res))
         )
 
     def test_enforce_resolution_floor_breaks_up_coarse_cells(self):
@@ -355,7 +348,7 @@ class TestA5CompactionBounds(TestCase):
             {
                 "id": [1] * len(self.cells),
                 "attr": range(len(self.cells)),
-                dggs_col: list(self.cells),
+                dggs_col: pd.array(list(self.cells), dtype="uint64"),
             }
         )
 
@@ -369,6 +362,13 @@ class TestA5CompactionBounds(TestCase):
                 for c in result.index
             )
         )
+        self.assertEqual(result.index.dtype, np.dtype("uint64"))
+
+    def test_cells_to_string_round_trips_exactly(self):
+        strings = self.indexer.cells_to_string(self.cells)
+        self.assertEqual(len(set(strings)), len(self.cells))
+        self.assertTrue(all(isinstance(s, str) for s in strings))
+        self.assertEqual({a5.hex_to_u64(s) for s in strings}, self.cells)
 
 
 class _SyntheticIndexer(VectorIndexer):

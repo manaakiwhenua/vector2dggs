@@ -12,6 +12,7 @@ from shapely.geometry import Point, box
 
 import vector2dggs.constants as const
 from vector2dggs import common
+from vector2dggs.indexers.h3vectorindexer import H3VectorIndexer
 
 from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME
 
@@ -315,10 +316,20 @@ class TestDropCondition(TestCase):
 
 
 class TestWritePartitionGuards(TestCase):
+    INDEXER = H3VectorIndexer(dggs="h3")
+
     def test_empty_frame_writes_nothing(self):
         with tempfile.TemporaryDirectory() as d:
             n = common.write_partition(
-                pd.DataFrame(), None, Path(d), "p", "c", "snappy"
+                pd.DataFrame(),
+                None,
+                Path(d),
+                "p",
+                "c",
+                "snappy",
+                self.INDEXER,
+                "string",
+                False,
             )
             self.assertEqual(n, 0)
             self.assertFalse(list(Path(d).iterdir()))
@@ -326,12 +337,16 @@ class TestWritePartitionGuards(TestCase):
     def test_missing_partition_column_raises(self):
         df = pd.DataFrame({"c": ["a"], "x": [1]}).set_index("c")
         with tempfile.TemporaryDirectory() as d, self.assertRaises(KeyError):
-            common.write_partition(df, None, Path(d), "p", "c", "snappy")
+            common.write_partition(
+                df, None, Path(d), "p", "c", "snappy", self.INDEXER, "string", False
+            )
 
     def test_all_null_cell_ids_write_nothing(self):
         df = pd.DataFrame({"p": ["x"], "c": [None]})
         with tempfile.TemporaryDirectory() as d:
-            n = common.write_partition(df, None, Path(d), "p", "c", "snappy")
+            n = common.write_partition(
+                df, None, Path(d), "p", "c", "snappy", self.INDEXER, "string", False
+            )
             self.assertEqual(n, 0)
             self.assertFalse(list(Path(d).iterdir()))
 
@@ -342,7 +357,9 @@ class TestWritePartitionGuards(TestCase):
         # contract here so a defensive copy doesn't silently creep back in.
         df = pd.DataFrame({"c": ["a", "b"], "p": [1, 2]})
         with tempfile.TemporaryDirectory() as d:
-            common.write_partition(df, None, Path(d), "p", "c", "snappy")
+            common.write_partition(
+                df, None, Path(d), "p", "c", "snappy", self.INDEXER, "string", False
+            )
         self.assertEqual(df["p"].dtype, "string")
 
 

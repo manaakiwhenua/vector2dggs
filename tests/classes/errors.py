@@ -150,6 +150,37 @@ class TestErrors(TestRunthrough):
                 standalone_mode=False,
             )
 
+    def test_cell_id_uint64_rejected_for_string_only_backend(self):
+        """H3 has no --cell-id uint64 support until #199: rejected by the
+        CLI's own dynamically-restricted --cell-id choices, before any of
+        our own validation runs."""
+        with self.assertRaises(click.BadParameter):
+            h3(
+                [
+                    TEST_FILE_PATH,
+                    str(self.output_path),
+                    "--layer",
+                    TEST_LAYER_NAME,
+                    "-r",
+                    "8",
+                    "--cell-id",
+                    "uint64",
+                ],
+                standalone_mode=False,
+            )
+
+    def test_check_cell_id_rejects_string_only_backend(self):
+        """The library-API guard (common.check_cell_id), independent of the
+        CLI's own Click-level restriction."""
+        indexer = indexer_instance("h3")
+        with self.assertRaises(common.CellIdError):
+            common.check_cell_id("uint64", indexer)
+
+    def test_check_cell_id_accepts_capable_backend(self):
+        indexer = indexer_instance("a5")
+        common.check_cell_id("uint64", indexer)
+        common.check_cell_id("string", indexer)
+
 
 class TestIndexCompactionDefaults(TestCase):
     """Library API: index() must validate compaction requirements itself."""
