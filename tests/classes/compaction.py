@@ -1,6 +1,7 @@
 from itertools import product
 from unittest import TestCase
 
+import numpy as np
 import pandas as pd
 
 from vector2dggs.indexers.vectorindexer import VectorIndexer
@@ -368,3 +369,104 @@ class TestA5CompactionBounds(TestCase):
                 for c in result.index
             )
         )
+
+
+class _SyntheticIndexer(VectorIndexer):
+    """A concrete but otherwise-unused VectorIndexer, so compaction_common
+    (a real, non-abstract instance method) can be called directly with
+    synthetic cell functions - isolating the shared algorithm from any real
+    backend's semantics."""
+
+    def _polyfill_polygons(self, df, resolution):
+        raise NotImplementedError
+
+    def _polyfill_linestrings(self, df, resolution):
+        raise NotImplementedError
+
+    def _polyfill_points(self, df, resolution):
+        raise NotImplementedError
+
+    def secondary_index(self, df, parent_res):
+        raise NotImplementedError
+
+    def compaction(self, df, res, col_order, dggs_col, id_field, parent_res):
+        raise NotImplementedError
+
+    @staticmethod
+    def cell_to_point(cell):
+        raise NotImplementedError
+
+    @staticmethod
+    def cell_to_polygon(cell):
+        raise NotImplementedError
+
+    @staticmethod
+    def get_resolution(cell):
+        raise NotImplementedError
+
+    @staticmethod
+    def children_at_res(cell, target_res):
+        raise NotImplementedError
+
+
+class TestCompactionCommonDtypeSafety(TestCase):
+    """
+    compaction_common builds a fresh pd.Series from a plain Python list of
+    compacted cell IDs (parent_for_pair), separately from the incoming
+    dataframe's own dggs_col. Left to inference, pandas picks int64 or
+    uint64 per list depending on whether any value exceeds 2**63-1,
+    independently of the source column's actual dtype - and concatenating a
+    frame with a mismatched int64/uint64 index silently upcasts the result
+    to float64, corrupting cell IDs. Reproduced here with synthetic
+    (non-string) cell IDs, ahead of any real backend adopting them.
+    """
+
+    DGGS_COL = "synthetic_02"
+
+    def setUp(self):
+        self.indexer = _SyntheticIndexer(dggs="synthetic")
+        # Feature A's three fine cells fully cover parent cell 100 and
+        # compact away entirely; feature B's one cell has no siblings and
+        # stays as-is - so the result concatenates a freshly-built
+        # (compacted) frame with a slice of the original (uncompacted) one.
+        self.df = pd.DataFrame(
+            {
+                "id": ["A", "A", "A", "B"],
+                "attr": [1, 2, 3, 4],
+                self.DGGS_COL: pd.array([1000, 1001, 1002, 2000], dtype="uint64"),
+            }
+        )
+
+    @staticmethod
+    def _compact_func(cells):
+        cells = set(cells)
+        return {100} if cells == {1000, 1001, 1002} else cells
+
+    @staticmethod
+    def _cell_to_child_func(cell, res):
+        return {100: 1000}[cell]
+
+    @staticmethod
+    def _get_resolution_func(cell):
+        return 2 if cell >= 1000 else 1
+
+    @staticmethod
+    def _children_at_res_func(cell, target_res):
+        return {cell}
+
+    def test_compacted_result_preserves_uint64_dtype(self):
+        result = self.indexer.compaction_common(
+            self.df,
+            res=2,
+            id_field="id",
+            col_order=["id", "attr"],
+            dggs_col=self.DGGS_COL,
+            compact_func=self._compact_func,
+            cell_to_child_func=self._cell_to_child_func,
+            parent_res=1,
+            get_resolution_func=self._get_resolution_func,
+            children_at_res_func=self._children_at_res_func,
+        )
+
+        self.assertEqual(result.index.dtype, np.dtype("uint64"))
+        self.assertEqual({int(c) for c in result.index}, {100, 2000})

@@ -31,6 +31,10 @@ with contextlib.suppress(ImportError):
     from .classes.compaction import TestA5CompactionBounds as TestA5CompactionBounds
 with contextlib.suppress(ImportError):
     from .classes.compaction import (
+        TestCompactionCommonDtypeSafety as TestCompactionCommonDtypeSafety,
+    )
+with contextlib.suppress(ImportError):
+    from .classes.compaction import (
         TestGeohashCompactionBounds as TestGeohashCompactionBounds,
     )
 with contextlib.suppress(ImportError):
@@ -68,6 +72,10 @@ with contextlib.suppress(ImportError):
 with contextlib.suppress(ImportError):
     from .classes.common_units import (
         TestReadBatchesColumnSelection as TestReadBatchesColumnSelection,
+    )
+with contextlib.suppress(ImportError):
+    from .classes.common_units import (
+        TestMergePartitionFilesDtypeSafety as TestMergePartitionFilesDtypeSafety,
     )
 with contextlib.suppress(ImportError):
     from .classes.common_units import (
