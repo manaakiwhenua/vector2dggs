@@ -28,7 +28,7 @@ try:
 except ImportError:
     S2 = None
 try:
-    from rhealpixdggs.rhp_wrappers import rhp_get_resolution
+    from rhealpixdggs import get_resolution as rhp_get_resolution
 
     from vector2dggs.indexers.rhpvectorindexer import RHPVectorIndexer
 except ImportError:

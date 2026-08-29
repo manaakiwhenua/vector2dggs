@@ -1,70 +1,58 @@
-import warnings
 from collections.abc import Iterable
-from itertools import product
 
 import geopandas as gpd
 import pandas as pd
-import rhppandas as rhppandas  # registers the .rhp accessor used below
-from rhealpixdggs.conversion import compress_order_cells
-from rhealpixdggs.dggs import WGS84_003
-from rhealpixdggs.rhp_wrappers import (
-    rhp_get_resolution,
-    rhp_to_center_child,
-    rhp_to_geo,
-    rhp_to_geo_boundary,
-)
-from rhppandas.util.const import COLUMNS
+import rhealpixdggs as rh
 from shapely.geometry import Point, Polygon
 
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 
-# upstream fix pending; fires per geometry, flooding CLI output
-warnings.filterwarnings(
-    "ignore", message="WARNING: Implementation of linetrace is incomplete"
-)
-
 
 class RHPVectorIndexer(VectorIndexer[str]):
     """
-    Provides integration for MWLR's rHEALPix DGGS.
+    Provides rHEALPix integration through the Rust-backed Python package.
     """
 
     GEODESIC_POLYFILL = False
 
+    @staticmethod
+    def _polyfill_polygon(geom, resolution: int) -> list[str]:
+        return rh.geo.geometry_to_cells(geom, resolution)
+
+    @staticmethod
+    def _linetrace(geom, resolution: int) -> list[str]:
+        coordinates = [(latitude, longitude) for longitude, latitude in geom.coords]
+        # A traversal can re-enter a cell, but vector2dggs emits at most one
+        # row per feature/cell pair.
+        return list(dict.fromkeys(rh.line_to_cells(coordinates, resolution)))
+
     def _polyfill_polygons(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
-        geom_col = df.geometry.name
-        result = df.rhp.polyfill_resample(
-            resolution, return_geometry=False, compress=False
-        ).drop(columns=["index", geom_col])
-        return pd.DataFrame(result)
+        return self._geo_to_cells(
+            df, resolution, self._polyfill_polygon, df.geometry.name
+        )
 
     def _polyfill_linestrings(
         self, df: gpd.GeoDataFrame, resolution: int
     ) -> pd.DataFrame:
-        geom_col = df.geometry.name
-        col = COLUMNS["linetrace"]
-        result = df.rhp.linetrace(resolution)
-        # linetrace returns a traversal sequence, which may revisit cells
-        result[col] = result[col].map(lambda cells: list(dict.fromkeys(cells)))
-        result = (
-            result.drop(columns=[geom_col])
-            .explode(col)
-            .dropna(subset=[col])
-            .set_index(col)
-        )
-        return pd.DataFrame(result)
+        return self._geo_to_cells(df, resolution, self._linetrace, df.geometry.name)
 
     def _polyfill_points(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
-        geom_col = df.geometry.name
-        result = df.rhp.geo_to_rhp(resolution, set_index=True)
-        return pd.DataFrame(result.drop(columns=[geom_col]))
+        return self._geo_to_cells(
+            df,
+            resolution,
+            lambda geom, res: [rh.latlng_to_cell(geom.y, geom.x, res)],
+            df.geometry.name,
+        )
 
     def secondary_index(self, df: pd.DataFrame, parent_res: int) -> pd.DataFrame:
         """
         Implementation of abstract function.
         """
 
-        return df.rhp.rhp_to_parent(parent_res)
+        df[f"rhp_{parent_res:02}"] = df.index.map(
+            lambda cell: rh.cell_to_parent(cell, parent_res)
+        )
+        return df
 
     def compaction(
         self,
@@ -88,7 +76,7 @@ class RHPVectorIndexer(VectorIndexer[str]):
             col_order,
             dggs_col,
             self.compact_cells,
-            rhp_to_center_child,
+            self.center_child_at_res,
             parent_res,
             self.get_resolution,
             self.children_at_res,
@@ -102,13 +90,7 @@ class RHPVectorIndexer(VectorIndexer[str]):
 
         Not a part of the interface provided by VectorIndexer.
         """
-        previous_result = set(cells)
-        while True:
-            current_result = set(compress_order_cells(previous_result))
-            if previous_result == current_result:
-                break
-            previous_result = current_result
-        return previous_result
+        return set(rh.compact_cells(list(cells)))
 
     @staticmethod
     def get_resolution(cell: str) -> int:
@@ -117,7 +99,15 @@ class RHPVectorIndexer(VectorIndexer[str]):
 
         Not a part of the interface provided by VectorIndexer.
         """
-        return rhp_get_resolution(cell)
+        return rh.get_resolution(cell)
+
+    @staticmethod
+    def center_child_at_res(cell: str, target_res: int) -> str:
+        """Return the aperture-9 centre descendant at ``target_res``."""
+        current_res = rh.get_resolution(cell)
+        if target_res <= current_res:
+            return cell
+        return cell + ("4" * (target_res - current_res))
 
     @staticmethod
     def children_at_res(cell: str, target_res: int) -> list[str]:
@@ -126,24 +116,21 @@ class RHPVectorIndexer(VectorIndexer[str]):
 
         Not a part of the interface provided by VectorIndexer.
         """
-        current_res = rhp_get_resolution(cell)
+        current_res = rh.get_resolution(cell)
         if target_res <= current_res:
             return [cell]
-        digits = "012345678"
-        return [
-            cell + "".join(suffix)
-            for suffix in product(digits, repeat=target_res - current_res)
-        ]
+        return rh.cell_to_children(cell, target_res)
 
     @staticmethod
     def cell_to_point(cell: str) -> Point:
-        return Point(rhp_to_geo(cell, plane=False, dggs=WGS84_003))
+        latitude, longitude = rh.cell_to_latlng(cell)
+        return Point(longitude, latitude)
 
     @staticmethod
     def cell_to_polygon(cell: str) -> Polygon:
         return Polygon(
             tuple(
-                coord
-                for coord in rhp_to_geo_boundary(cell, plane=False, dggs=WGS84_003)
+                (longitude, latitude)
+                for latitude, longitude in rh.cell_to_boundary(cell)
             )
         )

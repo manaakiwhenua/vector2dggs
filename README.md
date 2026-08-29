@@ -9,7 +9,7 @@ This is the vector equivalent of [raster2dggs](https://github.com/manaakiwhenua/
 Currently this tool supports the following DGGSs:
 
 - [H3](https://h3geo.org/)
-- [rHEALPix](https://datastore.landcareresearch.co.nz/dataset/rhealpix-discrete-global-grid-system)
+- [rHEALPix](https://datastore.landcareresearch.co.nz/dataset/rhealpix-discrete-global-grid-system), powered by the Rust-backed [`rhealpixdggs-rs`](https://github.com/ChocopieKewpie/rhealpixdggs-rs) package
 - [S2](https://s2geometry.io/)
 - [A5](https://a5geo.org/)
 
@@ -34,6 +34,12 @@ pip install vector2dggs[all]
 If you want only a subset, use the pattern `pip install vector2dggs[rhp]` (for one) or `pip install vector2dggs[h3,s2]` (for multiple).
 
 A bare `pip install vector2dggs` **will not install any DGGS backends**.
+
+The `rhp` extra currently installs a pinned `rhealpixdggs-rs` revision from
+GitHub and builds its Python extension from source. Install Rust 1.85 or newer
+first (`conda install -c conda-forge rust` or [rustup](https://rustup.rs/)). On
+Windows, the MSVC C++ Build Tools are also required. This build requirement can
+be removed once binary `rhealpixdggs-rs` wheels are published.
 
 PostgreSQL/PostGIS input requires the `postgres` extra (e.g. `pip install vector2dggs[h3,postgres]`); it is included in `all`.
 

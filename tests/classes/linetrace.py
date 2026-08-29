@@ -1,7 +1,6 @@
 from unittest import TestCase, mock
 
 import geopandas as gpd
-import pandas as pd
 from shapely.geometry import LineString
 
 from vector2dggs.indexerfactory import indexer_instance
@@ -82,18 +81,13 @@ class TestEmptyTraces(TestCase):
         df = gpd.GeoDataFrame(
             {"fid": [0, 1], "geometry": [self.LINE, self.LINE]}, crs=4326
         )
-        accessor_cls = type(df.rhp)
-        real = accessor_cls.linetrace
+        real = type(indexer)._linetrace
+        calls = iter([True, False])
 
-        def fake(self_acc, resolution):
-            out = real(self_acc, resolution)
-            col = out.columns[-1]
-            values = out[col].tolist()
-            values[0] = []
-            out[col] = pd.Series(values, index=out.index)
-            return out
+        def fake(geom, resolution):
+            return [] if next(calls) else real(geom, resolution)
 
-        with mock.patch.object(accessor_cls, "linetrace", fake):
+        with mock.patch.object(type(indexer), "_linetrace", staticmethod(fake)):
             result = indexer._polyfill_linestrings(df, 6)
         self._assert_no_nan_rows(indexer, result, 1)
 

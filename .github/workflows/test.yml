@@ -15,6 +15,9 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@1.85.0
+
       - name: Install Poetry
         run: pip install poetry
 
