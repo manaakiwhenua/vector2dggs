@@ -304,6 +304,22 @@ def raise_rlimit_nofile() -> None:
         LOGGER.debug("Could not raise RLIMIT_NOFILE: %s", e)
 
 
+def _categoricals_to_strings(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Convert pandas categorical columns back to nullable strings immediately
+    before final Parquet/GeoParquet output.
+
+    Categoricals are kept during indexing to reduce memory use when repeated
+    attributes are duplicated across many DGGS cells. Writing them directly
+    would expose Arrow dictionary columns, which are not consistently handled
+    as ordinary string fields by downstream GIS software such as GDAL/QGIS.
+    """
+    categorical_cols = df.select_dtypes(include=["category"]).columns
+    for col in categorical_cols:
+        df[col] = df[col].astype("string")
+    return df
+
+
 def write_partition(
     partition_df: pd.DataFrame,
     geo_serialisation_method,
@@ -392,6 +408,11 @@ def write_partition(
     # achieves the same churn-avoidance property, which only needs equal
     # values to end up contiguous, not any particular relative order.
     partition_df.sort_values(partition_col, kind="stable", inplace=True)
+
+    # Keep categorical attributes during processing for memory efficiency,
+    # but expose ordinary logical string fields in final non-compacted output.
+    if not compact:
+        partition_df = _categoricals_to_strings(partition_df)
 
     table = pa.Table.from_pandas(partition_df, preserve_index=True)
     if geo_serialisation_method is not None:
@@ -584,6 +605,10 @@ def _merge_partition_files(
             and pa.string() != indexer.CELL_ARROW_TYPE
         ):
             df.index = pd.Index(indexer.cells_to_string(df.index), name=df.index.name)
+
+        # Compaction needs the categorical representation internally, so
+        # decode attributes only now at the final compacted output boundary.
+        df = _categoricals_to_strings(df)
 
         table = pa.Table.from_pandas(df, preserve_index=True)
         if geom_fn is not None:
@@ -1077,27 +1102,50 @@ def _normalise_longitudes(df: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, bool]
     return df, bool(straddle.any())
 
 
-def _clean_geometries(df: gpd.GeoDataFrame, indexer: VectorIndexer) -> gpd.GeoDataFrame:
-    LOGGER.debug("Exploding geometry collections and multipolygons")
-    # Correct antimeridian-crossing artifacts when the source coordinates were
-    # unambiguous (projected CRS, or unwrapped longitudes), and only for
-    # backends whose polyfill isn't already geodesic.
+def _clean_geometries(
+    df: gpd.GeoDataFrame, indexer: VectorIndexer
+) -> gpd.GeoDataFrame:
+    LOGGER.debug("Cleaning and exploding geometries")
+
     was_projected = df.crs is not None and not df.crs.is_geographic
     df = df.to_crs(4326)
+
     df, had_unwrapped_crossing = _normalise_longitudes(df)
+
     if (was_projected or had_unwrapped_crossing) and not indexer.GEODESIC_POLYFILL:
         LOGGER.debug("Correcting antimeridian-crossing geometries")
         df["geometry"] = df.geometry.apply(_fix_antimeridian_crossing)
+
+    # Repair invalid polygonal geometries before passing them to DGGS backends.
+    polygonal = df.geometry.geom_type.isin(["Polygon", "MultiPolygon"])
+    invalid = polygonal & ~df.geometry.is_valid
+
+    if invalid.any():
+        LOGGER.warning(
+            "Repairing %d invalid polygon geometries",
+            int(invalid.sum()),
+        )
+
+        df.loc[invalid, "geometry"] = shapely.make_valid(
+            df.loc[invalid, "geometry"].values,
+            method="structure",
+            keep_collapsed=False,
+        )
+
+    # make_valid can create MultiPolygons / GeometryCollections,
+    # so explode after repairing.
     df = (
-        df.explode(index_parts=False).explode(  # Explode from GeometryCollection
-            index_parts=False
-        )  # Explode multipolygons to polygons
-    ).reset_index()
+        df.explode(index_parts=False)
+        .explode(index_parts=False)
+        .reset_index()
+    )
+
     df = drop_condition(
         df,
         df[df.geometry.is_empty | df.geometry.isna()].index,
         "Considering empty or null geometries",
     )
+
     df = drop_condition(
         df,
         df[
@@ -1107,6 +1155,7 @@ def _clean_geometries(df: gpd.GeoDataFrame, indexer: VectorIndexer) -> gpd.GeoDa
         ].index,
         "Considering unsupported geometries",
     )
+
     return df
 
 

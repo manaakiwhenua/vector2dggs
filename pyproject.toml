@@ -27,7 +27,7 @@ sqlalchemy = "^2.0.32"
 shapely = "^2.1"
 numpy = "^2"
 h3 = { version = "^4.1", optional = true }
-rhealpixdggs-rs = { git = "https://github.com/ChocopieKewpie/rhealpixdggs-rs.git", rev = "319ddbc58123e9de0e020d2a55d7c7753e042056", optional = true }
+rhealpixdggs-rs = { git = "https://github.com/ChocopieKewpie/rhealpixdggs-rs.git", rev = "bc28cbe89c0ba8cc63c008776771f13e608d8587", optional = true }
 s2geometry = { version = "^0.14.0", optional = true}
 rusty-polygon-geohasher = { version = "^0.2.3", optional = true}
 python-geohash = { version = "^0.8.5", optional = true}
