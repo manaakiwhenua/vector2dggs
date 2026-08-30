@@ -104,9 +104,11 @@ Options:
                                   cutting CRS. A threshold of 0 will skip
                                   bisection entirely (effectively ignoring
                                   --cut_crs).
-  -t, --threads INTEGER RANGE     Amount of threads used for operation
-                                  [default: (CPU count - 1, capped by available
-                                  memory); x>=1]
+  -p, -t, --processes, --threads INTEGER RANGE
+                                  Number of parallel workers: process pools for
+                                  indexing and for merging/compaction, and the
+                                  thread pool for bisection.  [default: (CPU
+                                  count - 1, capped by available memory); x>=1]
   -cp, --compression TEXT         Compression method to use for the output
                                   Parquet files. Options include 'snappy',
                                   'gzip', 'brotli', 'lz4', 'zstd', etc. Use
