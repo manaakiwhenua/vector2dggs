@@ -83,13 +83,16 @@ def make_dggs_command(
         nargs=1,
     )
     @click.option(
+        "-p",
+        "--processes",
         "-t",
         "--threads",
+        "processes",
         required=False,
         default=const.DEFAULTS["t"],
         show_default="CPU count - 1, capped by available memory",
         type=click.IntRange(min=1),
-        help="Amount of threads used for operation",
+        help="Number of parallel workers: process pools for indexing and for merging/compaction, and the thread pool for bisection.",
         nargs=1,
     )
     @click.option(
@@ -169,7 +172,7 @@ def make_dggs_command(
         keep_attribute: tuple[str, ...],
         cut_crs: int,
         cut_threshold: float,
-        threads: int,
+        processes: int,
         compression: str,
         layer: str,
         geom_col: str,
@@ -204,7 +207,7 @@ def make_dggs_command(
             parent_res,
             keep_attributes,
             cut_threshold,
-            threads,
+            processes,
             compression=compression,
             cut_crs=cut_crs_obj,
             id_field=id_field,
