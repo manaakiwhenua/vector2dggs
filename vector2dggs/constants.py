@@ -267,8 +267,6 @@ def default_threads() -> int:
 DEFAULTS = {
     "id": None,
     "k": False,
-    "crs": None,
-    "c": None,
     "t": default_threads(),
     "cp": "snappy",
     "lyr": None,

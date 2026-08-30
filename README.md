@@ -87,23 +87,6 @@ Options:
   -ka, --keep_attribute TEXT      Retain only this attribute in output; repeat
                                   for multiple. Takes precedence over
                                   -k/--keep_attributes.
-  -crs, --cut_crs INTEGER         Set the coordinate reference system (CRS) used
-                                  for cutting large geometries (see
-                                  `--cut_threshold`). Defaults to the same CRS
-                                  as the input. Should be a valid EPSG code.
-  -c, --cut_threshold FLOAT       Cutting up large geometries into smaller
-                                  geometries based on a target area. Units are
-                                  assumed to match the input CRS units unless
-                                  `--cut_crs` is also given, in which case units
-                                  match the units of the supplied CRS. If left
-                                  unspecified, the threshold defaults to the
-                                  area of a few thousand cells of the target
-                                  resolution (a benchmarked balance of
-                                  parallelism against per-piece overhead),
-                                  converted into the squared units of the
-                                  cutting CRS. A threshold of 0 will skip
-                                  bisection entirely (effectively ignoring
-                                  --cut_crs).
   -p, -t, --processes, --threads INTEGER RANGE
                                   Number of parallel workers: process pools for
                                   indexing and for merging/compaction, and the

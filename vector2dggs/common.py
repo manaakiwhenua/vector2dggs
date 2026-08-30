@@ -24,7 +24,7 @@ import pyproj
 import shapely
 import shapely.affinity
 import sqlalchemy
-from shapely.geometry import GeometryCollection
+from shapely.geometry import GeometryCollection, LineString
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError, NoSuchModuleError
 from tqdm import tqdm
@@ -704,6 +704,36 @@ def _polyfill_star(args) -> np.ndarray:
     return _polyfill(*args)
 
 
+def _metres_per_unit(crs: pyproj.CRS) -> float:
+    axis = crs.axis_info[0]
+    # unit_conversion_factor: linear units -> metres, angular -> radians
+    return axis.unit_conversion_factor * (
+        1 if crs.is_projected else const.EARTH_MEAN_RADIUS_M
+    )
+
+
+def _split_linestring_at_vertices(line, budget: float) -> list:
+    """
+    Split a LineString at existing vertices whenever cumulative arc length
+    exceeds the budget. Vertex-only cuts leave every vertex-to-vertex
+    segment untouched, so every backend traces exactly the segments it
+    would have traced uncut; the shared vertex's cell appearing in both
+    pieces is absorbed by the one-row-per-(feature, cell) contract.
+    """
+    coords = list(line.coords)
+    pieces = []
+    start, acc = 0, 0.0
+    for i in range(1, len(coords) - 1):
+        x0, y0 = coords[i - 1][:2]
+        x1, y1 = coords[i][:2]
+        acc += ((x1 - x0) ** 2 + (y1 - y0) ** 2) ** 0.5
+        if acc >= budget:
+            pieces.append(LineString(coords[start : i + 1]))
+            start, acc = i, 0.0
+    pieces.append(LineString(coords[start:]))
+    return pieces
+
+
 def bisection_preparation(
     df: pd.DataFrame,
     dggs: str,
@@ -734,15 +764,12 @@ def bisection_preparation(
         )
 
     if cut_threshold is None:
-        axis = cut_crs.axis_info[0]
-        # unit_conversion_factor: linear units -> metres, angular -> radians
-        metres_per_unit = axis.unit_conversion_factor * (
-            1 if cut_crs.is_projected else const.EARTH_MEAN_RADIUS_M
-        )
+        metres_per_unit = _metres_per_unit(cut_crs)
         cut_threshold_m2 = const.DEFAULT_AREA_THRESHOLD_M2(dggs, int(resolution))
         cut_threshold = cut_threshold_m2 / metres_per_unit**2
         LOGGER.debug(
-            f"Using default cut_threshold of {cut_threshold} ({axis.unit_name}^2)"
+            f"Using default cut_threshold of {cut_threshold} "
+            f"({cut_crs.axis_info[0].unit_name}^2)"
         )
 
     return df, cut_crs, cut_threshold
@@ -762,11 +789,7 @@ def _blade_segment(
     if not (indexer.GEODESIC_POLYFILL or cut_crs.is_projected):
         return None
     eps_m = max(const.DGGS_CELL_AREA_M2_BY_RES[dggs](resolution) ** 0.5 / 10, 10.0)
-    axis = cut_crs.axis_info[0]
-    metres_per_unit = axis.unit_conversion_factor * (
-        1 if cut_crs.is_projected else const.EARTH_MEAN_RADIUS_M
-    )
-    return eps_m / metres_per_unit
+    return eps_m / _metres_per_unit(cut_crs)
 
 
 def bisect_geometry(geometry, cut_threshold, blade_segment=None):
@@ -949,14 +972,36 @@ def _run_bisection(
     cut_threshold: None | float,
     processes: int,
     blade_segment: None | float = None,
+    line_budget: None | float = None,
     pbar: tqdm | None = None,
 ) -> gpd.GeoDataFrame:
     """
+    Geometry-type-aware bisection: polygonal features are cut by katana when
+    their bbox area exceeds cut_threshold; linestrings are split at existing
+    vertices when their arc length exceeds line_budget; points pass through.
+    cut_threshold == 0 disables all bisection.
+
     pbar, if given, is a shared bar whose total grows by this call's
     oversized-feature count; otherwise a local bar is created and closed.
     """
     LOGGER.debug("Bisecting large geometries")
     if cut_threshold is not None and cut_threshold > 0:
+        geom_type = df.geometry.geom_type
+        geometry_loc = df.columns.get_loc("geometry")
+
+        if line_budget is not None and line_budget > 0:
+            line_mask = geom_type.isin(("LineString", "MultiLineString")).to_numpy()
+            lengths = df.geometry.length.to_numpy()
+            for pos in np.flatnonzero(line_mask & (lengths > line_budget)):
+                g = df.geometry.iloc[pos]
+                parts = g.geoms if g.geom_type == "MultiLineString" else [g]
+                pieces = [
+                    piece
+                    for part in parts
+                    for piece in _split_linestring_at_vertices(part, line_budget)
+                ]
+                df.iloc[pos, geometry_loc] = GeometryCollection(pieces)
+
         # katana's own early exit is exactly this bbox-area check; computing
         # it vectorized upfront (rather than dispatching every row to the
         # thread pool regardless) skips that overhead for features that
@@ -965,18 +1010,22 @@ def _run_bisection(
         bbox_area = (bounds["maxx"] - bounds["minx"]) * (
             bounds["maxy"] - bounds["miny"]
         )
+        polygonal = geom_type.isin(
+            ("Polygon", "MultiPolygon", "GeometryCollection")
+        ).to_numpy()
         # Positions (not index labels) of oversized rows: the index is the
         # user-supplied id_field, which is not guaranteed to be unique, and
         # label-based assignment would write one feature's result into every
         # row sharing that label.
-        oversized_positions = np.flatnonzero(bbox_area > cut_threshold)
+        oversized_positions = np.flatnonzero(
+            polygonal & (bbox_area.to_numpy() > cut_threshold)
+        )
         LOGGER.debug(
             "%d of %d features exceed the bisection area threshold",
             len(oversized_positions),
             len(df),
         )
         if len(oversized_positions):
-            geometry_loc = df.columns.get_loc("geometry")
             owns_pbar = pbar is None
             active_pbar: tqdm = (
                 pbar
@@ -1339,8 +1388,19 @@ def _index(
             fid_offset += len(batch)
             features_in.update(batch.index)
             blade_segment = _blade_segment(indexer, dggs, resolution, cut_crs)
+            # linestrings cross roughly one cell per edge-length travelled
+            line_budget = (
+                const.DEFAULT_CUT_CELLS_PER_PIECE
+                * const.DGGS_CELL_AREA_M2_BY_RES[dggs](resolution) ** 0.5
+                / _metres_per_unit(cut_crs)
+            )
             batch = _run_bisection(
-                batch, cut_threshold, processes, blade_segment, bisection_pbar
+                batch,
+                cut_threshold,
+                processes,
+                blade_segment,
+                line_budget=line_budget,
+                pbar=bisection_pbar,
             )
             batch = _clean_geometries(batch, indexer)
             for start, end in _staged_file_chunks(

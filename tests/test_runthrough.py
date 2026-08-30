@@ -25,6 +25,10 @@ with contextlib.suppress(ImportError):
     from .classes.bisection import TestGeodesicCutEdges as TestGeodesicCutEdges
 with contextlib.suppress(ImportError):
     from .classes.bisection import (
+        TestLinestringBisection as TestLinestringBisection,
+    )
+with contextlib.suppress(ImportError):
+    from .classes.bisection import (
         TestSharedBisectionProgress as TestSharedBisectionProgress,
     )
 with contextlib.suppress(ImportError):

@@ -3,7 +3,7 @@ from unittest import TestCase
 
 import geopandas as gpd
 import pyproj
-from shapely.geometry import Polygon
+from shapely.geometry import LineString, Polygon
 from tqdm import tqdm
 
 from vector2dggs import common
@@ -259,3 +259,74 @@ class TestGeodesicCutEdges(TestCase):
                 if not on_bbox:
                     length = ((x1 - x0) ** 2 + (y1 - y0) ** 2) ** 0.5
                     self.assertLessEqual(length, eps * 1.001)
+
+
+class TestLinestringBisection(TestCase):
+    """
+    Long linestrings are split at existing vertices when cumulative arc
+    length exceeds the derived budget. Vertex-only cuts leave every
+    vertex-to-vertex segment untouched, so cell output is identical to the
+    uncut trace for every backend.
+    """
+
+    def _long_line(self, n=400, step=0.02):
+        # ~880 km of jittered line at ~-41S, many vertices
+        coords = [
+            (172.0 + i * step, -41.0 + (0.005 if i % 2 else -0.005)) for i in range(n)
+        ]
+        return LineString(coords)
+
+    def test_long_line_is_split_at_vertices(self):
+        line = self._long_line()
+        df = gpd.GeoDataFrame({"geometry": [line]}, crs=4326)
+        df.index.name = "fid"
+        out = _run_bisection(
+            df.copy(), 1e12, 1, line_budget=1.0
+        )  # budget: 1 degree-ish
+        pieces = list(out.geometry.iloc[0].geoms)
+        self.assertGreater(len(pieces), 3)
+        # every piece boundary vertex is an original vertex
+        original = set(line.coords)
+        for p in pieces:
+            self.assertIn(p.coords[0], original)
+            self.assertIn(p.coords[-1], original)
+        # pieces chain exactly through the original coordinate sequence
+        rebuilt = list(pieces[0].coords)
+        for p in pieces[1:]:
+            self.assertEqual(rebuilt[-1], p.coords[0])
+            rebuilt.extend(list(p.coords)[1:])
+        self.assertEqual(rebuilt, list(line.coords))
+
+    def test_split_output_cells_identical(self):
+        from .base import skip_unless_backend
+
+        skip_unless_backend("h3")
+        import tempfile
+        import warnings as _warnings
+
+        import pandas as pd
+
+        line = self._long_line()
+        df = gpd.GeoDataFrame({"name": ["x"], "geometry": [line]}, crs=4326)
+        with tempfile.TemporaryDirectory() as d:
+            with _warnings.catch_warnings():
+                _warnings.simplefilter("ignore")
+                df.to_file(f"{d}/in.gpkg", layer="l")
+            results = []
+            for cut_threshold in (None, 0.0):  # default (auto line split) vs none
+                common.index(
+                    "h3",
+                    f"{d}/in.gpkg",
+                    f"{d}/out{cut_threshold}.pq",
+                    7,
+                    None,
+                    False,
+                    cut_threshold,
+                    1,
+                    layer="l",
+                    compact=False,
+                )
+                out = pd.read_parquet(f"{d}/out{cut_threshold}.pq")
+                results.append(set(out.index))
+        self.assertGreater(len(results[0]), 0)
+        self.assertEqual(results[0], results[1])

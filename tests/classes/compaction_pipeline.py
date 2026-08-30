@@ -4,7 +4,6 @@ from unittest import TestCase
 import h3 as h3lib
 import pandas as pd
 
-from vector2dggs.h3 import h3
 from vector2dggs.indexers.h3vectorindexer import H3VectorIndexer
 
 from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME
@@ -42,25 +41,20 @@ class TestCompactionAcrossPartitions(TestRunthrough):
 
     def test_compaction_merges_siblings_across_dask_partitions(self):
         # small -c and -ch scatter each feature across many partitions
-        h3(
-            [
-                TEST_FILE_PATH,
-                str(self.output_path),
-                "--layer",
-                TEST_LAYER_NAME,
-                "-r",
-                "11",
-                "-pr",
-                "8",
-                "-id",
-                "LCDB_UID",
-                "-c",
-                "50000",
-                "-co",
-                "-t",
-                "1",
-            ],
-            standalone_mode=False,
+        from vector2dggs import common
+
+        common.index(
+            "h3",
+            TEST_FILE_PATH,
+            str(self.output_path),
+            11,
+            8,
+            False,
+            50000.0,
+            1,
+            id_field="LCDB_UID",
+            layer=TEST_LAYER_NAME,
+            compact=True,
         )
 
         df = pd.read_parquet(self.output_path)

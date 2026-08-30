@@ -114,28 +114,34 @@ class RunthroughScenarios:
         self._run(POLYGON, self.POLYGON_RES, "-o")
         self._assert_output(self.POLYGON_RES)
 
-    def test_cut_crs(self):
-        self._run(POLYGON, self.POLYGON_RES, "-crs", "3793", "-c", "4000")
-        self._assert_output(self.POLYGON_RES)
-
-    def test_cut_crs_reproject(self):
-        self._run(POLYGON, self.POLYGON_RES, "-crs", "4326", "-c", "0.005")
-        self._assert_output(self.POLYGON_RES)
-
-    def test_no_bisection(self):
-        self._run(POLYGON, self.POLYGON_RES, "-c", "0")
-        self._assert_output(self.POLYGON_RES)
-
     def test_bisection_invariance(self):
         """Bisection must be invisible: identical (cell, feature) sets with
-        and without cutting."""
-        self._run(POLYGON, self.POLYGON_RES, "-c", "0")
-        uncut = pd.read_parquet(self.output_path)
-        uncut_cells = set(zip(uncut.index, uncut["fid"], strict=True))
-        self._run(POLYGON, self.POLYGON_RES, "-o", "-c", "300000")
+        and without cutting. The uncut arm uses the library parameter, since
+        the CLI no longer exposes a cutting knob."""
+        import tempfile
+
+        from vector2dggs import common
+
+        self._run(POLYGON, self.POLYGON_RES)
         cut = pd.read_parquet(self.output_path)
-        cut_cells = set(zip(cut.index, cut["fid"], strict=True))
-        self.assertEqual(uncut_cells, cut_cells)
+        with tempfile.TemporaryDirectory() as d:
+            common.index(
+                self.DGGS,
+                POLYGON[0],
+                f"{d}/uncut.pq",
+                int(self.POLYGON_RES),
+                None,
+                False,
+                0.0,
+                1,
+                layer=POLYGON[1],
+                compact=False,
+            )
+            uncut = pd.read_parquet(f"{d}/uncut.pq")
+        self.assertEqual(
+            set(zip(cut.index, cut["fid"], strict=True)),
+            set(zip(uncut.index, uncut["fid"], strict=True)),
+        )
 
     def test_compaction(self):
         self._run(POLYGON, self.POLYGON_RES, "-co", "-id", POLYGON[2])
@@ -166,45 +172,45 @@ class RunthroughScenarios:
     # -- linestring input --------------------------------------------------
 
     def test_linestring_run(self):
-        self._run(LINESTRING, self.LINE_RES, "-c", "0")
+        self._run(LINESTRING, self.LINE_RES)
         self._assert_output(self.LINE_RES)
 
     def test_linestring_keep_attrs(self):
-        self._run(LINESTRING, self.LINE_RES, "-c", "0", "-k")
+        self._run(LINESTRING, self.LINE_RES, "-k")
         self._assert_output(self.LINE_RES, attr_col=LINESTRING[3])
 
     def test_linestring_compaction(self):
-        self._run(LINESTRING, self.LINE_RES, "-c", "0", "-co", "-id", LINESTRING[2])
+        self._run(LINESTRING, self.LINE_RES, "-co", "-id", LINESTRING[2])
         self._assert_output(self.LINE_RES, id_col=LINESTRING[2], compact=True)
 
     def test_linestring_geo_point(self):
-        self._run(LINESTRING, self.LINE_RES, "-c", "0", "--geo", "point")
+        self._run(LINESTRING, self.LINE_RES, "--geo", "point")
         self._assert_output(self.LINE_RES, geo="point")
 
     def test_linestring_geo_polygon(self):
-        self._run(LINESTRING, self.LINE_RES, "-c", "0", "--geo", "polygon")
+        self._run(LINESTRING, self.LINE_RES, "--geo", "polygon")
         self._assert_output(self.LINE_RES, geo="polygon")
 
     # -- point input -------------------------------------------------------
 
     def test_point_run(self):
-        self._run(POINT, self.LINE_RES, "-c", "0")
+        self._run(POINT, self.LINE_RES)
         self._assert_output(self.LINE_RES)
 
     def test_point_keep_attrs(self):
-        self._run(POINT, self.LINE_RES, "-c", "0", "-k")
+        self._run(POINT, self.LINE_RES, "-k")
         self._assert_output(self.LINE_RES, attr_col=POINT[3])
 
     def test_point_compaction(self):
-        self._run(POINT, self.LINE_RES, "-c", "0", "-co", "-id", POINT[2])
+        self._run(POINT, self.LINE_RES, "-co", "-id", POINT[2])
         self._assert_output(self.LINE_RES, id_col=POINT[2], compact=True)
 
     def test_point_geo_point(self):
-        self._run(POINT, self.LINE_RES, "-c", "0", "--geo", "point")
+        self._run(POINT, self.LINE_RES, "--geo", "point")
         self._assert_output(self.LINE_RES, geo="point")
 
     def test_point_geo_polygon(self):
-        self._run(POINT, self.LINE_RES, "-c", "0", "--geo", "polygon")
+        self._run(POINT, self.LINE_RES, "--geo", "polygon")
         self._assert_output(self.LINE_RES, geo="polygon")
 
 

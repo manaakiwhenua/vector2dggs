@@ -3,7 +3,6 @@ from pathlib import Path
 
 import click
 import click_log
-import pyproj
 
 import vector2dggs.common as common
 import vector2dggs.constants as const
@@ -63,24 +62,6 @@ def make_dggs_command(
         default=(),
         type=str,
         help="Retain only this attribute in output; repeat for multiple. Takes precedence over -k/--keep_attributes.",
-    )
-    @click.option(
-        "-crs",
-        "--cut_crs",
-        required=False,
-        default=const.DEFAULTS["crs"],
-        type=int,
-        help="Set the coordinate reference system (CRS) used for cutting large geometries (see `--cut_threshold`). Defaults to the same CRS as the input. Should be a valid EPSG code.",
-        nargs=1,
-    )
-    @click.option(
-        "-c",
-        "--cut_threshold",
-        required=False,
-        default=const.DEFAULTS["c"],
-        type=float,
-        help="Cutting up large geometries into smaller geometries based on a target area. Units are assumed to match the input CRS units unless `--cut_crs` is also given, in which case units match the units of the supplied CRS. If left unspecified, the threshold defaults to the area of a few thousand cells of the target resolution (a benchmarked balance of parallelism against per-piece overhead), converted into the squared units of the cutting CRS. A threshold of 0 will skip bisection entirely (effectively ignoring --cut_crs).",
-        nargs=1,
     )
     @click.option(
         "-p",
@@ -170,8 +151,6 @@ def make_dggs_command(
         id_field: str | None,
         keep_attributes: bool,
         keep_attribute: tuple[str, ...],
-        cut_crs: int,
-        cut_threshold: float,
         processes: int,
         compression: str,
         layer: str,
@@ -195,10 +174,6 @@ def make_dggs_command(
         common.check_requested_attributes(keep_attribute, vector_input, layer, con)
         common.check_id_field(id_field, vector_input, layer, con)
 
-        cut_crs_obj: pyproj.CRS | None = None
-        if cut_crs is not None:
-            cut_crs_obj = pyproj.CRS.from_user_input(cut_crs)
-
         common.index(
             dggs_key,
             vector_input,
@@ -206,10 +181,9 @@ def make_dggs_command(
             int(resolution),
             parent_res,
             keep_attributes,
-            cut_threshold,
+            None,
             processes,
             compression=compression,
-            cut_crs=cut_crs_obj,
             id_field=id_field,
             con=con,
             layer=layer,
