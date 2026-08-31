@@ -734,45 +734,29 @@ def _split_linestring_at_vertices(line, budget: float) -> list:
     return pieces
 
 
-def bisection_preparation(
+def _derive_cut_threshold(
     df: pd.DataFrame,
     dggs: str,
     resolution: int,
-    cut_crs: pyproj.CRS | None = None,
     cut_threshold: None | float = None,
-) -> tuple[pd.DataFrame, pyproj.CRS, None | float]:
-    cut_threshold = float(cut_threshold) if cut_threshold is not None else None
-
-    # cut_threshold == 0 disables bisection entirely, ignoring cut_crs
-    if cut_crs is not None and cut_threshold != 0:
-        if df.crs is None and df.empty:
-            # empty + naive: nothing to transform
-            df = df.set_crs(cut_crs, allow_override=True)
-        elif df.crs is None:
-            raise ValueError(
-                "Input has no CRS; cannot reproject. Specify input CRS or provide a dataset with CRS."
-            )
-        else:
-            df = df.to_crs(cut_crs)
-    else:
-        cut_crs = df.crs
-
-    if cut_crs is None:
+) -> float:
+    # cut_threshold == 0 disables bisection entirely
+    if df.crs is None:
         raise ValueError(
             "Input has no CRS, which is required for indexing. "
             "Provide a dataset with a defined CRS."
         )
 
     if cut_threshold is None:
-        metres_per_unit = _metres_per_unit(cut_crs)
+        metres_per_unit = _metres_per_unit(df.crs)
         cut_threshold_m2 = const.DEFAULT_AREA_THRESHOLD_M2(dggs, int(resolution))
         cut_threshold = cut_threshold_m2 / metres_per_unit**2
         LOGGER.debug(
             f"Using default cut_threshold of {cut_threshold} "
-            f"({cut_crs.axis_info[0].unit_name}^2)"
+            f"({df.crs.axis_info[0].unit_name}^2)"
         )
 
-    return df, cut_crs, cut_threshold
+    return float(cut_threshold)
 
 
 def _blade_segment(
@@ -1261,7 +1245,6 @@ def index(
     processes: int,
     compression: str = "snappy",
     id_field: str | None = None,
-    cut_crs: pyproj.CRS | None = None,
     con: SQLConnectionType | None = None,
     layer: str | None = None,
     geom_col: str = "geom",
@@ -1295,7 +1278,6 @@ def index(
             processes,
             compression,
             id_field,
-            cut_crs,
             con,
             layer,
             geom_col,
@@ -1321,7 +1303,6 @@ def _index(
     processes: int,
     compression: str,
     id_field: str | None,
-    cut_crs: pyproj.CRS | None,
     con: SQLConnectionType | None,
     layer: str | None,
     geom_col: str,
@@ -1356,7 +1337,6 @@ def _index(
     )
 
     features_in: set = set()
-    user_cut_crs = cut_crs
 
     with tempfile.TemporaryDirectory(suffix=".parquet") as tmpdir:
         fid_offset = 0
@@ -1374,25 +1354,20 @@ def _index(
             keep_attribute,
         ):
             pbar.update(len(batch))
-            if batch.crs is None:
-                raise ValueError(
-                    "Input has no CRS, which is required for indexing. "
-                    "Provide a dataset with a defined CRS."
-                )
-            batch, cut_crs, cut_threshold = bisection_preparation(
-                batch, dggs, resolution, user_cut_crs, cut_threshold
+            cut_threshold = _derive_cut_threshold(
+                batch, dggs, resolution, cut_threshold
             )
             batch = _prepare_dataframe(
                 batch, id_field, keep_attributes, keep_attribute, fid_offset=fid_offset
             )
             fid_offset += len(batch)
             features_in.update(batch.index)
-            blade_segment = _blade_segment(indexer, dggs, resolution, cut_crs)
+            blade_segment = _blade_segment(indexer, dggs, resolution, batch.crs)
             # linestrings cross roughly one cell per edge-length travelled
             line_budget = (
                 const.DEFAULT_CUT_CELLS_PER_PIECE
                 * const.DGGS_CELL_AREA_M2_BY_RES[dggs](resolution) ** 0.5
-                / _metres_per_unit(cut_crs)
+                / _metres_per_unit(batch.crs)
             )
             batch = _run_bisection(
                 batch,

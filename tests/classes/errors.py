@@ -26,7 +26,7 @@ class TestErrors(TestRunthrough):
             {"geometry": [Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])]}
         )
         with self.assertRaisesRegex(ValueError, "CRS"):
-            common.bisection_preparation(naive, "h3", 5, None, None)
+            common._derive_cut_threshold(naive, "h3", 5)
 
     def test_crsless_file_rejected_before_any_processing(self):
         naive = gpd.GeoDataFrame(

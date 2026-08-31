@@ -7,10 +7,10 @@ from shapely.geometry import Polygon
 
 from vector2dggs.common import (
     _clean_geometries,
+    _derive_cut_threshold,
     _normalise_longitudes,
     _prepare_dataframe,
     _run_bisection,
-    bisection_preparation,
 )
 from vector2dggs.h3 import h3
 from vector2dggs.indexerfactory import indexer_instance
@@ -47,10 +47,8 @@ class TestAntimeridian(TestRunthrough):
             TEST_ANTIMERIDIAN_FILE_PATH, layer=TEST_ANTIMERIDIAN_LAYER_NAME
         )
         gdf = _prepare_dataframe(gdf, None, False)
-        df, _cut_crs, cut_threshold = bisection_preparation(
-            gdf, indexer.dggs, 0, None, None
-        )
-        df = _run_bisection(df, cut_threshold, 1)
+        cut_threshold = _derive_cut_threshold(gdf, indexer.dggs, 0)
+        df = _run_bisection(gdf, cut_threshold, 1)
         return _clean_geometries(df, indexer)
 
     def test_clean_geometries_splits_for_backends_that_require_it(self):
