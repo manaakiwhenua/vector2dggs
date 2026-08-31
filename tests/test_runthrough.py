@@ -119,6 +119,7 @@ with contextlib.suppress(ImportError):
     from .classes.errors import TestStagedOutput as TestStagedOutput
 with contextlib.suppress(ImportError):
     from .classes.ingest import TestBatchedIngest as TestBatchedIngest
+    from .classes.ingest import TestDefaultLayer as TestDefaultLayer
 with contextlib.suppress(ImportError):
     from .classes.input_dispatch import TestInputDispatch as TestInputDispatch
 with contextlib.suppress(ImportError):
