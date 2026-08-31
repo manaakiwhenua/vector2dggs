@@ -3,7 +3,7 @@ from unittest import TestCase
 
 import geopandas as gpd
 import pyproj
-from shapely.geometry import Polygon
+from shapely.geometry import LineString, Polygon
 from tqdm import tqdm
 
 from vector2dggs import common
@@ -93,47 +93,43 @@ class TestSharedBisectionProgress(TestCase):
 
 class TestBisectionPreparation(TestCase):
     """
-    Default cut_threshold derivation must be exact for any CRS unit (via
-    pyproj unit conversion factors), and --cut_crs must take effect even
-    when no explicit threshold is given.
+    Default cut_threshold derivation must be exact for whatever CRS unit
+    the input data arrives in (via pyproj unit conversion factors).
     """
 
     SQUARE_4167 = Polygon([(174, -41), (174.1, -41), (174.1, -40.9), (174, -40.9)])
 
-    def _prep(self, cut_crs=None, cut_threshold=None):
+    def _threshold(self, crs=None, resolution=5):
         df = gpd.GeoDataFrame({"geometry": [self.SQUARE_4167]}, crs=4167)
-        return common.bisection_preparation(df, "h3", 5, cut_crs, cut_threshold)
+        if crs is not None:
+            df = df.to_crs(crs)
+        return common._derive_cut_threshold(df, "h3", resolution)
 
     def test_default_threshold_scales_with_target_resolution(self):
         # granularity follows the target resolution (K cells per piece),
         # not the parent resolution
-        target = pyproj.CRS.from_epsg(2193)
-        df = gpd.GeoDataFrame({"geometry": [self.SQUARE_4167]}, crs=4167)
-        _, _, threshold = common.bisection_preparation(df, "h3", 9, target, None)
+        threshold = self._threshold(crs=2193, resolution=9)
         expected = const.DEFAULT_CUT_CELLS_PER_PIECE * const.DGGS_CELL_AREA_M2_BY_RES[
             "h3"
         ](9)
         self.assertAlmostEqual(threshold, expected, delta=expected * 0.001)
 
-    def test_cut_crs_applies_without_explicit_threshold(self):
-        target = pyproj.CRS.from_epsg(2193)
-        df, cut_crs, threshold = self._prep(cut_crs=target)
-        self.assertEqual(df.crs, target)
-        self.assertEqual(cut_crs, target)
+    def test_default_threshold_in_metre_crs(self):
         # metre CRS: threshold is the default area in m^2, unconverted
+        threshold = self._threshold(crs=2193)
         self.assertAlmostEqual(
             threshold, const.DEFAULT_AREA_THRESHOLD_M2("h3", 5), delta=1
         )
 
     def test_default_threshold_in_foot_crs(self):
         target = pyproj.CRS.from_epsg(2230)  # US survey foot
-        _, _, threshold = self._prep(cut_crs=target)
+        threshold = self._threshold(crs=target)
         m2 = const.DEFAULT_AREA_THRESHOLD_M2("h3", 5)
         factor = target.axis_info[0].unit_conversion_factor
         self.assertAlmostEqual(threshold, m2 / factor**2, delta=m2 * 0.001)
 
     def test_default_threshold_in_degree_crs(self):
-        _, _, threshold = self._prep()
+        threshold = self._threshold()
         m2 = const.DEFAULT_AREA_THRESHOLD_M2("h3", 5)
         metres_per_degree = 111_195  # pi/180 * mean earth radius
         expected = m2 / metres_per_degree**2
@@ -169,8 +165,8 @@ class TestDroppedFeatureReport(TestCase):
                     7,
                     None,
                     False,
-                    0.0,
                     1,
+                    cut_threshold=0.0,
                     layer="x",
                     compact=False,
                 )
@@ -259,3 +255,74 @@ class TestGeodesicCutEdges(TestCase):
                 if not on_bbox:
                     length = ((x1 - x0) ** 2 + (y1 - y0) ** 2) ** 0.5
                     self.assertLessEqual(length, eps * 1.001)
+
+
+class TestLinestringBisection(TestCase):
+    """
+    Long linestrings are split at existing vertices when cumulative arc
+    length exceeds the derived budget. Vertex-only cuts leave every
+    vertex-to-vertex segment untouched, so cell output is identical to the
+    uncut trace for every backend.
+    """
+
+    def _long_line(self, n=400, step=0.02):
+        # ~880 km of jittered line at ~-41S, many vertices
+        coords = [
+            (172.0 + i * step, -41.0 + (0.005 if i % 2 else -0.005)) for i in range(n)
+        ]
+        return LineString(coords)
+
+    def test_long_line_is_split_at_vertices(self):
+        line = self._long_line()
+        df = gpd.GeoDataFrame({"geometry": [line]}, crs=4326)
+        df.index.name = "fid"
+        out = _run_bisection(
+            df.copy(), 1e12, 1, line_budget=1.0
+        )  # budget: 1 degree-ish
+        pieces = list(out.geometry.iloc[0].geoms)
+        self.assertGreater(len(pieces), 3)
+        # every piece boundary vertex is an original vertex
+        original = set(line.coords)
+        for p in pieces:
+            self.assertIn(p.coords[0], original)
+            self.assertIn(p.coords[-1], original)
+        # pieces chain exactly through the original coordinate sequence
+        rebuilt = list(pieces[0].coords)
+        for p in pieces[1:]:
+            self.assertEqual(rebuilt[-1], p.coords[0])
+            rebuilt.extend(list(p.coords)[1:])
+        self.assertEqual(rebuilt, list(line.coords))
+
+    def test_split_output_cells_identical(self):
+        from .base import skip_unless_backend
+
+        skip_unless_backend("h3")
+        import tempfile
+        import warnings as _warnings
+
+        import pandas as pd
+
+        line = self._long_line()
+        df = gpd.GeoDataFrame({"name": ["x"], "geometry": [line]}, crs=4326)
+        with tempfile.TemporaryDirectory() as d:
+            with _warnings.catch_warnings():
+                _warnings.simplefilter("ignore")
+                df.to_file(f"{d}/in.gpkg", layer="l")
+            results = []
+            for cut_threshold in (None, 0.0):  # default (auto line split) vs none
+                common.index(
+                    "h3",
+                    f"{d}/in.gpkg",
+                    f"{d}/out{cut_threshold}.pq",
+                    7,
+                    None,
+                    False,
+                    1,
+                    cut_threshold=cut_threshold,
+                    layer="l",
+                    compact=False,
+                )
+                out = pd.read_parquet(f"{d}/out{cut_threshold}.pq")
+                results.append(set(out.index))
+        self.assertGreater(len(results[0]), 0)
+        self.assertEqual(results[0], results[1])

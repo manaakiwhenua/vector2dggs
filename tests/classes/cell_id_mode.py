@@ -81,7 +81,7 @@ class TestA5CellIdUint64(TestRunthrough):
         # a small cut_threshold scatters each feature's cells across many
         # staged files, forcing _merge_partition_files to actually merge
         # (not just pass through a single file) before compacting.
-        self._run(("--cell-id", "uint64", "-co", "-c", "50000"))
+        self._run(("--cell-id", "uint64", "-co"))
         _, field_type = self._dggs_col_type()
         self.assertEqual(field_type, pa.uint64())
 
@@ -145,7 +145,7 @@ class TestH3CellIdUint64(TestRunthrough):
         self.assertEqual(field_type, pa.uint64())
 
     def test_uint64_output_with_compaction_and_scattered_partitions(self):
-        self._run(("--cell-id", "uint64", "-co", "-c", "50000"))
+        self._run(("--cell-id", "uint64", "-co"))
         _, field_type = self._dggs_col_type()
         self.assertEqual(field_type, pa.uint64())
 
@@ -209,7 +209,7 @@ class TestS2CellIdUint64(TestRunthrough):
         self.assertEqual(field_type, pa.uint64())
 
     def test_uint64_output_with_compaction_and_scattered_partitions(self):
-        self._run(("--cell-id", "uint64", "-co", "-c", "50000"))
+        self._run(("--cell-id", "uint64", "-co"))
         _, field_type = self._dggs_col_type()
         self.assertEqual(field_type, pa.uint64())
 
