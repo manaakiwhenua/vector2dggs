@@ -153,7 +153,7 @@ def make_dggs_command(
         keep_attribute: tuple[str, ...],
         processes: int,
         compression: str,
-        layer: str,
+        layer: str | None,
         geom_col: str,
         geo: str,
         cell_id: str,
@@ -170,6 +170,7 @@ def make_dggs_command(
         cell_id = const.CellIdMode(cell_id).value
 
         con, vector_input = common.db_conn_and_input_path(vector_input)
+        layer = common.resolve_layer(vector_input, layer, con)
         output_directory = common.resolve_output_path(output_directory, overwrite)
         common.check_requested_attributes(keep_attribute, vector_input, layer, con)
         common.check_id_field(id_field, vector_input, layer, con)

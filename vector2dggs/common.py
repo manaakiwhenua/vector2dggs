@@ -141,6 +141,32 @@ def check_id_field(
         )
 
 
+def resolve_layer(
+    input_file: Path | str,
+    layer: str | None,
+    con: SQLConnectionType | None = None,
+) -> str | None:
+    """
+    When no layer is requested and the input has several, GDAL would silently
+    index the first; announce that choice in the tool's own voice and pin the
+    layer explicitly so pyogrio's per-call UserWarning never fires.
+    """
+    if layer is not None or con is not None:
+        return layer
+    layers = pyogrio.list_layers(str(input_file))
+    if len(layers) > 1:
+        names = [name for name, _ in layers]
+        LOGGER.warning(
+            "Input has %d layers: %s. Indexing '%s' (the default). "
+            "Pass -l/--layer to choose a different layer.",
+            len(names),
+            ", ".join(f"'{name}'" for name in names),
+            names[0],
+        )
+        return names[0]
+    return layer
+
+
 def resolve_default_id_field(
     input_file: Path | str,
     layer: str | None,
@@ -1262,6 +1288,7 @@ def index(
     success, so a failed run never destroys previous output (with overwrite)
     nor leaves a half-written target behind.
     """
+    layer = resolve_layer(input_file, layer, con)
     output_directory = resolve_output_path(output_directory, overwrite)
     staging = output_directory.parent / f".{output_directory.name}.staging"
     if staging.exists():
