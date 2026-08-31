@@ -181,7 +181,6 @@ def make_dggs_command(
             int(resolution),
             parent_res,
             keep_attributes,
-            None,
             processes,
             compression=compression,
             id_field=id_field,

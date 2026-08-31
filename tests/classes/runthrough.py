@@ -132,8 +132,8 @@ class RunthroughScenarios:
                 int(self.POLYGON_RES),
                 None,
                 False,
-                0.0,
                 1,
+                cut_threshold=0.0,
                 layer=POLYGON[1],
                 compact=False,
             )

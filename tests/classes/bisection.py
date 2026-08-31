@@ -165,8 +165,8 @@ class TestDroppedFeatureReport(TestCase):
                     7,
                     None,
                     False,
-                    0.0,
                     1,
+                    cut_threshold=0.0,
                     layer="x",
                     compact=False,
                 )
@@ -317,8 +317,8 @@ class TestLinestringBisection(TestCase):
                     7,
                     None,
                     False,
-                    cut_threshold,
                     1,
+                    cut_threshold=cut_threshold,
                     layer="l",
                     compact=False,
                 )

@@ -21,7 +21,6 @@ class TestBatchedIngest(TestCase):
             8,
             None,
             False,
-            None,
             1,
             layer=TEST_LAYER_NAME,
             compact=False,

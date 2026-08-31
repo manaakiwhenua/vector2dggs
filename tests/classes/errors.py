@@ -44,7 +44,6 @@ class TestErrors(TestRunthrough):
                     9,
                     5,
                     False,
-                    None,
                     1,
                     layer="naive",
                 )
@@ -216,8 +215,8 @@ class TestIndexCompactionDefaults(TestCase):
             7,
             None,
             False,
-            0.0,
             1,
+            cut_threshold=0.0,
             layer="x",
             **kwargs,
         )
@@ -251,8 +250,8 @@ class TestIndexCompactionDefaults(TestCase):
             7,
             None,
             False,
-            0.0,
             1,
+            cut_threshold=0.0,
             compact=True,
         )
         self.assertTrue(any(Path(out).rglob("*.parquet")))
