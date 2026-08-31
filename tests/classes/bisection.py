@@ -293,6 +293,16 @@ class TestLinestringBisection(TestCase):
             rebuilt.extend(list(p.coords)[1:])
         self.assertEqual(rebuilt, list(line.coords))
 
+    def test_no_geographic_crs_length_warning(self):
+        import warnings as _warnings
+
+        df = gpd.GeoDataFrame({"geometry": [self._long_line()]}, crs=4326)
+        df.index.name = "fid"
+        with _warnings.catch_warnings(record=True) as caught:
+            _warnings.simplefilter("always")
+            _run_bisection(df.copy(), 1e12, 1, line_budget=1.0)
+        self.assertFalse([w for w in caught if "geographic CRS" in str(w.message)])
+
     def test_split_output_cells_identical(self):
         from .base import skip_unless_backend
 
