@@ -1001,7 +1001,9 @@ def _run_bisection(
 
         if line_budget is not None and line_budget > 0:
             line_mask = geom_type.isin(("LineString", "MultiLineString")).to_numpy()
-            lengths = df.geometry.length.to_numpy()
+            # planar CRS-unit length, same units as line_budget; shapely
+            # directly, as GeoSeries.length warns on geographic CRSs
+            lengths = shapely.length(df.geometry.values)
             for pos in np.flatnonzero(line_mask & (lengths > line_budget)):
                 g = df.geometry.iloc[pos]
                 parts = g.geoms if g.geom_type == "MultiLineString" else [g]
