@@ -1337,6 +1337,8 @@ def _index(
     )
 
     features_in: set = set()
+    blade_segment: float | None = None
+    line_budget: float | None = None
 
     with tempfile.TemporaryDirectory(suffix=".parquet") as tmpdir:
         fid_offset = 0
@@ -1362,13 +1364,14 @@ def _index(
             )
             fid_offset += len(batch)
             features_in.update(batch.index)
-            blade_segment = _blade_segment(indexer, dggs, resolution, batch.crs)
-            # linestrings cross roughly one cell per edge-length travelled
-            line_budget = (
-                const.DEFAULT_CUT_CELLS_PER_PIECE
-                * const.DGGS_CELL_AREA_M2_BY_RES[dggs](resolution) ** 0.5
-                / _metres_per_unit(batch.crs)
-            )
+            if line_budget is None:
+                blade_segment = _blade_segment(indexer, dggs, resolution, batch.crs)
+                # linestrings cross roughly one cell per edge-length travelled
+                line_budget = (
+                    const.DEFAULT_CUT_CELLS_PER_PIECE
+                    * const.DGGS_CELL_AREA_M2_BY_RES[dggs](resolution) ** 0.5
+                    / _metres_per_unit(batch.crs)
+                )
             batch = _run_bisection(
                 batch,
                 cut_threshold,
