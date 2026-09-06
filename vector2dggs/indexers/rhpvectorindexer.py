@@ -1,12 +1,13 @@
-import warnings
 from collections.abc import Iterable
 from itertools import product
 
 import geopandas as gpd
 import pandas as pd
 import rhppandas as rhppandas  # registers the .rhp accessor used below
-from rhealpixdggs.conversion import compress_order_cells
 from rhealpixdggs.dggs import WGS84_003
+from rhealpixdggs.rhp_wrappers import (
+    compact_cells as rhp_compact_cells,
+)
 from rhealpixdggs.rhp_wrappers import (
     rhp_get_resolution,
     rhp_to_center_child,
@@ -17,11 +18,6 @@ from rhppandas.util.const import COLUMNS
 from shapely.geometry import Point, Polygon
 
 from vector2dggs.indexers.vectorindexer import VectorIndexer
-
-# upstream fix pending; fires per geometry, flooding CLI output
-warnings.filterwarnings(
-    "ignore", message="WARNING: Implementation of linetrace is incomplete"
-)
 
 
 class RHPVectorIndexer(VectorIndexer[str]):
@@ -98,17 +94,10 @@ class RHPVectorIndexer(VectorIndexer[str]):
         """
         Compact a set of rHEALPix DGGS cells.
         Cells must be at the same resolution.
-        See https://github.com/manaakiwhenua/rhealpixdggs-py/issues/35#issuecomment-3186073554
 
         Not a part of the interface provided by VectorIndexer.
         """
-        previous_result = set(cells)
-        while True:
-            current_result = set(compress_order_cells(previous_result))
-            if previous_result == current_result:
-                break
-            previous_result = current_result
-        return previous_result
+        return rhp_compact_cells(cells)
 
     @staticmethod
     def get_resolution(cell: str) -> int:
