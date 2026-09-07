@@ -51,7 +51,7 @@ class TestSortedHiveWrite(TestCase):
         ):
             common.write_partition(
                 df,
-                H3VectorIndexer.cell_to_polygon,
+                H3VectorIndexer(dggs="h3").cells_to_polygons,
                 Path(out),
                 "h3_08",
                 "h3_12",
@@ -88,7 +88,7 @@ class TestSortedHiveWrite(TestCase):
         with tempfile.TemporaryDirectory() as out:
             common.write_partition(
                 df,
-                H3VectorIndexer.cell_to_polygon,
+                H3VectorIndexer(dggs="h3").cells_to_polygons,
                 Path(out),
                 "h3_08",
                 "h3_09",

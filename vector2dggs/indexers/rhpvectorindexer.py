@@ -3,18 +3,19 @@ from itertools import product
 
 import geopandas as gpd
 import pandas as pd
-import rhppandas as rhppandas  # registers the .rhp accessor used below
+import shapely
 from rhealpixdggs.dggs import WGS84_003
 from rhealpixdggs.rhp_wrappers import (
     compact_cells as rhp_compact_cells,
 )
 from rhealpixdggs.rhp_wrappers import (
+    linetrace,
+    polyfill,
     rhp_get_resolution,
     rhp_to_center_child,
     rhp_to_geo,
     rhp_to_geo_boundary,
 )
-from rhppandas.util.const import COLUMNS
 from shapely.geometry import Point, Polygon
 
 from vector2dggs.indexers.vectorindexer import VectorIndexer
@@ -27,40 +28,53 @@ class RHPVectorIndexer(VectorIndexer[str]):
 
     GEODESIC_POLYFILL = False
 
+    @staticmethod
+    def _polyfill_polygon(geom, resolution: int) -> list:
+        cells = polyfill(geom, resolution, plane=False, dggs=WGS84_003)
+        return list(cells) if cells else []
+
+    @staticmethod
+    def _linetrace(geom, resolution: int) -> list:
+        cells = linetrace(geom, resolution, plane=False, dggs=WGS84_003)
+        # linetrace returns a traversal sequence, which may revisit cells
+        return list(dict.fromkeys(cells)) if cells else []
+
     def _polyfill_polygons(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
-        geom_col = df.geometry.name
-        result = df.rhp.polyfill_resample(
-            resolution, return_geometry=False, compress=False
-        ).drop(columns=["index", geom_col])
-        return pd.DataFrame(result)
+        return self._geo_to_cells(
+            df, resolution, self._polyfill_polygon, df.geometry.name
+        )
 
     def _polyfill_linestrings(
         self, df: gpd.GeoDataFrame, resolution: int
     ) -> pd.DataFrame:
-        geom_col = df.geometry.name
-        col = COLUMNS["linetrace"]
-        result = df.rhp.linetrace(resolution)
-        # linetrace returns a traversal sequence, which may revisit cells
-        result[col] = result[col].map(lambda cells: list(dict.fromkeys(cells)))
-        result = (
-            result.drop(columns=[geom_col])
-            .explode(col)
-            .dropna(subset=[col])
-            .set_index(col)
-        )
-        return pd.DataFrame(result)
+        return self._geo_to_cells(df, resolution, self._linetrace, df.geometry.name)
 
     def _polyfill_points(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
-        geom_col = df.geometry.name
-        result = df.rhp.geo_to_rhp(resolution, set_index=True)
-        return pd.DataFrame(result.drop(columns=[geom_col]))
+        geom = df[df.geometry.name]
+        cells = WGS84_003.cells_from_points(
+            geom.x.to_numpy(), geom.y.to_numpy(), resolution, plane=False
+        )
+        result = df.drop(columns=[df.geometry.name])
+        result.index = pd.Index(cells.astype(object))
+        # empty string marks a point outside the planar image (no cell)
+        return pd.DataFrame(result[result.index != ""].rename_axis(None))
+
+    def cells_to_points(self, cells: Iterable[str]) -> Iterable[Point]:
+        return shapely.points(WGS84_003.centroids(list(cells), plane=False))
+
+    def cells_to_polygons(self, cells: Iterable[str]) -> Iterable[Polygon]:
+        return shapely.polygons(WGS84_003.boundary_array(list(cells), n=2, plane=False))
 
     def secondary_index(self, df: pd.DataFrame, parent_res: int) -> pd.DataFrame:
         """
         Implementation of abstract function.
-        """
 
-        return df.rhp.rhp_to_parent(parent_res)
+        A cell's ancestor at parent_res is its address prefix (the rHEALPix
+        addressing convention), so this is a vectorised string slice rather
+        than a per-cell library call.
+        """
+        df[f"rhp_{parent_res:02}"] = df.index.str[: parent_res + 1]
+        return df
 
     def compaction(
         self,

@@ -381,7 +381,7 @@ def write_partition(
     # form, before any string conversion below.
     if geo_serialisation_method is not None:
         partition_df["geometry"] = shapely.to_wkb(
-            cell_ids.map(geo_serialisation_method), hex=False
+            np.asarray(geo_serialisation_method(cell_ids.to_numpy())), hex=False
         )
 
     # The parent/partition column decides the hive directory name, created
@@ -486,12 +486,13 @@ def _with_geoparquet_metadata(table: pa.Table) -> pa.Table:
 
 
 def _geom_fn(indexer: VectorIndexer, geo: str):
+    """Returns a batch cells -> geometries callable, or None."""
     if geo == const.GeoOutputMode.NONE.value:
         return None
     if geo == const.GeoOutputMode.POINT.value:
-        return indexer.cell_to_point
+        return indexer.cells_to_points
     if geo == const.GeoOutputMode.POLYGON.value:
-        return indexer.cell_to_polygon
+        return indexer.cells_to_polygons
     raise ValueError(
         f"Unknown geo output mode '{geo}'. Expected one of {const.GEOM_TYPES}."
     )
@@ -599,8 +600,11 @@ def _merge_partition_files(
         )
         geom_fn = _geom_fn(indexer, geo) if geo else None
         if geom_fn is not None:
-            cells = df.index.to_series(index=df.index)
-            df = df.assign(geometry=shapely.to_wkb(cells.map(geom_fn), hex=False))
+            df = df.assign(
+                geometry=shapely.to_wkb(
+                    np.asarray(geom_fn(df.index.to_numpy())), hex=False
+                )
+            )
 
         # Compaction and geometry reconstruction both need the working
         # (native, for capable backends) cell form; string output - the

@@ -108,6 +108,20 @@ class VectorIndexer(ABC, Generic[CellId]):
     @abstractmethod
     def cell_to_polygon(cell: CellId) -> Polygon: ...
 
+    def cells_to_points(self, cells: Iterable[CellId]) -> Iterable[Point]:
+        """
+        Batch form of cell_to_point; backends with a vectorised cell-to-
+        geometry API override this.
+        """
+        return [self.cell_to_point(c) for c in cells]
+
+    def cells_to_polygons(self, cells: Iterable[CellId]) -> Iterable[Polygon]:
+        """
+        Batch form of cell_to_polygon; backends with a vectorised cell-to-
+        geometry API override this.
+        """
+        return [self.cell_to_polygon(c) for c in cells]
+
     @staticmethod
     @abstractmethod
     def get_resolution(cell: CellId) -> int: ...

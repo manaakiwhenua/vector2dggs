@@ -1997,15 +1997,15 @@ idna2008 = ["idna"]
 
 [[package]]
 name = "rhealpixdggs"
-version = "0.8.2"
+version = "0.8.3"
 description = "An implementation of the rHEALPix discrete global grid system"
 optional = true
 python-versions = ">=3.11"
 groups = ["main"]
 markers = "extra == \"rhp\" or extra == \"all\""
 files = [
-    {file = "rhealpixdggs-0.8.2-py3-none-any.whl", hash = "sha256:76413b64c2c009012289b70f235e08ced326578d602449a8629d3e15cab61c60"},
-    {file = "rhealpixdggs-0.8.2.tar.gz", hash = "sha256:0212643925935620a709f45d5c692d3d917ad8d0759d42a084466c3069328936"},
+    {file = "rhealpixdggs-0.8.3-py3-none-any.whl", hash = "sha256:539a5881fa7c578e38b8a710858eb71bd7a0771f7fd7ec7123aff7624a70f45f"},
+    {file = "rhealpixdggs-0.8.3.tar.gz", hash = "sha256:ad6c16a7d698fd4ee54d79d391d7891f1e309ea0b650acc5802b23ad819d2b78"},
 ]
 
 [package.dependencies]
@@ -2013,30 +2013,6 @@ numpy = ">=2.0"
 pyproj = ">=3.6"
 scipy = ">=1.11"
 shapely = ">=2.1"
-
-[[package]]
-name = "rhppandas"
-version = "0.3.1"
-description = "Integration of rHEALPixDGGS and Pandas/GeoPandas"
-optional = true
-python-versions = ">=3.11"
-groups = ["main"]
-markers = "extra == \"rhp\" or extra == \"all\""
-files = [
-    {file = "rhppandas-0.3.1-py3-none-any.whl", hash = "sha256:1c29a42a163e0cc11dfa9c96b394b3bad77ead3cd058f874b3b5edbc3e3cf1f2"},
-    {file = "rhppandas-0.3.1.tar.gz", hash = "sha256:496f645613151bfb1d984c68bd99d5e4d22dccd5c8b652352203df1b633d1923"},
-]
-
-[package.dependencies]
-geopandas = "*"
-numpy = "*"
-pandas = "*"
-rhealpixdggs = ">=0.8.1"
-shapely = "*"
-typing-extensions = "*"
-
-[package.extras]
-dev = ["pytest", "pytest-cov"]
 
 [[package]]
 name = "rich"
@@ -2736,14 +2712,14 @@ type = ["pytest-mypy (>=1.0.1) ; platform_python_implementation != \"PyPy\""]
 
 [extras]
 a5 = ["pya5"]
-all = ["h3", "psycopg2-binary", "pya5", "python-geohash", "rhealpixdggs", "rhppandas", "rusty-polygon-geohasher", "s2geometry"]
+all = ["h3", "psycopg2-binary", "pya5", "python-geohash", "rhealpixdggs", "rusty-polygon-geohasher", "s2geometry"]
 geohash = ["python-geohash", "rusty-polygon-geohasher"]
 h3 = ["h3"]
 postgres = ["psycopg2-binary"]
-rhp = ["rhealpixdggs", "rhppandas"]
+rhp = ["rhealpixdggs"]
 s2 = ["s2geometry"]
 
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "df2dd4f63296f6faa671ce48805b7879a42e4c6f167ec831a784a3fcb93cf650"
+content-hash = "d30ad1cc0a97ef30996b69f1e2a79b8fef9b264191bb6441b21c1381ac9d1c51"
