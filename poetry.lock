@@ -1997,15 +1997,15 @@ idna2008 = ["idna"]
 
 [[package]]
 name = "rhealpixdggs"
-version = "0.8.2"
+version = "0.8.3"
 description = "An implementation of the rHEALPix discrete global grid system"
 optional = true
 python-versions = ">=3.11"
 groups = ["main"]
 markers = "extra == \"rhp\" or extra == \"all\""
 files = [
-    {file = "rhealpixdggs-0.8.2-py3-none-any.whl", hash = "sha256:76413b64c2c009012289b70f235e08ced326578d602449a8629d3e15cab61c60"},
-    {file = "rhealpixdggs-0.8.2.tar.gz", hash = "sha256:0212643925935620a709f45d5c692d3d917ad8d0759d42a084466c3069328936"},
+    {file = "rhealpixdggs-0.8.3-py3-none-any.whl", hash = "sha256:539a5881fa7c578e38b8a710858eb71bd7a0771f7fd7ec7123aff7624a70f45f"},
+    {file = "rhealpixdggs-0.8.3.tar.gz", hash = "sha256:ad6c16a7d698fd4ee54d79d391d7891f1e309ea0b650acc5802b23ad819d2b78"},
 ]
 
 [package.dependencies]
@@ -2722,4 +2722,4 @@ s2 = ["s2geometry"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "deb2ef72bbc33cccfa05151ba9c7c046d4c9db4d0a587ac3144ded3aca91f545"
+content-hash = "d30ad1cc0a97ef30996b69f1e2a79b8fef9b264191bb6441b21c1381ac9d1c51"

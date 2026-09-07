@@ -3,12 +3,12 @@ from itertools import product
 
 import geopandas as gpd
 import pandas as pd
+import shapely
 from rhealpixdggs.dggs import WGS84_003
 from rhealpixdggs.rhp_wrappers import (
     compact_cells as rhp_compact_cells,
 )
 from rhealpixdggs.rhp_wrappers import (
-    geo_to_rhp,
     linetrace,
     polyfill,
     rhp_get_resolution,
@@ -50,12 +50,20 @@ class RHPVectorIndexer(VectorIndexer[str]):
         return self._geo_to_cells(df, resolution, self._linetrace, df.geometry.name)
 
     def _polyfill_points(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
-        return self._geo_to_cells(
-            df,
-            resolution,
-            lambda geom, res: [geo_to_rhp(geom.y, geom.x, res, plane=False)],
-            df.geometry.name,
+        geom = df[df.geometry.name]
+        cells = WGS84_003.cells_from_points(
+            geom.x.to_numpy(), geom.y.to_numpy(), resolution, plane=False
         )
+        result = df.drop(columns=[df.geometry.name])
+        result.index = pd.Index(cells.astype(object))
+        # empty string marks a point outside the planar image (no cell)
+        return pd.DataFrame(result[result.index != ""].rename_axis(None))
+
+    def cells_to_points(self, cells: Iterable[str]) -> Iterable[Point]:
+        return shapely.points(WGS84_003.centroids(list(cells), plane=False))
+
+    def cells_to_polygons(self, cells: Iterable[str]) -> Iterable[Polygon]:
+        return shapely.polygons(WGS84_003.boundary_array(list(cells), n=2, plane=False))
 
     def secondary_index(self, df: pd.DataFrame, parent_res: int) -> pd.DataFrame:
         """
