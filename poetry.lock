@@ -2015,30 +2015,6 @@ scipy = ">=1.11"
 shapely = ">=2.1"
 
 [[package]]
-name = "rhppandas"
-version = "0.3.1"
-description = "Integration of rHEALPixDGGS and Pandas/GeoPandas"
-optional = true
-python-versions = ">=3.11"
-groups = ["main"]
-markers = "extra == \"rhp\" or extra == \"all\""
-files = [
-    {file = "rhppandas-0.3.1-py3-none-any.whl", hash = "sha256:1c29a42a163e0cc11dfa9c96b394b3bad77ead3cd058f874b3b5edbc3e3cf1f2"},
-    {file = "rhppandas-0.3.1.tar.gz", hash = "sha256:496f645613151bfb1d984c68bd99d5e4d22dccd5c8b652352203df1b633d1923"},
-]
-
-[package.dependencies]
-geopandas = "*"
-numpy = "*"
-pandas = "*"
-rhealpixdggs = ">=0.8.1"
-shapely = "*"
-typing-extensions = "*"
-
-[package.extras]
-dev = ["pytest", "pytest-cov"]
-
-[[package]]
 name = "rich"
 version = "15.0.0"
 description = "Render rich text, tables, progress bars, syntax highlighting, markdown and more to the terminal"
@@ -2736,14 +2712,14 @@ type = ["pytest-mypy (>=1.0.1) ; platform_python_implementation != \"PyPy\""]
 
 [extras]
 a5 = ["pya5"]
-all = ["h3", "psycopg2-binary", "pya5", "python-geohash", "rhealpixdggs", "rhppandas", "rusty-polygon-geohasher", "s2geometry"]
+all = ["h3", "psycopg2-binary", "pya5", "python-geohash", "rhealpixdggs", "rusty-polygon-geohasher", "s2geometry"]
 geohash = ["python-geohash", "rusty-polygon-geohasher"]
 h3 = ["h3"]
 postgres = ["psycopg2-binary"]
-rhp = ["rhealpixdggs", "rhppandas"]
+rhp = ["rhealpixdggs"]
 s2 = ["s2geometry"]
 
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "df2dd4f63296f6faa671ce48805b7879a42e4c6f167ec831a784a3fcb93cf650"
+content-hash = "deb2ef72bbc33cccfa05151ba9c7c046d4c9db4d0a587ac3144ded3aca91f545"
