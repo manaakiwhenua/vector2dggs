@@ -1,5 +1,6 @@
 import multiprocessing
 from enum import StrEnum, unique
+from math import radians
 
 MIN_H3, MAX_H3 = 0, 15
 MIN_RHP, MAX_RHP = 0, 15
@@ -8,6 +9,11 @@ MIN_GEOHASH, MAX_GEOHASH = 1, 12
 MIN_A5, MAX_A5 = 0, 30
 
 EARTH_MEAN_RADIUS_M = 6_371_008.8
+
+# Metres per degree of latitude/longitude on a sphere of the above radius.
+# For cheap scale estimates on geometries already in EPSG:4326 (everything
+# downstream of common._clean_geometries).
+METRES_PER_DEGREE = radians(1) * EARTH_MEAN_RADIUS_M
 
 # max_open_files per pq.write_to_dataset call. Rows are written sorted by
 # partition column, so a small pool cannot fragment output; a small fixed

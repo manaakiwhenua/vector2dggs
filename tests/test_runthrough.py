@@ -143,6 +143,12 @@ with contextlib.suppress(ImportError):
 with contextlib.suppress(ImportError):
     from .classes.readme_help import TestReadmeHelp as TestReadmeHelp
 with contextlib.suppress(ImportError):
+    from .classes.rhp_fill import TestRHPFillEquivalence as TestRHPFillEquivalence
+with contextlib.suppress(ImportError):
+    from .classes.rhp_fill import TestRHPFillMinRes as TestRHPFillMinRes
+with contextlib.suppress(ImportError):
+    from .classes.rhp_fill import TestRHPFillPerformance as TestRHPFillPerformance
+with contextlib.suppress(ImportError):
     from .classes.write_limits import TestProcessPoolContext as TestProcessPoolContext
 with contextlib.suppress(ImportError):
     from .classes.write_limits import TestRaiseRlimitNofile as TestRaiseRlimitNofile

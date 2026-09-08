@@ -4,13 +4,11 @@ from itertools import product
 import geopandas as gpd
 import pandas as pd
 import shapely
+from rhealpixdggs.conversion import compact_cells as rhp_compact_cells
 from rhealpixdggs.dggs import WGS84_003
 from rhealpixdggs.rhp_wrappers import (
-    compact_cells as rhp_compact_cells,
-)
-from rhealpixdggs.rhp_wrappers import (
     linetrace,
-    polyfill,
+    polyfill_array,
     rhp_get_resolution,
     rhp_to_center_child,
     rhp_to_geo,
@@ -18,7 +16,19 @@ from rhealpixdggs.rhp_wrappers import (
 )
 from shapely.geometry import Point, Polygon
 
+import vector2dggs.constants as const
 from vector2dggs.indexers.vectorindexer import VectorIndexer
+
+# Cell side length by resolution (rHEALPix cells are equal-area squares, so
+# side = sqrt(area)); reuses constants.py's table rather than a fresh library
+# call per geometry.
+_CELL_WIDTH_M = tuple(
+    const.DGGS_CELL_AREA_M2_BY_RES["rhp"](res) ** 0.5
+    for res in range(const.MIN_RHP, const.MAX_RHP + 1)
+)
+
+# rhealpixdggs calls here run under ProcessPoolExecutor workers or the main
+# process only, never multiple threads in one process, so no lock is needed.
 
 
 class RHPVectorIndexer(VectorIndexer[str]):
@@ -29,9 +39,35 @@ class RHPVectorIndexer(VectorIndexer[str]):
     GEODESIC_POLYFILL = False
 
     @staticmethod
+    def _fill_min_res(geom, resolution: int) -> int:
+        """
+        Starting resolution for polyfill's hierarchical descent: the finest
+        whose cell still covers geom's bbox. Affects speed, not output.
+
+        Not a part of the interface provided by VectorIndexer.
+        """
+        minx, miny, maxx, maxy = geom.bounds
+        if maxy >= 90 or miny <= -90 or maxx - minx >= 360:
+            # pole-touching/antimeridian-spanning bbox: candidate region is
+            # the whole polar square regardless of geom's real size
+            return const.MIN_RHP
+        span_m = max(maxx - minx, maxy - miny) * const.METRES_PER_DEGREE
+        for res in range(min(resolution, const.MAX_RHP), const.MIN_RHP, -1):
+            if _CELL_WIDTH_M[res] >= span_m:
+                return res
+        return const.MIN_RHP
+
+    @staticmethod
     def _polyfill_polygon(geom, resolution: int) -> list:
-        cells = polyfill(geom, resolution, plane=False, dggs=WGS84_003)
-        return list(cells) if cells else []
+        cells = polyfill_array(
+            geom,
+            resolution,
+            plane=False,
+            dggs=WGS84_003,
+            min_res=RHPVectorIndexer._fill_min_res(geom, resolution),
+        )
+        # an array's truthiness is ambiguous, unlike a set's - test for None
+        return [] if cells is None else cells.tolist()
 
     @staticmethod
     def _linetrace(geom, resolution: int) -> list:
