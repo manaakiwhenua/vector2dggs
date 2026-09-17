@@ -14,6 +14,7 @@ try:
     from rhealpixdggs.dggs import WGS84_003
     from rhealpixdggs.rhp_wrappers import polyfill_array
 
+    from vector2dggs.indexers import rhpvectorindexer
     from vector2dggs.indexers.rhpvectorindexer import RHPVectorIndexer
 except ImportError:
     RHPVectorIndexer = None
@@ -103,6 +104,10 @@ class TestRHPFillEquivalence(TestCase):
     target resolution - the semantics of the pre-0.8.5 algorithm). This
     proves both correctness against the old behaviour and min_res
     invariance in the same assertion.
+
+    Asserted in every containment mode: min_res only chooses where the
+    hierarchical descent starts, so it must stay invisible in the result
+    whichever test decides a cell at the bottom of it.
     """
 
     def setUp(self):
@@ -110,13 +115,23 @@ class TestRHPFillEquivalence(TestCase):
         self.indexer = RHPVectorIndexer(dggs="rhp")
 
     def _assert_min_res_invariant(self, geom, resolution):
-        got = set(self.indexer._polyfill_polygon(geom, resolution))
-        for min_res in (0, resolution):
-            arr = polyfill_array(
-                geom, resolution, plane=False, dggs=WGS84_003, min_res=min_res
-            )
-            want = set() if arr is None else set(arr.tolist())
-            self.assertEqual(got, want, f"mismatch at min_res={min_res} for {geom.wkt}")
+        for mode, containment in rhpvectorindexer._CONTAIN.items():
+            with self.subTest(mode=mode.value):
+                indexer = RHPVectorIndexer(dggs="rhp", mode=mode.value)
+                got = set(indexer._polyfill_polygon(geom, resolution))
+                for min_res in (0, resolution):
+                    arr = polyfill_array(
+                        geom,
+                        resolution,
+                        plane=False,
+                        dggs=WGS84_003,
+                        containment=containment,
+                        min_res=min_res,
+                    )
+                    want = set() if arr is None else set(arr.tolist())
+                    self.assertEqual(
+                        got, want, f"mismatch at min_res={min_res} for {geom.wkt}"
+                    )
 
     def test_small_polygon(self):
         geom = box(174.7, -41.30, 174.701, -41.299)
@@ -167,7 +182,7 @@ class TestRHPFillPerformance(TestCase):
             "vector2dggs.indexers.rhpvectorindexer.polyfill_array",
             wraps=polyfill_array,
         ) as mocked:
-            RHPVectorIndexer._polyfill_polygon(geom, resolution)
+            self.indexer._polyfill_polygon(geom, resolution)
         self.assertEqual(mocked.call_args.kwargs["min_res"], expected)
 
     def test_small_polygon_fill_is_fast(self):

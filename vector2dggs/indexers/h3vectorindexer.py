@@ -2,12 +2,23 @@ from collections.abc import Iterable
 
 import geopandas as gpd
 import h3
+import numpy as np
 import pandas as pd
 import pyarrow as pa
+import shapely
 from h3.api import basic_int
 from shapely.geometry import Point, Polygon, mapping
 
+import vector2dggs.constants as const
 from vector2dggs.indexers.vectorindexer import VectorIndexer
+
+# h3-py's containment vocabulary. Only h3shape_to_cells_experimental offers
+# these, and upstream declares that API unstable, so centre mode stays on
+# the stable geo_to_cells.
+_CONTAIN = {
+    const.ContainmentMode.INTERSECTS: "overlap",
+    const.ContainmentMode.WITHIN: "full",
+}
 
 
 def _as_int(cell: str | int) -> int:
@@ -35,21 +46,31 @@ class H3VectorIndexer(VectorIndexer[str | int]):
     def cells_to_string(cells: Iterable[str | int]) -> list[str]:
         return [h3.int_to_str(int(c)) for c in cells]
 
-    @staticmethod
-    def _polyfill_polygon(geom, resolution: int) -> list:
-        return basic_int.geo_to_cells(mapping(geom), resolution)
+    def _polyfill_polygon(self, geom, resolution: int) -> list:
+        if self.mode == const.ContainmentMode.CENTRE:
+            return basic_int.geo_to_cells(mapping(geom), resolution)
+        return basic_int.h3shape_to_cells_experimental(
+            basic_int.geo_to_h3shape(mapping(geom)),
+            resolution,
+            _CONTAIN[self.mode],
+        )
 
-    @staticmethod
-    def _linetrace(geom, resolution: int) -> list:
-        coords = list(geom.coords)
-        cells = set()
-        for i in range(len(coords) - 1):
-            start = basic_int.latlng_to_cell(coords[i][1], coords[i][0], resolution)
-            end = basic_int.latlng_to_cell(
-                coords[i + 1][1], coords[i + 1][0], resolution
-            )
-            cells.update(basic_int.grid_path_cells(start, end))
-        return list(cells)
+    def _cell_at(self, lon: float, lat: float, resolution: int) -> int:
+        return basic_int.latlng_to_cell(lat, lon, resolution)
+
+    def _neighbours(self, cell: str | int) -> list[int]:
+        """
+        Hexagons have no vertex-only neighbours, so the edge-adjacent disk
+        is already what _cover_segment needs.
+        """
+        return basic_int.grid_disk(_as_int(cell), 1)
+
+    def _linetrace(self, geom, resolution: int) -> list:
+        """
+        h3-py has no line cover: grid_path_cells walks a route between two
+        cells, not the cells a line occupies.
+        """
+        return self._cover_line(geom, resolution)
 
     def _polyfill_polygons(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
         return self._geo_to_cells(
@@ -117,6 +138,26 @@ class H3VectorIndexer(VectorIndexer[str | int]):
     @staticmethod
     def cell_to_point(cell: str | int) -> Point:
         return Point(basic_int.cell_to_latlng(_as_int(cell))[::-1])
+
+    def cells_to_polygons(self, cells: Iterable[str | int]) -> Iterable[Polygon]:
+        """
+        Batched construction, which dominates the per-cell cost of the
+        line cover: h3-py has no batch boundary call, but building the
+        polygons from one array beats building them one at a time.
+        Boundaries are grouped by vertex count, since a pentagon or a
+        distorted cell has a different number from a plain hexagon.
+        """
+        boundaries = [basic_int.cell_to_boundary(_as_int(c)) for c in cells]
+        polygons = np.empty(len(boundaries), dtype=object)
+        by_size: dict[int, list[int]] = {}
+        for i, boundary in enumerate(boundaries):
+            by_size.setdefault(len(boundary), []).append(i)
+        for size, positions in by_size.items():
+            rings = np.empty((len(positions), size, 2))
+            for k, i in enumerate(positions):
+                rings[k] = [coord[::-1] for coord in boundaries[i]]
+            polygons[positions] = shapely.polygons(rings)
+        return polygons
 
     @staticmethod
     def cell_to_polygon(cell: str | int) -> Polygon:

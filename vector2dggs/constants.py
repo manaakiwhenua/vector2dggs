@@ -39,6 +39,47 @@ class CellIdMode(StrEnum):
 
 CELL_ID_MODES = tuple(mode.value for mode in CellIdMode)
 
+
+@unique
+class ContainmentMode(StrEnum):
+    """
+    Which cells a polygon contributes, named for the DE-9IM predicate each
+    applies between the cell and the feature.
+
+    - CENTRE (the default): the cell's centre point falls inside the
+      feature - each backend's own centre (rHEALPix's nucleus, the geohash
+      box's midpoint). No DE-9IM name, because it relates a point derived
+      from the cell rather than the cell, which is also why it is the one
+      mode unaffected by how a cell's extent is modelled.
+    - INTERSECTS: the cell's area meets the feature anywhere, so the cells
+      cover the feature completely and a feature smaller than a cell still
+      produces one. Not called "touched" (rasterio's name for it): DE-9IM's
+      `touches` is a different relation, boundaries meeting while interiors
+      stay disjoint.
+    - WITHIN: `within` (T*F**F***) - the cell's area lies wholly inside the
+      feature, its boundary permitted to run along the feature's.
+
+    INTERSECTS and WITHIN are decided against each backend's own model of a
+    cell's extent and of the feature's edges: H3 and geohash read both as
+    straight in longitude/latitude, S2 and A5 as great-circle arcs, and a
+    rHEALPix cell is exact in its own projection but sampled at the poles.
+    So membership near a feature's boundary is backend specific - the
+    planar and spherical readings of one long edge can diverge by far more
+    than a cell (~170 km for a 40-degree edge at 60N).
+    """
+
+    CENTRE = "centre"
+    INTERSECTS = "intersects"
+    WITHIN = "within"
+
+
+CONTAINMENT_MODES = tuple(mode.value for mode in ContainmentMode)
+
+# Marks the rows carrying a feature's boundary linework rather than its
+# area, in WITHIN mode. Never reaches the output: the merge subtracts the
+# cells it marks and drops the column.
+EDGE_COLUMN = "__edge__"
+
 DEFAULT_DGGS_PARENT_RES = {
     "h3": lambda resolution: max(MIN_H3, (resolution - DEFAULT_PARENT_OFFSET)),
     "rhp": lambda resolution: max(MIN_RHP, (resolution - DEFAULT_PARENT_OFFSET)),
@@ -280,4 +321,5 @@ DEFAULTS = {
     "tempdir": None,
     "geo": GeoOutputMode.NONE.value,
     "cell_id": CellIdMode.STRING.value,
+    "mode": ContainmentMode.CENTRE.value,
 }

@@ -2,12 +2,14 @@ from collections.abc import Iterable
 from itertools import product
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
-from geohash import decode, decode_exactly, encode  # python-geohash
+import shapely
+from geohash import decode, decode_exactly, encode, neighbors  # python-geohash
 from geohash_polygon import polygon_to_geohashes  # rusty-polygon-geohasher
 from shapely.geometry import Point, Polygon, box
 
-from vector2dggs.indexers.geohash import traversal as geohash_traversal
+import vector2dggs.constants as const
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 
 
@@ -45,7 +47,7 @@ class GeohashVectorIndexer(VectorIndexer[str]):
             df.assign(
                 **{
                     gh_col: df.geometry.apply(
-                        lambda geom: geohash_traversal.linetrace_linewise(geom, level)
+                        lambda geom: self._cover_line(geom, level)
                     )
                 }
             )
@@ -71,6 +73,15 @@ class GeohashVectorIndexer(VectorIndexer[str]):
             .set_index(gh_col)
         )
         return pd.DataFrame(result)
+
+    def _cell_at(self, lon: float, lat: float, resolution: int) -> str:
+        return encode(lat, lon, precision=resolution)
+
+    def _neighbours(self, cell: str) -> list[str]:
+        """
+        All eight, diagonals included, so corner-only neighbours count.
+        """
+        return neighbors(cell)
 
     def secondary_index(self, df: pd.DataFrame, parent_level: int) -> pd.DataFrame:
         """
@@ -181,32 +192,42 @@ class GeohashVectorIndexer(VectorIndexer[str]):
 
     def _polygon_to_geohashes(self, polygon: Polygon, level: int) -> set[str]:
         """
-        Function to compute geohash set for one polygon geometry
+        The geohash set for one polygon, under this indexer's mode.
 
-        NB this implements a point-inside hash, but geohash_polygon only
-        supports "within" or "intersects" (on the basis of geohashes as
-        _polygon_ geometries) which means we have to perform additional
-        computation to support "polyfill" as defined by H3.
-
-        A future version of vector2dggs may support within/intersects modality,
-        at which point that would just be outer/inner with no further
-        computation.
+        geohash_polygon tests boxes, so it gives INTERSECTS (inner=False)
+        and WITHIN (inner=True) natively. CENTRE is not a box test at all,
+        so it is computed here by testing the centre of each boundary box -
+        the ones the two native modes disagree about.
 
         Not a part of the interface provided by VectorIndexer.
         """
-        outer: set[str] = polygon_to_geohashes(polygon, level, inner=False)
+        if self.mode == const.ContainmentMode.INTERSECTS:
+            return polygon_to_geohashes(polygon, level, inner=False)
         inner: set[str] = polygon_to_geohashes(polygon, level, inner=True)
+        if self.mode == const.ContainmentMode.WITHIN:
+            return inner
+        outer: set[str] = polygon_to_geohashes(polygon, level, inner=False)
         edge: set[str] = {
             h
             for h in (outer - inner)  # All edge cells
             if Point(*reversed(decode(h))).within(polygon)
-        }  # Edge cells with a center within the polygon
+        }  # Edge cells with a centre point within the polygon
         return edge | inner
 
     @staticmethod
     def cell_to_point(cell: str) -> Point:
         lat, lon, _, _ = decode_exactly(cell)
         return Point(lon, lat)
+
+    def cells_to_polygons(self, cells: Iterable[str]) -> Iterable[Polygon]:
+        """
+        Batched construction, which dominates the per-cell cost of the
+        line cover. A geohash cell is a longitude/latitude box, so the
+        whole set is one vectorised shapely.box call.
+        """
+        centres = np.array([decode_exactly(c)[:4] for c in cells])
+        lat, lon, lat_err, lon_err = centres.T
+        return shapely.box(lon - lon_err, lat - lat_err, lon + lon_err, lat + lat_err)
 
     @staticmethod
     def cell_to_polygon(cell: str) -> Polygon:

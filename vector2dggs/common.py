@@ -17,6 +17,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+import pyarrow.compute as pc
 import pyarrow.dataset as pa_ds
 import pyarrow.parquet as pq
 import pyogrio
@@ -69,6 +70,21 @@ class CellIdError(ValueError):
     """Raised when --cell-id uint64 is requested for a string-only DGGS."""
 
     pass
+
+
+class ContainmentModeError(ValueError):
+    """Raised when -m/--mode names a mode the backend cannot express."""
+
+    pass
+
+
+def check_mode(mode: str, indexer: VectorIndexer) -> None:
+    if const.ContainmentMode(mode) not in indexer.SUPPORTED_MODES:
+        supported = ", ".join(sorted(m.value for m in indexer.SUPPORTED_MODES))
+        raise ContainmentModeError(
+            f"--mode {mode} is not supported for '{indexer.dggs}': its library "
+            f"offers no equivalent test. Available: {supported}."
+        )
 
 
 def check_cell_id(cell_id: str, indexer: VectorIndexer) -> None:
@@ -498,30 +514,88 @@ def _geom_fn(indexer: VectorIndexer, geo: str):
     )
 
 
+def _ids_in(table: pa.Table, id_col: str) -> set:
+    """The distinct feature ids a merged partition actually contains."""
+    if id_col not in table.column_names:
+        return set()
+    return set(table.column(id_col).unique().to_pylist())
+
+
+def _drop_duplicate_cells(table: pa.Table, id_col: str, dggs_col: str) -> pa.Table:
+    """
+    Enforce the one-row-per-(feature, cell) contract, keeping the first of
+    each group and leaving row order otherwise untouched.
+
+    A feature reaches polyfill as several geometries whenever it was split
+    upstream - bisected, cut at a vertex, or exploded from a multipart -
+    and each is indexed independently. Centre containment stays unique for
+    free, a cell's centre falling in exactly one piece, but an area test
+    does not: a cell straddling a cut meets both pieces and is emitted by
+    both (~2.7% of rows on a bisected fixture).
+
+    Lossless, because such duplicates are exact: attributes belong to the
+    feature and the geometry to the cell, so every column agrees.
+    """
+    if table.num_rows < 2:
+        return table
+    if id_col not in table.column_names or dggs_col not in table.column_names:
+        return table
+
+    edged = const.EDGE_COLUMN in table.column_names
+    positions = pa.array(np.arange(table.num_rows, dtype=np.int64))
+    keyed = table.select(
+        [id_col, dggs_col] + ([const.EDGE_COLUMN] if edged else [])
+    ).append_column("__row__", positions)
+    aggregations = [("__row__", "min")]
+    if edged:
+        aggregations.append((const.EDGE_COLUMN, "any"))
+    groups = keyed.group_by([id_col, dggs_col]).aggregate(aggregations)
+    if edged:
+        # a cell the boundary passes through is not within the feature
+        groups = groups.filter(
+            pc.equal(groups.column(f"{const.EDGE_COLUMN}_any"), False)
+        )
+    elif groups.num_rows == table.num_rows:
+        return table
+
+    keep = groups.column("__row___min").combine_chunks()
+    # group_by does not preserve input order; restore it so the write stays
+    # sorted by partition value as write_partition arranged it
+    kept = table.take(keep.take(pc.array_sort_indices(keep)))
+    return kept.drop_columns([const.EDGE_COLUMN]) if edged else kept
+
+
 def _merge_partition_files(
     partition_dir: Path,
     compression: str,
+    dggs_col: str,
+    id_col: str,
     indexer: VectorIndexer | None = None,
     resolution: int | None = None,
     parent_res: int | None = None,
     id_field: str | None = None,
     geo: str | None = None,
     cell_id: str = const.CellIdMode.STRING.value,
-) -> None:
+) -> tuple[int, set]:
     """
     Merges all Parquet files within a single hive partition directory into one
-    file. Preserves and correctly aggregates GeoParquet 'geo' metadata (bbox,
-    geometry_types) if present. When a compactor is given, the merged rows are
-    compacted here — the hive write already routes a parent cell's every row
-    into this directory, and the resolution floor stops compaction crossing a
-    parent boundary, so each directory is a complete, independent unit — and
-    cell geometries are (re)generated for the compacted cells. Peak memory is
-    bounded to one parent cell's data at a time.
+    file, dropping any duplicate (feature, cell) rows and returning how many
+    were dropped together with the feature ids that survived. Preserves and correctly aggregates GeoParquet 'geo' metadata
+    (bbox, geometry_types) if present. When a compactor is given, the merged
+    rows are compacted here — the hive write already routes a parent cell's
+    every row into this directory, and the resolution floor stops compaction
+    crossing a parent boundary, so each directory is a complete, independent
+    unit — and cell geometries are (re)generated for the compacted cells. Peak
+    memory is bounded to one parent cell's data at a time.
+
+    Deduplication belongs here because a cell and its duplicates share a
+    parent, so the hive write has already gathered them into this one
+    directory. A single-file directory with nothing to drop is left alone.
     """
     compacting = indexer is not None
     files = sorted(partition_dir.glob("*.parquet"))
-    if not files or (len(files) <= 1 and not compacting):
-        return
+    if not files:
+        return 0, set()
 
     # partitioning=None: don't hive-parse the file's own path into a column
     tables = [pq.read_table(f, partitioning=None) for f in files]
@@ -570,6 +644,14 @@ def _merge_partition_files(
 
     tables = [t.cast(unified_schema) for t in tables]
     table = pa.concat_tables(tables)
+
+    edged = const.EDGE_COLUMN in table.column_names
+    resolved = _drop_duplicate_cells(table, id_col, dggs_col)
+    dropped = table.num_rows - resolved.num_rows
+    table = resolved
+    if len(files) == 1 and not compacting and not dropped and not edged:
+        # nothing to merge and nothing to drop: leave the file as written
+        return 0, _ids_in(table, id_col)
 
     if base_geo_meta is not None:
         col_meta = base_geo_meta["columns"]["geometry"].copy()
@@ -623,6 +705,7 @@ def _merge_partition_files(
     pq.write_table(table, merged, compression=compression)
     for f in files:
         f.unlink()
+    return dropped, _ids_in(table, id_col)
 
 
 def _merge_output(
@@ -636,9 +719,10 @@ def _merge_output(
     compression: str,
     processes: int,
     cell_id: str,
-) -> None:
+) -> set:
     """
-    Consolidate each hive partition directory to a single file (aggregating
+    Consolidate each hive partition directory to a single file, returning the
+    feature ids present in the output (aggregating
     GeoParquet metadata), compacting per-directory when requested: the hive
     write routes a parent cell's every row into its directory, and the
     resolution floor keeps compaction within one parent, so no shuffle is
@@ -650,6 +734,9 @@ def _merge_output(
     desc = (
         "Compacting and merging" if compact else "Merging to one file per parent cell"
     )
+    dggs_col = f"{indexer.dggs}_{resolution:02}"
+    dropped = 0
+    written: set = set()
     with ProcessPoolExecutor(
         max_workers=max(1, processes), mp_context=_mp_context()
     ) as executor:
@@ -658,6 +745,8 @@ def _merge_output(
                 _merge_partition_files,
                 d,
                 compression,
+                dggs_col,
+                id_field or "fid",
                 indexer=indexer if compact else None,
                 resolution=resolution if compact else None,
                 parent_res=parent_res if compact else None,
@@ -668,9 +757,18 @@ def _merge_output(
             for d in dirs
         ]
         for future in tqdm(as_completed(futures), total=len(futures), desc=desc):
-            future.result()
+            partition_dropped, partition_ids = future.result()
+            dropped += partition_dropped
+            written |= partition_ids
 
+    if dropped:
+        LOGGER.debug(
+            "Dropped %d duplicate (feature, cell) rows emitted by features "
+            "indexed as more than one geometry",
+            dropped,
+        )
     LOGGER.debug("Output writing complete")
+    return written
 
 
 def _polyfill(
@@ -747,8 +845,10 @@ def _split_linestring_at_vertices(line, budget: float) -> list:
     Split a LineString at existing vertices whenever cumulative arc length
     exceeds the budget. Vertex-only cuts leave every vertex-to-vertex
     segment untouched, so every backend traces exactly the segments it
-    would have traced uncut; the shared vertex's cell appearing in both
-    pieces is absorbed by the one-row-per-(feature, cell) contract.
+    would have traced uncut; the shared vertex's cell appears in both
+    pieces, and is collapsed back to one row by _drop_duplicate_cells at
+    the merge step, which is what enforces the one-row-per-(feature, cell)
+    contract.
     """
     coords = list(line.coords)
     pieces = []
@@ -979,6 +1079,28 @@ def _prepare_dataframe(
     else:
         df = df.loc[:, ["geometry"]]
     return df
+
+
+def _add_boundary_rows(df: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """
+    Append each polygonal feature's boundary as its own linework row,
+    marked with const.EDGE_COLUMN, so WITHIN can be computed as the
+    intersecting cells minus the cells the boundary passes through.
+
+    Taken here, before bisection, so the boundary is the feature's own and
+    never includes a cut edge; from then on it is an ordinary line, split
+    by the same budget as any other and traced by the same cover. Holes
+    count: a cell straddling one is not within the feature either, and
+    Polygon.boundary returns the interior rings along with the exterior.
+    """
+    polygonal = df.geometry.geom_type.isin(("Polygon", "MultiPolygon")).to_numpy()
+    df = df.assign(**{const.EDGE_COLUMN: False})
+    if not polygonal.any():
+        return df
+    edges = df[polygonal].copy()
+    edges["geometry"] = edges.geometry.boundary
+    edges[const.EDGE_COLUMN] = True
+    return gpd.GeoDataFrame(pd.concat([df, edges]), geometry="geometry", crs=df.crs)
 
 
 def _run_bisection(
@@ -1286,6 +1408,7 @@ def index(
     compact: bool = False,
     keep_attribute: tuple[str, ...] = (),
     cell_id: str = const.CellIdMode.STRING.value,
+    mode: str = const.ContainmentMode.CENTRE.value,
 ) -> Path | str:
     """
     Performs multi-threaded DGGS indexing on geometries (including multipart and collections).
@@ -1319,6 +1442,7 @@ def index(
             compact,
             keep_attribute,
             cell_id,
+            mode,
         )
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
@@ -1344,10 +1468,24 @@ def _index(
     compact: bool,
     keep_attribute: tuple[str, ...] = (),
     cell_id: str = const.CellIdMode.STRING.value,
+    mode: str = const.ContainmentMode.CENTRE.value,
 ) -> None:
     id_field = id_field or resolve_default_id_field(input_file, layer, con)
-    indexer = idxfactory.indexer_instance(dggs)
+    indexer = idxfactory.indexer_instance(dggs, mode)
     check_cell_id(cell_id, indexer)
+    check_mode(mode, indexer)
+    # WITHIN is never asked of a backend, whose answer would be per-piece:
+    # a cell wholly inside a feature need not be wholly inside any one
+    # piece it was cut into. The pipeline composes it instead, filling the
+    # intersecting cells and subtracting those the feature's own boundary
+    # passes through (_add_boundary_rows, _drop_duplicate_cells), which
+    # survives cutting because neither term is taken from a piece.
+    subtracting = indexer.mode == const.ContainmentMode.WITHIN
+    fill_indexer = (
+        idxfactory.indexer_instance(dggs, const.ContainmentMode.INTERSECTS.value)
+        if subtracting
+        else indexer
+    )
     parent_res = get_parent_res(dggs, parent_res, resolution)
 
     total = _feature_count(input_file, layer, con)
@@ -1406,6 +1544,8 @@ def _index(
                     * const.DGGS_CELL_AREA_M2_BY_RES[dggs](resolution) ** 0.5
                     / _metres_per_unit(batch.crs)
                 )
+            if subtracting:
+                batch = _add_boundary_rows(batch)
             batch = _run_bisection(
                 batch,
                 cut_threshold,
@@ -1428,8 +1568,8 @@ def _index(
         bisection_pbar.close()
         filepaths = [f.absolute() for f in Path(tmpdir).glob("*")]
 
-        indexed_ids = _run_dggs_indexing(
-            indexer,
+        _run_dggs_indexing(
+            fill_indexer,
             filepaths,
             resolution,
             parent_res,
@@ -1441,14 +1581,6 @@ def _index(
             compact,
             cell_id,
         )
-        dropped = features_in - indexed_ids
-        if dropped:
-            LOGGER.warning(
-                "%d of %d features produced no cells at resolution %s and were omitted",
-                len(dropped),
-                len(features_in),
-                resolution,
-            )
         if not any(d.is_dir() for d in Path(output_directory).iterdir()):
             LOGGER.warning(
                 "No features were indexed (resolution %s may be too coarse for the input). Nothing to write; exiting.",
@@ -1456,7 +1588,12 @@ def _index(
             )
             return
 
-        _merge_output(
+        # Counted from what the merge actually wrote, not from what the fill
+        # produced: under WITHIN a feature's boundary rows produce cells of
+        # their own, and every one of them may be subtracted again here, so
+        # a fill-time count would report a feature as indexed that has no
+        # cell in the output.
+        indexed_ids = _merge_output(
             indexer,
             output_directory,
             resolution,
@@ -1468,3 +1605,16 @@ def _index(
             processes,
             cell_id,
         )
+        dropped = features_in - indexed_ids
+        if dropped:
+            LOGGER.warning(
+                "%d of %d features produced no cells at resolution %s and were omitted%s",
+                len(dropped),
+                len(features_in),
+                resolution,
+                (
+                    ""
+                    if indexer.mode == const.ContainmentMode.INTERSECTS
+                    else " (--mode intersects indexes every feature, however small)"
+                ),
+            )

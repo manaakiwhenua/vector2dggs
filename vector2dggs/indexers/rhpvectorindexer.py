@@ -19,6 +19,13 @@ from shapely.geometry import Point, Polygon
 import vector2dggs.constants as const
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 
+# rhealpixdggs's containment vocabulary (rhp_wrappers.polyfill_array)
+_CONTAIN = {
+    const.ContainmentMode.CENTRE: "center",
+    const.ContainmentMode.INTERSECTS: "overlapping",
+    const.ContainmentMode.WITHIN: "full",
+}
+
 # Cell side length by resolution (rHEALPix cells are equal-area squares, so
 # side = sqrt(area)); reuses constants.py's table rather than a fresh library
 # call per geometry.
@@ -57,13 +64,13 @@ class RHPVectorIndexer(VectorIndexer[str]):
                 return res
         return const.MIN_RHP
 
-    @staticmethod
-    def _polyfill_polygon(geom, resolution: int) -> list:
+    def _polyfill_polygon(self, geom, resolution: int) -> list:
         cells = polyfill_array(
             geom,
             resolution,
             plane=False,
             dggs=WGS84_003,
+            containment=_CONTAIN[self.mode],
             min_res=RHPVectorIndexer._fill_min_res(geom, resolution),
         )
         # an array's truthiness is ambiguous, unlike a set's - test for None
