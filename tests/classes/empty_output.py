@@ -123,53 +123,98 @@ class TestEmptyOutput(TestRunthrough):
 
 class TestEmptyOutputSchemaMatchesPopulated(TestCase):
     """
-    The empty dataset's schema has to be the one the run would have
-    produced, or it is a different dataset that happens to have no rows.
+    The empty dataset has to be the schema the run would have produced, or
+    it is a different dataset that happens to have no rows.
+
+    Compared as a reader sees it rather than file against file, because the
+    two cannot be identical on disk: in a populated run the parent column
+    is a hive key, stored in the directory name and not in any file, and an
+    empty run has no directories to put it in. It is carried as data
+    instead, typed so that it reads back the same way.
     """
+
+    # a whole degree square, so it comfortably contains cell centres at
+    # the same coarse resolution that indexes TINY to nothing
+    BIG = Polygon([(174.0, -41.5), (175.0, -41.5), (175.0, -40.5), (174.0, -40.5)])
 
     def setUp(self):
         skip_unless_backend("h3")
 
-    def test_columns_match_a_populated_run_of_the_same_shape(self):
-        # a whole degree square, so it comfortably contains cell centres at
-        # the same coarse resolution that indexes TINY to nothing
-        big = Polygon(
-            [
-                (174.0, -41.5),
-                (175.0, -41.5),
-                (175.0, -40.5),
-                (174.0, -40.5),
-            ]
+    def _read(self, source, layer, out, **kwargs):
+        common.index(
+            "h3",
+            source,
+            out,
+            RES,
+            str(PARENT_RES),
+            kwargs.pop("keep_attributes", False),
+            1,
+            layer=layer,
+            **kwargs,
         )
+        return pd.read_parquet(out)
+
+    def _assert_schemas_match(self, **kwargs):
         with tempfile.TemporaryDirectory() as d:
             source = Path(d) / "shapes.gpkg"
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                for layer, geom in (("tiny", TINY), ("big", self.BIG)):
+                    gpd.GeoDataFrame(
+                        {"name": ["a"], "geometry": [geom]}, crs=4326
+                    ).to_file(source, layer=layer)
+            empty = self._read(source, "tiny", f"{d}/empty.pq", **dict(kwargs))
+            populated = self._read(source, "big", f"{d}/populated.pq", **dict(kwargs))
+
+        self.assertEqual(len(empty), 0)
+        self.assertGreater(len(populated), 0)
+        self.assertEqual(empty.index.name, populated.index.name)
+        self.assertEqual(list(empty.columns), list(populated.columns))
+        self.assertEqual(
+            {c: str(empty[c].dtype) for c in empty.columns},
+            {c: str(populated[c].dtype) for c in populated.columns},
+        )
+
+    def test_default(self):
+        self._assert_schemas_match()
+
+    def test_geo_polygon(self):
+        self._assert_schemas_match(geo="polygon")
+
+    def test_kept_attributes(self):
+        self._assert_schemas_match(keep_attributes=True)
+
+    def test_cell_id_uint64(self):
+        """uint64 cell ids round-trip exactly, index dtype included."""
+        self._assert_schemas_match(cell_id="uint64")
+        with tempfile.TemporaryDirectory() as d:
+            source = Path(d) / "shapes.gpkg"
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                for layer, geom in (("tiny", TINY), ("big", self.BIG)):
+                    gpd.GeoDataFrame(
+                        {"name": ["a"], "geometry": [geom]}, crs=4326
+                    ).to_file(source, layer=layer)
+            empty = self._read(source, "tiny", f"{d}/e.pq", cell_id="uint64")
+            populated = self._read(source, "big", f"{d}/p.pq", cell_id="uint64")
+        self.assertEqual(str(empty.index.dtype), str(populated.index.dtype))
+
+    def test_parent_column_reads_back_as_a_category(self):
+        """
+        Pinning the one type that cannot be inferred from the empty frame:
+        a populated run's parent column is a hive key that readers rebuild
+        as a dictionary, so the empty one is cast to match. Left as a
+        plain string it would read back as a different dtype.
+        """
+        with tempfile.TemporaryDirectory() as d:
+            source = Path(d) / "tiny.gpkg"
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 gpd.GeoDataFrame({"name": ["a"], "geometry": [TINY]}, crs=4326).to_file(
                     source, layer="tiny"
                 )
-                gpd.GeoDataFrame({"name": ["a"], "geometry": [big]}, crs=4326).to_file(
-                    source, layer="big"
-                )
-
-            def run(layer, out):
-                common.index(
-                    "h3",
-                    source,
-                    out,
-                    RES,
-                    str(PARENT_RES),
-                    True,
-                    1,
-                    layer=layer,
-                    geo="polygon",
-                )
-                return pd.read_parquet(out)
-
-            empty = run("tiny", f"{d}/empty.pq")
-            populated = run("big", f"{d}/populated.pq")
-
-        self.assertEqual(len(empty), 0)
-        self.assertGreater(len(populated), 0)
-        self.assertEqual(empty.index.name, populated.index.name)
-        self.assertEqual(set(empty.columns), set(populated.columns))
+            empty = self._read(source, "tiny", f"{d}/out.pq")
+        self.assertEqual(
+            str(empty[f"h3_{PARENT_RES:02}"].dtype),
+            "category",
+        )

@@ -724,7 +724,6 @@ def _write_empty_output(
         cell_id == const.CellIdMode.STRING.value
         or pa.string() == indexer.CELL_ARROW_TYPE
     )
-    cell_dtype = "string" if emit_string else "uint64"
     dggs_col = f"{indexer.dggs}_{resolution:02}"
     parent_col = f"{indexer.dggs}_{parent_res:02}"
     geo_output = geo != const.GeoOutputMode.NONE.value
@@ -740,11 +739,29 @@ def _write_empty_output(
     )
     if geo_output:
         empty["geometry"] = pd.Series(dtype="object")
-    empty[parent_col] = pd.Series(dtype=cell_dtype)
-    empty[dggs_col] = pd.Series(dtype=cell_dtype)
+    empty[parent_col] = pd.Series(dtype="str")
+    empty[dggs_col] = pd.Series(dtype="str" if emit_string else "uint64")
     empty = empty.set_index(dggs_col)
 
     table = pa.Table.from_pandas(empty, preserve_index=True)
+    # The parent column is a hive key in a populated run, never stored in
+    # the file, and a reader rebuilds it from the directory name as a
+    # dictionary - whatever --cell-id asked for, since a path is text. An
+    # empty run has no directories to rebuild it from, so it is carried as
+    # data instead, typed to read back the same way.
+    table = table.cast(
+        pa.schema(
+            [
+                (
+                    field.with_type(pa.dictionary(pa.int32(), pa.string()))
+                    if field.name == parent_col
+                    else field
+                )
+                for field in table.schema
+            ],
+            metadata=table.schema.metadata,
+        )
+    )
     if geo_output:
         table = _with_geoparquet_metadata(table)
     pq.write_table(
