@@ -56,6 +56,8 @@ vector2dggs <dggs> [OPTIONS] VECTOR_INPUT OUTPUT_DIRECTORY
 - `-m`/`--mode`: which of a polygon's cells are indexed. See [Containment modes](#containment-modes) below.
 - `--cell-id`: `string` (default) or `uint64`. DGGS with a native integer cell form (A5, H3, S2) can write cell IDs as unsigned 64-bit integers instead of text — useful where downstream tools take integer cell IDs directly (e.g. DuckDB's `h3` extension). Cell IDs are worked in the native form internally regardless of this flag; it only controls the final output rendering. String-only DGGS (rHEALPix, Geohash) reject `--cell-id uint64`.
 
+If nothing is indexed — usually because the resolution is too coarse for the input — the run warns and writes an empty dataset: one zero-row file carrying the schema the run would have produced, so a reader sees an empty layer rather than an unreadable directory.
+
 The full reference (`vector2dggs h3 --help`; the other commands differ only in their resolution ranges):
 
 ```

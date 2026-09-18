@@ -140,6 +140,12 @@ with contextlib.suppress(ImportError):
         TestS2ContainmentMode as TestS2ContainmentMode,
     )
 with contextlib.suppress(ImportError):
+    from .classes.empty_output import TestEmptyOutput as TestEmptyOutput
+with contextlib.suppress(ImportError):
+    from .classes.empty_output import (
+        TestEmptyOutputSchemaMatchesPopulated as TestEmptyOutputSchemaMatchesPopulated,
+    )
+with contextlib.suppress(ImportError):
     from .classes.errors import TestErrors as TestErrors
 with contextlib.suppress(ImportError):
     from .classes.errors import (
