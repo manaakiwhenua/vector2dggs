@@ -32,6 +32,9 @@ from tqdm import tqdm
 
 import vector2dggs.constants as const
 import vector2dggs.indexerfactory as idxfactory
+from vector2dggs.indexers.vectorindexer import (
+    ContainmentModeError as ContainmentModeError,
+)
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 
 from . import katana
@@ -72,19 +75,8 @@ class CellIdError(ValueError):
     pass
 
 
-class ContainmentModeError(ValueError):
-    """Raised when -m/--mode names a mode the backend cannot express."""
-
-    pass
-
-
 def check_mode(mode: str, indexer: VectorIndexer) -> None:
-    if const.ContainmentMode(mode) not in indexer.SUPPORTED_MODES:
-        supported = ", ".join(sorted(m.value for m in indexer.SUPPORTED_MODES))
-        raise ContainmentModeError(
-            f"--mode {mode} is not supported for '{indexer.dggs}': its library "
-            f"offers no equivalent test. Available: {supported}."
-        )
+    indexer.check_mode(const.ContainmentMode(mode))
 
 
 def check_cell_id(cell_id: str, indexer: VectorIndexer) -> None:

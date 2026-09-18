@@ -18,6 +18,12 @@ import vector2dggs.constants as const
 CellId = TypeVar("CellId")
 
 
+class ContainmentModeError(ValueError):
+    """Raised when a containment mode names one the backend cannot express."""
+
+    pass
+
+
 class VectorIndexer(ABC, Generic[CellId]):
     """
     Abstract base class and interface for all DGGS indexers. Generic over
@@ -68,11 +74,31 @@ class VectorIndexer(ABC, Generic[CellId]):
         """
         return [str(c) for c in cells]
 
+    def check_mode(self, mode: const.ContainmentMode) -> None:
+        """
+        Reject a mode this backend cannot express, naming the alternatives.
+
+        Worth stating rather than trusting a library to complain: pya5
+        accepts an unrecognised containment value and silently applies
+        centre containment, so asking for one a backend does not have can
+        otherwise return a plausible answer to a different question.
+        """
+        if mode not in self.SUPPORTED_MODES:
+            available = ", ".join(sorted(m.value for m in self.SUPPORTED_MODES))
+            raise ContainmentModeError(
+                f"--mode {mode.value} is not supported for '{self.dggs}': its "
+                f"library offers no equivalent test. Available: {available}."
+            )
+
     def polyfill(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
         """
         Splits df by geometry type, dispatches each non-empty subset to the
         corresponding _polyfill_* implementation, and concatenates the results.
         """
+        # guards the library call itself, not just the CLI: reached through
+        # the Python API, an unsupported mode would otherwise surface as a
+        # KeyError from a backend's containment lookup
+        self.check_mode(self.mode)
         parts = []
 
         df_polygon = df[df.geom_type == "Polygon"]

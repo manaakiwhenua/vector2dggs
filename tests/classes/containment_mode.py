@@ -191,6 +191,20 @@ class TestA5WithinUnsupported(TestCase):
             indexer_instance("a5").SUPPORTED_MODES,
         )
 
+    def test_polyfill_rejects_within(self):
+        """
+        The library path, not just the CLI: pya5 accepts an unrecognised
+        containment value and quietly applies centre containment, so an
+        unsupported mode has to be refused here rather than left to
+        surface as a KeyError, or worse as a plausible wrong answer.
+        """
+        indexer = indexer_instance("a5", "within")
+        frame = gpd.GeoDataFrame({"fid": [1], "geometry": [BIG]}, crs=4326)
+        with self.assertRaises(common.ContainmentModeError) as caught:
+            indexer.polyfill(frame, RES["a5"])
+        self.assertIn("within", str(caught.exception))
+        self.assertIn("centre, intersects", str(caught.exception))
+
     def test_cli_rejects_within(self):
         with self.assertRaises(click.UsageError) as caught:
             a5(
