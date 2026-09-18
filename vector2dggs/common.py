@@ -700,6 +700,77 @@ def _merge_partition_files(
     return dropped, _ids_in(table, id_col)
 
 
+def _write_empty_output(
+    output_directory: Path,
+    template: gpd.GeoDataFrame,
+    indexer: VectorIndexer,
+    resolution: int,
+    parent_res: int,
+    geo: str,
+    compression: str,
+    cell_id: str,
+) -> None:
+    """
+    Write a valid but empty dataset: one zero-row file carrying the schema
+    the run would have produced.
+
+    Indexing nothing is a legitimate answer, usually that the resolution is
+    too coarse for the input, but publishing an empty directory makes it
+    indistinguishable from a failed run and leaves nothing any reader can
+    open. `template` is an empty slice of a cleaned input batch, so the id
+    and attribute columns keep the types they would have carried.
+    """
+    emit_string = (
+        cell_id == const.CellIdMode.STRING.value
+        or pa.string() == indexer.CELL_ARROW_TYPE
+    )
+    dggs_col = f"{indexer.dggs}_{resolution:02}"
+    parent_col = f"{indexer.dggs}_{parent_res:02}"
+    geo_output = geo != const.GeoOutputMode.NONE.value
+
+    empty = pd.DataFrame(
+        template.drop(
+            columns=[
+                c
+                for c in ("geometry", const.EDGE_COLUMN, "index")
+                if c in template.columns
+            ]
+        )
+    )
+    if geo_output:
+        empty["geometry"] = pd.Series(dtype="object")
+    empty[parent_col] = pd.Series(dtype="str")
+    empty[dggs_col] = pd.Series(dtype="str" if emit_string else "uint64")
+    empty = empty.set_index(dggs_col)
+
+    table = pa.Table.from_pandas(empty, preserve_index=True)
+    # The parent column is a hive key in a populated run, never stored in
+    # the file, and a reader rebuilds it from the directory name as a
+    # dictionary - whatever --cell-id asked for, since a path is text. An
+    # empty run has no directories to rebuild it from, so it is carried as
+    # data instead, typed to read back the same way.
+    table = table.cast(
+        pa.schema(
+            [
+                (
+                    field.with_type(pa.dictionary(pa.int32(), pa.string()))
+                    if field.name == parent_col
+                    else field
+                )
+                for field in table.schema
+            ],
+            metadata=table.schema.metadata,
+        )
+    )
+    if geo_output:
+        table = _with_geoparquet_metadata(table)
+    pq.write_table(
+        table,
+        output_directory / f"part.0-{uuid4().hex}.parquet",
+        compression=compression,
+    )
+
+
 def _merge_output(
     indexer: VectorIndexer,
     output_dir: Path | str,
@@ -1503,6 +1574,9 @@ def _index(
     features_in: set = set()
     blade_segment: float | None = None
     line_budget: float | None = None
+    # an empty slice of the first cleaned batch, kept so that a run which
+    # indexes nothing can still write that run's schema (_write_empty_output)
+    template: gpd.GeoDataFrame | None = None
 
     with tempfile.TemporaryDirectory(suffix=".parquet") as tmpdir:
         fid_offset = 0
@@ -1547,6 +1621,8 @@ def _index(
                 pbar=bisection_pbar,
             )
             batch = _clean_geometries(batch, indexer)
+            if template is None:
+                template = batch.iloc[:0].copy()
             for start, end in _staged_file_chunks(
                 batch, dggs, resolution, rows_per_file
             ):
@@ -1575,9 +1651,21 @@ def _index(
         )
         if not any(d.is_dir() for d in Path(output_directory).iterdir()):
             LOGGER.warning(
-                "No features were indexed (resolution %s may be too coarse for the input). Nothing to write; exiting.",
+                "No features were indexed (resolution %s may be too coarse for "
+                "the input); writing an empty dataset.",
                 resolution,
             )
+            if template is not None:
+                _write_empty_output(
+                    Path(output_directory),
+                    template,
+                    indexer,
+                    resolution,
+                    parent_res,
+                    geo,
+                    compression,
+                    cell_id,
+                )
             return
 
         # Counted from what the merge actually wrote, not from what the fill
