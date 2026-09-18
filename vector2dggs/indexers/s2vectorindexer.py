@@ -7,6 +7,7 @@ import s2geometry as S2
 from shapely import force_2d
 from shapely.geometry import LineString, Point, Polygon
 
+import vector2dggs.constants as const
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 
 
@@ -42,7 +43,12 @@ class S2VectorIndexer(VectorIndexer[str | int]):
         return [S2.S2CellId(int(c)).ToToken() for c in cells]
 
     def _polyfill_polygons(self, df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
-        return self._geo_to_cells(df, level, self.cells_from_polygon, df.geometry.name)
+        return self._geo_to_cells(
+            df,
+            level,
+            lambda geom, lvl: self.cells_from_polygon(geom, lvl, self.mode),
+            df.geometry.name,
+        )
 
     def _polyfill_linestrings(self, df: gpd.GeoDataFrame, level: int) -> pd.DataFrame:
         return self._geo_to_cells(
@@ -97,9 +103,20 @@ class S2VectorIndexer(VectorIndexer[str | int]):
         )
 
     def cells_from_polygon(
-        self, geom: Polygon, level: int, centroid_inside: bool = True
+        self,
+        geom: Polygon,
+        level: int,
+        mode: const.ContainmentMode = const.ContainmentMode.CENTRE,
+        max_cells: int | None = None,
     ) -> set[int]:
         """
+        The cells at `level` that meet `geom` under `mode` (see
+        const.ContainmentMode).
+
+        `max_cells` caps the covering, trading exactness for size. Left
+        unset it is exact: with min_level == max_level pinned, S2 can only
+        satisfy a covering by returning every cell the mode admits.
+
         Not a part of the interface provided by VectorIndexer.
         """
         geom = force_2d(geom)
@@ -129,24 +146,33 @@ class S2VectorIndexer(VectorIndexer[str | int]):
         s2polygon.InitNested(loops)
 
         # Use S2RegionCoverer to get the cell IDs at the specified level
-        # (min_level == max_level, so max_cells is irrelevant and left unset)
         coverer = S2.S2RegionCoverer()
         coverer.set_min_level(level)
         coverer.set_max_level(level)
+        if max_cells is not None:
+            coverer.set_max_cells(max_cells)
 
+        # Pinned to a single level, a covering is exactly the cells the
+        # polygon meets: cells at one level are disjoint, so every cell
+        # holding part of the polygon must appear for the union to cover
+        # it. The narrower modes filter that complete set. GetInteriorCovering
+        # is NOT the way to get WITHIN - it truncates to max_cells (8 by
+        # default), silently dropping cells that qualify.
         raw_covering: Iterable[S2.S2CellId] = coverer.GetCovering(s2polygon)
-        covering: set[S2.S2CellId]
+        covering: Iterable[S2.S2CellId]
 
-        if centroid_inside:
-            # Coverings are "intersects" modality, polyfill is "centre inside" modality
-            # ergo, filter out covering cells that are not inside the polygon
-            covering = {
+        if mode == const.ContainmentMode.CENTRE:
+            covering = (
                 cell
                 for cell in raw_covering
                 if self.cell_center_is_inside_polygon(cell, s2polygon)
-            }
+            )
+        elif mode == const.ContainmentMode.WITHIN:
+            covering = (
+                cell for cell in raw_covering if s2polygon.Contains(S2.S2Cell(cell))
+            )
         else:
-            covering = set(raw_covering)
+            covering = raw_covering
 
         return {_cell_id(cell) for cell in covering}
 
@@ -154,7 +180,7 @@ class S2VectorIndexer(VectorIndexer[str | int]):
         self, cell: S2.S2CellId, polygon: S2.S2Polygon
     ) -> bool:
         """
-        Determines if the center of the S2 cell is inside the polygon
+        Determines if the center point of the S2 cell is inside the polygon
 
         Not a part of the interface provided by VectorIndexer.
         """

@@ -48,11 +48,12 @@ vector2dggs <dggs> [OPTIONS] VECTOR_INPUT OUTPUT_DIRECTORY
 
 `VECTOR_INPUT` may be a local file (anything GDAL can read), a remote URI or GDAL virtual path (e.g. `https://…`, `/vsizip/…`), or a PostgreSQL/PostGIS connection URL (with `-lyr` naming the table). `OUTPUT_DIRECTORY` is written as an Apache Parquet data store: a directory with one file per partition.
 
-- `-r`/`--resolution`: the target DGGS resolution. Each output row is one (feature, cell) pair; a cell is included when its centre falls inside the feature, uniformly across all backends.
+- `-r`/`--resolution`: the target DGGS resolution. Each output row is one (feature, cell) pair; by default a cell is included when its centre point falls inside the feature, uniformly across all backends (see `-m`/`--mode`).
 - `-pr`/`--parent_res`: a coarser resolution used to partition the output (hive directories such as `h3_03=…`); defaults to a fixed offset below the target resolution.
 - `-id`/`--id_field`: the feature identifier carried into the output. Defaults to the input's own internal ID where one exists (a GPKG's FID column, or a DB table's single-column primary key); otherwise falls back to a synthetic index tied to row position in the read order — stable across repeated runs of the same unchanged input, but not portable to a different export/copy of the same data. Rows sharing an id are treated as one feature.
 - `-co`/`--compact`: merges complete sets of sibling cells belonging to one feature (grouped by whichever id_field is in play, explicit, auto-detected, or synthetic), to no coarser than the parent resolution. Compacted output expands back to exactly the full-resolution result.
 - `--geo`: plain Parquet by default; `point` or `polygon` writes GeoParquet (v1.1.0) cell geometries instead.
+- `-m`/`--mode`: which of a polygon's cells are indexed. See [Containment modes](#containment-modes) below.
 - `--cell-id`: `string` (default) or `uint64`. DGGS with a native integer cell form (A5, H3, S2) can write cell IDs as unsigned 64-bit integers instead of text — useful where downstream tools take integer cell IDs directly (e.g. DuckDB's `h3` extension). Cell IDs are worked in the native form internally regardless of this flag; it only controls the final output rendering. String-only DGGS (rHEALPix, Geohash) reject `--cell-id uint64`.
 
 The full reference (`vector2dggs h3 --help`; the other commands differ only in their resolution ranges):
@@ -108,6 +109,18 @@ Options:
   --cell-id [string|uint64]       Cell ID output form: 'string' (default) or
                                   'uint64' (unsigned 64-bit integer; e.g. for
                                   DuckDB interop).  [default: string]
+  -m, --mode [centre|intersects|within]
+                                  How a polygon's cells are chosen, named for
+                                  the DE-9IM predicate each applies: 'centre'
+                                  takes each cell whose centre point falls
+                                  inside the feature; 'intersects' takes every
+                                  cell whose area meets the feature, covering it
+                                  completely, so a feature smaller than a cell
+                                  still produces one (rasterio's all_touched);
+                                  'within' takes only cells whose area lies
+                                  wholly inside it. Linestrings and points are
+                                  indexed the same way in every mode.  [default:
+                                  centre]
   --tempdir PATH                  Temporary data is created during the execution
                                   of this program. This parameter allows you to
                                   control where this data will be written.
@@ -121,6 +134,33 @@ Options:
 ```
 
 vector2dggs is a command-line tool; the underlying Python API (`vector2dggs.common.index`) can be called directly but is not a stable, supported interface.
+
+## Containment modes
+
+Filling a polygon means deciding, cell by cell, whether the cell belongs to the feature — and that needs a rule for what counts. `-m`/`--mode` chooses it, and each mode is named for the [DE-9IM](https://en.wikipedia.org/wiki/DE-9IM) predicate it applies between the cell and the feature:
+
+| Mode | A cell is indexed when… | Use it for |
+| --- | --- | --- |
+| `centre` (default) | its **centre point** falls inside the feature | one cell per place: cells partition the plane, so a coverage input gives a coverage output, with no cell claimed by two neighbouring features |
+| `intersects` | its **area** meets the feature anywhere | complete coverage: querying by any cell that intersects a feature finds it, and a feature smaller than a cell still gets one (in `centre` mode such features produce nothing and are reported as omitted) |
+| `within` | its **area** lies wholly inside the feature | conservative selection: every cell returned is unambiguously the feature's, at the cost of dropping the boundary |
+
+The modes are nested: `within` ⊆ `centre` ⊆ `intersects`. Only polygons are affected — a traced line already covers every cell it meets, and a point has exactly one cell.
+
+`within` is computed as the intersecting cells minus the cells the feature's own boundary passes through, rather than asked of the backend directly. The two are equivalent for a whole feature, but only the first survives bisection: vector2dggs cuts large polygons into pieces to bound memory, and a cell wholly inside a feature need not be wholly inside any single piece the cut lines cross. Both terms of the subtraction are taken before cutting, so neither depends on where the cuts fall.
+
+`within` is unavailable for A5, whose library (`pya5`) offers no wholly-within test; `vector2dggs a5 -m within` is rejected rather than silently indexed some other way.
+
+If you have arrived from raster tooling, `intersects` is what rasterio's `all_touched=True` and GDAL's `ALL_TOUCHED` do. It is deliberately **not** called `touched`, because DE-9IM already has a `touches` predicate meaning something close to the opposite — geometries meeting only at their boundaries, with their interiors disjoint. The backends' own vocabularies map straight across: H3's `center`/`overlap`/`full` and rHEALPix's `center`/`overlapping`/`full` are `centre`/`intersects`/`within`.
+
+### What "cell" means here
+
+A DGGS cell has no canonical rendering as either a point or an area, so each mode above is explicit about which it tests, and each backend answers with its own:
+
+- **Centre point.** rHEALPix uses the cell's nucleus; geohash the midpoint of its box; H3, S2 and A5 their own cell centres.
+- **Area.** A geohash cell is a longitude/latitude aligned box, bounded by parallels and meridians, so it is exactly what it appears to be; H3's cells are decided in longitude/latitude too; S2 and A5 work on a sphere, where cell edges are great-circle arcs; a rHEALPix cell is an exact quadrilateral in its own projection, which on the ellipsoid stays longitude/latitude aligned for equatorial cells but gives polar cells curved edges that are sampled.
+
+So `intersects` and `within` are exact with respect to each backend's own model of a cell's extent, and near a feature's boundary different backends will not necessarily agree about the same cell — which is a property of the grids, not a defect in any one of them. The feature's own edges are read under the same model: as straight lines in longitude/latitude by H3, geohash and rHEALPix, and as great-circle arcs by S2 and A5. For short edges the two readings barely differ, but they are not interchangeable at length: a 40° edge at 60°N passes 170 km from where the great circle between its endpoints runs.
 
 ## Visualising output
 
@@ -189,6 +229,12 @@ With a local GPKG:
 ```bash
 vector2dggs h3 -v DEBUG -id title_no -r 12 -o ~/Downloads/nz-property-titles.gpkg ~/Downloads/nz-property-titles.parquet
 
+```
+
+Indexing small polygons without losing any of them (see [Containment modes](#containment-modes)):
+
+```bash
+vector2dggs s2 -id parcel_id -r 16 -m intersects ./parcels.gpkg ./parcels.parquet
 ```
 
 With a PostgreSQL/PostGIS connection:

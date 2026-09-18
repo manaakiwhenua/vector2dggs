@@ -523,7 +523,9 @@ class TestMergePartitionFilesDtypeSafety(TestCase):
                 partition_dir / "part-1.parquet",
             )
 
-            common._merge_partition_files(partition_dir, compression="snappy")
+            common._merge_partition_files(
+                partition_dir, compression="snappy", dggs_col="cell", id_col="fid"
+            )
 
             merged = list(partition_dir.glob("*.parquet"))
             self.assertEqual(len(merged), 1)
@@ -532,3 +534,131 @@ class TestMergePartitionFilesDtypeSafety(TestCase):
             self.assertEqual(
                 sorted(table.column("cell").to_pylist()), [1, 2, 3, 4, 5, 6]
             )
+
+
+def _pairs_table(fids, cells, extra=None):
+    data = {"fid": fids, "h3_09": cells}
+    if extra is not None:
+        data["attr"] = extra
+    return pa.table(data)
+
+
+class TestDropDuplicateCells(TestCase):
+    """
+    One row per (feature, cell). A feature split into several geometries
+    upstream fills each one independently, and any containment test on a
+    cell's area - unlike a centre-point test, where a cell centre falls in
+    exactly one piece - can emit the same cell from more than one of them.
+    """
+
+    def test_exact_duplicates_collapse_to_one(self):
+        table = _pairs_table([1, 1, 2], ["a", "a", "b"], extra=["x", "x", "y"])
+        result = common._drop_duplicate_cells(table, "fid", "h3_09")
+        self.assertEqual(result.num_rows, 2)
+        self.assertEqual(result.column("fid").to_pylist(), [1, 2])
+        self.assertEqual(result.column("h3_09").to_pylist(), ["a", "b"])
+        self.assertEqual(result.column("attr").to_pylist(), ["x", "y"])
+
+    def test_same_cell_for_different_features_is_kept(self):
+        # overlapping features legitimately share cells; only the pair is
+        # what has to be unique
+        table = _pairs_table([1, 2], ["a", "a"])
+        result = common._drop_duplicate_cells(table, "fid", "h3_09")
+        self.assertEqual(result.num_rows, 2)
+
+    def test_same_feature_with_different_cells_is_kept(self):
+        table = _pairs_table([1, 1], ["a", "b"])
+        result = common._drop_duplicate_cells(table, "fid", "h3_09")
+        self.assertEqual(result.num_rows, 2)
+
+    def test_row_order_is_preserved(self):
+        # write_partition sorts by partition value so each parent cell's
+        # rows stay contiguous; deduplication must not reshuffle that
+        table = _pairs_table([3, 1, 3, 2, 1], ["c", "a", "c", "b", "a"])
+        result = common._drop_duplicate_cells(table, "fid", "h3_09")
+        self.assertEqual(result.column("h3_09").to_pylist(), ["c", "a", "b"])
+
+    def test_unduplicated_table_is_returned_unchanged(self):
+        table = _pairs_table([1, 2, 3], ["a", "b", "c"])
+        self.assertIs(common._drop_duplicate_cells(table, "fid", "h3_09"), table)
+
+    def test_schema_metadata_survives(self):
+        table = _pairs_table([1, 1], ["a", "a"]).replace_schema_metadata(
+            {b"geo": b"{}"}
+        )
+        result = common._drop_duplicate_cells(table, "fid", "h3_09")
+        self.assertEqual(result.num_rows, 1)
+        self.assertEqual(result.schema.metadata.get(b"geo"), b"{}")
+
+    def test_missing_key_column_is_a_no_op(self):
+        table = pa.table({"h3_09": ["a", "a"]})
+        self.assertIs(common._drop_duplicate_cells(table, "fid", "h3_09"), table)
+
+
+class TestMergePartitionFilesDeduplication(TestCase):
+    """
+    The merge step is where deduplication can be both complete and cheap: a
+    cell and every duplicate of it share a parent, so the hive write has
+    already gathered them into one directory.
+    """
+
+    def _write(self, partition_dir, name, fids, cells):
+        pq.write_table(_pairs_table(fids, cells), partition_dir / name)
+
+    def test_duplicates_within_a_single_file_are_dropped(self):
+        # a feature's pieces can land in one staged file, so a lone part
+        # file is not evidence that there is nothing to drop
+        with tempfile.TemporaryDirectory() as d:
+            partition_dir = Path(d)
+            self._write(partition_dir, "part-0.parquet", [1, 1, 2], ["a", "a", "b"])
+            dropped, ids = common._merge_partition_files(
+                partition_dir, compression="snappy", dggs_col="h3_09", id_col="fid"
+            )
+            self.assertEqual(dropped, 1)
+            self.assertEqual(ids, {1, 2})
+            merged = list(partition_dir.glob("*.parquet"))
+            self.assertEqual(len(merged), 1)
+            self.assertEqual(pq.read_table(merged[0]).num_rows, 2)
+
+    def test_duplicates_across_files_are_dropped(self):
+        # pieces of one feature can also be split across staged files, which
+        # is why this cannot be done before the merge
+        with tempfile.TemporaryDirectory() as d:
+            partition_dir = Path(d)
+            self._write(partition_dir, "part-0.parquet", [1, 2], ["a", "b"])
+            self._write(partition_dir, "part-1.parquet", [1, 3], ["a", "c"])
+            dropped, ids = common._merge_partition_files(
+                partition_dir, compression="snappy", dggs_col="h3_09", id_col="fid"
+            )
+            self.assertEqual(dropped, 1)
+            self.assertEqual(ids, {1, 2, 3})
+            merged = list(partition_dir.glob("*.parquet"))
+            self.assertEqual(len(merged), 1)
+            table = pq.read_table(merged[0])
+            self.assertEqual(table.num_rows, 3)
+            self.assertEqual(
+                sorted(
+                    zip(
+                        table.column("fid").to_pylist(),
+                        table.column("h3_09").to_pylist(),
+                        strict=True,
+                    )
+                ),
+                [(1, "a"), (2, "b"), (3, "c")],
+            )
+
+    def test_clean_single_file_is_left_untouched(self):
+        # the pre-existing no-work shortcut: one file, nothing to drop, so
+        # no rewrite (and the file keeps its name)
+        with tempfile.TemporaryDirectory() as d:
+            partition_dir = Path(d)
+            self._write(partition_dir, "part-0.parquet", [1, 2], ["a", "b"])
+            before = {f.name for f in partition_dir.glob("*.parquet")}
+            dropped, ids = common._merge_partition_files(
+                partition_dir, compression="snappy", dggs_col="h3_09", id_col="fid"
+            )
+            self.assertEqual(dropped, 0)
+            # reported even though the file was left alone: the ids present
+            # in the output are what the dropped-feature count is taken from
+            self.assertEqual(ids, {1, 2})
+            self.assertEqual({f.name for f in partition_dir.glob("*.parquet")}, before)

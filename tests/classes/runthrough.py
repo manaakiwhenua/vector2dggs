@@ -41,6 +41,9 @@ class RunthroughScenarios:
     COMMAND: staticmethod
     POLYGON_RES: str
     LINE_RES: str  # also used for point inputs
+    # fine enough that cells actually fit inside these small features;
+    # at POLYGON_RES none do, and within is legitimately empty
+    WITHIN_RES: str
 
     @classmethod
     def setUpClass(cls):
@@ -94,6 +97,18 @@ class RunthroughScenarios:
             all(d.name.startswith(f"{parent_col}=") for d in partition_dirs)
         )
 
+        # One row per (feature, cell), in every scenario. A feature indexed
+        # as several geometries - bisected, split, or multipart - fills each
+        # independently, and anything but a centre-point test can emit the
+        # same cell from more than one of them; the merge step is what
+        # collapses those.
+        pairs = df.reset_index()[[dggs_col, id_col]]
+        self.assertEqual(
+            len(pairs),
+            len(pairs.drop_duplicates()),
+            "duplicate (feature, cell) rows in output",
+        )
+
         if geo is not None:
             table = pq.read_table(files[0])
             meta = table.schema.metadata or {}
@@ -143,9 +158,113 @@ class RunthroughScenarios:
             set(zip(uncut.index, uncut["fid"], strict=True)),
         )
 
+    def test_bisection_invariance_intersects(self):
+        """
+        As test_bisection_invariance, for intersects mode. Cutting a feature up
+        is only free for centre containment, where each cell centre lands in
+        exactly one piece; a cell's *area* can meet several pieces, so this
+        arm additionally depends on the merge step collapsing the repeats.
+        """
+        import tempfile
+
+        from vector2dggs import common
+
+        self._run(POLYGON, self.POLYGON_RES, "-m", "intersects")
+        cut = pd.read_parquet(self.output_path)
+        with tempfile.TemporaryDirectory() as d:
+            common.index(
+                self.DGGS,
+                POLYGON[0],
+                f"{d}/uncut.pq",
+                int(self.POLYGON_RES),
+                None,
+                False,
+                1,
+                cut_threshold=0.0,
+                layer=POLYGON[1],
+                compact=False,
+                mode="intersects",
+            )
+            uncut = pd.read_parquet(f"{d}/uncut.pq")
+        self.assertEqual(
+            set(zip(cut.index, cut["fid"], strict=True)),
+            set(zip(uncut.index, uncut["fid"], strict=True)),
+        )
+
+    def test_bisection_invariance_within(self):
+        """
+        Cutting must stay invisible in within mode too - the case it
+        breaks outright if the mode is asked of the backend per piece,
+        since a cell wholly inside a feature is wholly inside none of the
+        pieces the cut lines pass through.
+        """
+        import tempfile
+
+        from vector2dggs import common
+        from vector2dggs.indexerfactory import indexer_instance
+
+        if (
+            const.ContainmentMode.WITHIN
+            not in indexer_instance(self.DGGS).SUPPORTED_MODES
+        ):
+            self.skipTest(f"{self.DGGS} has no wholly-within test")
+
+        self._run(POLYGON, self.WITHIN_RES, "-m", "within", "-id", POLYGON[2])
+        cut = pd.read_parquet(self.output_path)
+        self.assertGreater(len(cut), 0)
+        with tempfile.TemporaryDirectory() as d:
+            common.index(
+                self.DGGS,
+                POLYGON[0],
+                f"{d}/uncut.pq",
+                int(self.WITHIN_RES),
+                None,
+                False,
+                1,
+                cut_threshold=0.0,
+                id_field=POLYGON[2],
+                layer=POLYGON[1],
+                mode="within",
+            )
+            uncut = pd.read_parquet(f"{d}/uncut.pq")
+        self.assertEqual(
+            set(zip(cut.index, cut[POLYGON[2]], strict=True)),
+            set(zip(uncut.index, uncut[POLYGON[2]], strict=True)),
+        )
+
     def test_compaction(self):
         self._run(POLYGON, self.POLYGON_RES, "-co", "-id", POLYGON[2])
         self._assert_output(self.POLYGON_RES, id_col=POLYGON[2], compact=True)
+
+    def test_mode_intersects(self):
+        """
+        CLI wiring for -m/--mode, end to end. The mode's own contract is
+        pinned per backend in containment_mode.py; what this adds is that
+        the flag survives the trip through the process pool to polyfill,
+        where a mode set on the CLI but dropped in the pipeline would
+        otherwise pass every test by quietly indexing in centre mode.
+        """
+        self._run(POLYGON, self.POLYGON_RES, "-m", "intersects")
+        self._assert_output(self.POLYGON_RES)
+        intersects = set(pd.read_parquet(self.output_path).index)
+
+        import tempfile
+
+        from vector2dggs import common
+
+        with tempfile.TemporaryDirectory() as d:
+            common.index(
+                self.DGGS,
+                POLYGON[0],
+                f"{d}/centre.pq",
+                int(self.POLYGON_RES),
+                None,
+                False,
+                1,
+                layer=POLYGON[1],
+            )
+            centre = set(pd.read_parquet(f"{d}/centre.pq").index)
+        self.assertLess(centre, intersects)
 
     def test_geo_point(self):
         self._run(POLYGON, self.POLYGON_RES, "--geo", "point")
@@ -219,6 +338,7 @@ class TestH3(RunthroughScenarios, TestRunthrough):
     COMMAND = staticmethod(h3)
     POLYGON_RES = "8"
     LINE_RES = "10"
+    WITHIN_RES = "12"
 
 
 class TestS2(RunthroughScenarios, TestRunthrough):
@@ -226,6 +346,7 @@ class TestS2(RunthroughScenarios, TestRunthrough):
     COMMAND = staticmethod(s2)
     POLYGON_RES = "13"
     LINE_RES = "13"
+    WITHIN_RES = "16"
 
 
 class TestA5(RunthroughScenarios, TestRunthrough):
@@ -233,6 +354,7 @@ class TestA5(RunthroughScenarios, TestRunthrough):
     COMMAND = staticmethod(a5)
     POLYGON_RES = "17"
     LINE_RES = "17"
+    WITHIN_RES = "17"
 
 
 class TestRHP(RunthroughScenarios, TestRunthrough):
@@ -240,6 +362,7 @@ class TestRHP(RunthroughScenarios, TestRunthrough):
     COMMAND = staticmethod(rhp)
     POLYGON_RES = "8"
     LINE_RES = "8"
+    WITHIN_RES = "11"
 
 
 class TestGeohash(RunthroughScenarios, TestRunthrough):
@@ -247,3 +370,4 @@ class TestGeohash(RunthroughScenarios, TestRunthrough):
     COMMAND = staticmethod(geohash)
     POLYGON_RES = "6"
     LINE_RES = "6"
+    WITHIN_RES = "8"

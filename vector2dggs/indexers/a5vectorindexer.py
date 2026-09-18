@@ -6,7 +6,15 @@ import pandas as pd
 import pyarrow as pa
 from shapely.geometry import Point, Polygon
 
+import vector2dggs.constants as const
 from vector2dggs.indexers.vectorindexer import VectorIndexer
+
+# pya5's containment vocabulary (a5.polygon_to_cells' options). A5 has no
+# wholly-within test, hence no WITHIN here or in SUPPORTED_MODES.
+_CONTAIN = {
+    const.ContainmentMode.CENTRE: "center",
+    const.ContainmentMode.INTERSECTS: "overlapping",
+}
 
 
 def _as_u64(cell: str | int) -> int:
@@ -29,18 +37,22 @@ class A5VectorIndexer(VectorIndexer[str | int]):
 
     GEODESIC_POLYFILL = True
     CELL_ARROW_TYPE: pa.DataType = pa.uint64()
+    SUPPORTED_MODES = frozenset(_CONTAIN)
 
     @staticmethod
     def cells_to_string(cells: Iterable[str | int]) -> list[str]:
         return [a5.u64_to_hex(int(c)) for c in cells]
 
-    @staticmethod
-    def _polyfill_polygon(geom, resolution: int) -> list:
+    def _polyfill_polygon(self, geom, resolution: int) -> list:
         interiors = [i.coords for i in geom.interiors]
         return list(
             set(
                 a5.uncompact(
-                    a5.polygon_to_cells([geom.exterior.coords, *interiors], resolution),
+                    a5.polygon_to_cells(
+                        [geom.exterior.coords, *interiors],
+                        resolution,
+                        {"containment": _CONTAIN[self.mode]},
+                    ),
                     resolution,
                 )
             )

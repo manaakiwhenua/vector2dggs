@@ -72,6 +72,14 @@ with contextlib.suppress(ImportError):
 with contextlib.suppress(ImportError):
     from .classes.common_units import TestDefaultThreads as TestDefaultThreads
 with contextlib.suppress(ImportError):
+    from .classes.common_units import (
+        TestDropDuplicateCells as TestDropDuplicateCells,
+    )
+with contextlib.suppress(ImportError):
+    from .classes.common_units import (
+        TestMergePartitionFilesDeduplication as TestMergePartitionFilesDeduplication,
+    )
+with contextlib.suppress(ImportError):
     from .classes.common_units import TestDropCondition as TestDropCondition
 with contextlib.suppress(ImportError):
     from .classes.common_units import TestFidColumnIdField as TestFidColumnIdField
@@ -108,6 +116,30 @@ with contextlib.suppress(ImportError):
         TestCompactionEmptyPartition as TestCompactionEmptyPartition,
     )
 with contextlib.suppress(ImportError):
+    from .classes.containment_mode import (
+        TestA5ContainmentMode as TestA5ContainmentMode,
+    )
+with contextlib.suppress(ImportError):
+    from .classes.containment_mode import (
+        TestA5WithinUnsupported as TestA5WithinUnsupported,
+    )
+with contextlib.suppress(ImportError):
+    from .classes.containment_mode import (
+        TestGeohashContainmentMode as TestGeohashContainmentMode,
+    )
+with contextlib.suppress(ImportError):
+    from .classes.containment_mode import (
+        TestH3ContainmentMode as TestH3ContainmentMode,
+    )
+with contextlib.suppress(ImportError):
+    from .classes.containment_mode import (
+        TestRHPContainmentMode as TestRHPContainmentMode,
+    )
+with contextlib.suppress(ImportError):
+    from .classes.containment_mode import (
+        TestS2ContainmentMode as TestS2ContainmentMode,
+    )
+with contextlib.suppress(ImportError):
     from .classes.errors import TestErrors as TestErrors
 with contextlib.suppress(ImportError):
     from .classes.errors import (
@@ -126,6 +158,16 @@ with contextlib.suppress(ImportError):
     from .classes.input_dispatch import TestInputDispatch as TestInputDispatch
 with contextlib.suppress(ImportError):
     from .classes.katana import TestKatana as TestKatana
+with contextlib.suppress(ImportError):
+    from .classes.line_cover import TestLineCover as TestLineCover
+with contextlib.suppress(ImportError):
+    from .classes.line_cover import (
+        TestWithinIsIntersectsMinusCover as TestWithinIsIntersectsMinusCover,
+    )
+with contextlib.suppress(ImportError):
+    from .classes.line_cover import (
+        TestH3CoverAgainstH3 as TestH3CoverAgainstH3,
+    )
 with contextlib.suppress(ImportError):
     from .classes.linetrace import TestEmptyTraces as TestEmptyTraces
 with contextlib.suppress(ImportError):

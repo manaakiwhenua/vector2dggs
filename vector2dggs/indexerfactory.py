@@ -1,5 +1,6 @@
 from importlib import import_module
 
+import vector2dggs.constants as const
 from vector2dggs.indexers import vectorindexer
 
 INDEXER_LOOKUP: dict[str, tuple[str, str]] = {
@@ -11,7 +12,9 @@ INDEXER_LOOKUP: dict[str, tuple[str, str]] = {
 }
 
 
-def indexer_instance(dggs: str) -> vectorindexer.VectorIndexer:
+def indexer_instance(
+    dggs: str, mode: str = const.ContainmentMode.CENTRE.value
+) -> vectorindexer.VectorIndexer:
     try:
         module_name, class_name = INDEXER_LOOKUP[dggs]
     except KeyError as e:
@@ -28,4 +31,4 @@ def indexer_instance(dggs: str) -> vectorindexer.VectorIndexer:
             f"(or 'vector2dggs[all]')."
         ) from e
     indexer: type[vectorindexer.VectorIndexer] = getattr(module, class_name)
-    return indexer(dggs)
+    return indexer(dggs, mode)

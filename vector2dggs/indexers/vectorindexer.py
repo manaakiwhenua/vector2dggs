@@ -6,13 +6,22 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import pyarrow as pa
-from shapely.geometry import Point, Polygon
+import shapely
+from shapely.geometry import LineString, Point, Polygon
+
+import vector2dggs.constants as const
 
 # Unconstrained (not TypeVar("CellId", str, int)), so a subclass genuinely
 # accepting either form per-call (e.g. A5, which also reads back its own
 # string output as a convenience) can bind VectorIndexer[str | int] - a
 # union - which a constrained TypeVar disallows as a binding.
 CellId = TypeVar("CellId")
+
+
+class ContainmentModeError(ValueError):
+    """Raised when a containment mode names one the backend cannot express."""
+
+    pass
 
 
 class VectorIndexer(ABC, Generic[CellId]):
@@ -23,10 +32,12 @@ class VectorIndexer(ABC, Generic[CellId]):
     back its own string output as a convenience (see A5VectorIndexer).
     """
 
-    # Whether this backend's polyfill does its point-in-polygon containment
-    # test geodesically (on the sphere) rather than on planar coordinates.
-    # A geodesic polyfill indexes antimeridian-crossing geometries correctly
-    # whether or not they've been pre-split; a planar one does not.
+    # Whether this backend's polyfill resolves an antimeridian-crossing
+    # geometry itself, so the pipeline need not pre-split one.
+    #
+    # Despite the name, not a claim that containment is decided on the
+    # sphere: H3 decides it in longitude/latitude yet still handles the
+    # antimeridian. Only S2 and A5 read edges as great-circle arcs.
     GEODESIC_POLYFILL: bool = False
 
     # This backend's native cell-id form, worked in unconditionally
@@ -37,8 +48,21 @@ class VectorIndexer(ABC, Generic[CellId]):
     # boundary instead of the default one-time string conversion there.
     CELL_ARROW_TYPE: pa.DataType = pa.string()
 
-    def __init__(self, dggs: str):
+    # Containment modes (const.ContainmentMode) this backend's polygon fill
+    # can express; one its library cannot is rejected by common.check_mode
+    # rather than silently substituted. Only polygon filling varies, so
+    # linestring and point indexing are identical in every mode.
+    SUPPORTED_MODES: frozenset[const.ContainmentMode] = frozenset(const.ContainmentMode)
+
+    def __init__(
+        self,
+        dggs: str,
+        mode: str = const.ContainmentMode.CENTRE.value,
+    ):
         self.dggs = dggs
+        # Not validated here: an indexer is also constructed just to read
+        # SUPPORTED_MODES off it. common.check_mode does the rejecting.
+        self.mode = const.ContainmentMode(mode)
 
     @staticmethod
     def cells_to_string(cells: Iterable[CellId]) -> list[str]:
@@ -50,11 +74,31 @@ class VectorIndexer(ABC, Generic[CellId]):
         """
         return [str(c) for c in cells]
 
+    def check_mode(self, mode: const.ContainmentMode) -> None:
+        """
+        Reject a mode this backend cannot express, naming the alternatives.
+
+        Worth stating rather than trusting a library to complain: pya5
+        accepts an unrecognised containment value and silently applies
+        centre containment, so asking for one a backend does not have can
+        otherwise return a plausible answer to a different question.
+        """
+        if mode not in self.SUPPORTED_MODES:
+            available = ", ".join(sorted(m.value for m in self.SUPPORTED_MODES))
+            raise ContainmentModeError(
+                f"--mode {mode.value} is not supported for '{self.dggs}': its "
+                f"library offers no equivalent test. Available: {available}."
+            )
+
     def polyfill(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
         """
         Splits df by geometry type, dispatches each non-empty subset to the
         corresponding _polyfill_* implementation, and concatenates the results.
         """
+        # guards the library call itself, not just the CLI: reached through
+        # the Python API, an unsupported mode would otherwise surface as a
+        # KeyError from a backend's containment lookup
+        self.check_mode(self.mode)
         parts = []
 
         df_polygon = df[df.geom_type == "Polygon"]
@@ -129,6 +173,73 @@ class VectorIndexer(ABC, Generic[CellId]):
     @staticmethod
     @abstractmethod
     def children_at_res(cell: CellId, target_res: int) -> Iterable[CellId]: ...
+
+    def _cell_at(self, lon: float, lat: float, resolution: int) -> CellId:
+        """
+        The cell containing a point. Only _cover_segment calls it.
+        """
+        raise NotImplementedError
+
+    def _neighbours(self, cell: CellId) -> Iterable[CellId]:
+        """
+        The cells adjoining one cell, at its own resolution. Must include
+        vertex-only neighbours, or _cover_segment's walk dead-ends where a
+        line crosses a point at which three or more cells meet.
+        """
+        raise NotImplementedError
+
+    def _cover_line(self, geom, resolution: int) -> list[CellId]:
+        """
+        Every cell a line passes through, for backends whose library has
+        no cover of its own (S2 and rHEALPix do, and override _linetrace).
+
+        Not a path: a route of adjacent cells joining the line's ends is
+        free to step through a cell the line never enters and to skip one
+        it merely clips.
+        """
+        cells: set[CellId] = set()
+        coords = [c[:2] for c in geom.coords]
+        for start, end in zip(coords[:-1], coords[1:], strict=True):
+            cells |= self._cover_segment(LineString([start, end]), start, resolution)
+        return list(cells)
+
+    def _cover_segment(
+        self, segment: LineString, start: tuple[float, float], resolution: int
+    ) -> set[CellId]:
+        """
+        Flood fill from the cell holding the segment's first point, keeping
+        cells the segment meets and refusing to spread through those it
+        does not.
+
+        Complete because the cells a continuous curve passes through are
+        connected under cell adjacency; bounded because the fill dies out
+        one cell either side of the line, so it costs the line's length
+        rather than the area it may enclose.
+        """
+        seed = self._cell_at(start[0], start[1], resolution)
+        # holds the segment's first point, so it needs no test - and must
+        # survive one a point exactly on a cell boundary could fail
+        found: set[CellId] = {seed}
+        seen: set[CellId] = {seed}
+        frontier = [seed]
+        while frontier:
+            # a layer at a time, so the geometry work batches: building
+            # cell polygons one by one costs several times the predicate
+            # itself, and both vectorise
+            candidates = []
+            for cell in frontier:
+                for neighbour in self._neighbours(cell):
+                    if neighbour not in seen:
+                        seen.add(neighbour)
+                        candidates.append(neighbour)
+            if not candidates:
+                break
+            hits = shapely.intersects(
+                np.asarray(self.cells_to_polygons(candidates), dtype=object), segment
+            )
+            frontier = [c for c, hit in zip(candidates, hits, strict=True) if hit]
+            found.update(frontier)
+        return found
 
     def _geo_to_cells(
         self, df: gpd.GeoDataFrame, resolution: int, cell_fn, geom_col: str

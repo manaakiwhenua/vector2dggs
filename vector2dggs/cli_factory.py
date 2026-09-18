@@ -16,6 +16,7 @@ def make_dggs_command(
     min_res: int,
     max_res: int,
     int_cells: bool = False,
+    modes: tuple[str, ...] = const.CONTAINMENT_MODES,
 ) -> click.Command:
     res_choices = list(map(str, range(min_res, max_res + 1)))
 
@@ -129,6 +130,28 @@ def make_dggs_command(
         nargs=1,
     )
     @click.option(
+        "-m",
+        "--mode",
+        required=False,
+        default=const.DEFAULTS["mode"],
+        type=click.Choice(modes),
+        help=(
+            "How a polygon's cells are chosen, named for the DE-9IM predicate "
+            "each applies: 'centre' takes each cell whose centre point falls "
+            "inside the feature; 'intersects' takes every cell whose area meets "
+            "the feature, covering it completely, so a feature smaller than a "
+            "cell still produces one (rasterio's all_touched); 'within' takes "
+            "only cells whose area lies wholly inside it."
+            + (
+                ""
+                if const.ContainmentMode.WITHIN.value in modes
+                else f" ('within' is unavailable for {display_name}.)"
+            )
+            + " Linestrings and points are indexed the same way in every mode."
+        ),
+        nargs=1,
+    )
+    @click.option(
         "--tempdir",
         default=const.DEFAULTS["tempdir"],
         show_default="system temp dir",
@@ -157,6 +180,7 @@ def make_dggs_command(
         geom_col: str,
         geo: str,
         cell_id: str,
+        mode: str,
         tempdir: str | Path,
         compact: bool,
         overwrite: bool,
@@ -168,6 +192,7 @@ def make_dggs_command(
 
         geo = const.GeoOutputMode(geo).value
         cell_id = const.CellIdMode(cell_id).value
+        mode = const.ContainmentMode(mode).value
 
         con, vector_input = common.db_conn_and_input_path(vector_input)
         layer = common.resolve_layer(vector_input, layer, con)
@@ -193,6 +218,7 @@ def make_dggs_command(
             compact=compact,
             keep_attribute=keep_attribute,
             cell_id=cell_id,
+            mode=mode,
         )
 
     command.help = (
