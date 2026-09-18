@@ -19,7 +19,7 @@ Currently this tool supports the following DGGSs:
 
 Contributions (especially for other DGGSs), suggestions, bug reports and strongly worded letters are all welcome.
 
-![Example use case for vector2dggs, showing parcels indexed to a high H3 resolution](./docs/imgs/vector2dggs-example.png "Example use case for vector2dggs, showing parcels indexed to a high H3 resolution")
+![Land cover polygons indexed to H3 resolutions 10 and 12, with the hive-partitioned Parquet output they produce](./docs/imgs/indexing-example.png "Land cover polygons indexed to H3 resolutions 10 and 12, with the hive-partitioned Parquet output they produce")
 
 ## Installation
 
@@ -149,6 +149,10 @@ Filling a polygon means deciding, cell by cell, whether the cell belongs to the 
 
 The modes are nested: `within` ⊆ `centre` ⊆ `intersects`. Only polygons are affected — a traced line already covers every cell it meets, and a point has exactly one cell.
 
+![The three containment modes compared across H3, S2, A5, rHEALPix and Geohash on the same land cover polygons](./docs/imgs/containment-modes.gif "The three containment modes compared across H3, S2, A5, rHEALPix and Geohash on the same land cover polygons")
+
+Each backend applies the same rule to its own cells, so the three modes differ in the same way everywhere: `centre` tiles the plane, `intersects` spills past the feature's edge and gives a shared edge's cells to both neighbours, and `within` opens a gap along every boundary. (The same animation is also available as [an MP4](./docs/imgs/containment-modes.mp4), which GitHub will not play inline but which is crisper for slides.)
+
 `within` is computed as the intersecting cells minus the cells the feature's own boundary passes through, rather than asked of the backend directly. The two are equivalent for a whole feature, but only the first survives bisection: vector2dggs cuts large polygons into pieces to bound memory, and a cell wholly inside a feature need not be wholly inside any single piece the cut lines cross. Both terms of the subtraction are taken before cutting, so neither depends on where the cuts fall.
 
 `within` is unavailable for A5, whose library (`pya5`) offers no wholly-within test; `vector2dggs a5 -m within` is rejected rather than silently indexed some other way.
@@ -174,9 +178,11 @@ The Apache Parquet output is indexed by an ID column (which you can specify), so
 
 ## Compaction
 
-Compaction is supported with the `-co/--compact` argument. The result respects overlapping polygons by considering each feature independently. (In the below example output for rHEALPix, cells are shown with opacity; overlap is visible where there is a darker shade.) This does mean that the index of the result is not necessarily unique (unless your input is a vector _coverage_, i.e. it does not have overlaps.)
+Compaction is supported with the `-co/--compact` argument. A complete set of sibling cells is replaced by their parent, as far up as the partition's parent resolution, so a feature's interior coarsens while its boundary stays at the target resolution. The coverage is unchanged; only the row count falls.
 
-![Example of compaction of overlapping vector features with the rHEALPix DGGS](docs/imgs/rhp-compaction-example.png)
+![The same land cover indexed to rHEALPix resolution 13, before and after compaction](docs/imgs/compaction-example.png "The same land cover indexed to rHEALPix resolution 13, before and after compaction")
+
+Compaction respects overlapping polygons by considering each feature independently. This does mean that the index of the result is not necessarily unique (unless your input is a vector _coverage_, i.e. it does not have overlaps — as the example above is, so each of its cells belongs to exactly one feature). Where features do overlap, a cell covered by two of them appears once per feature.
 
 ### For development
 
