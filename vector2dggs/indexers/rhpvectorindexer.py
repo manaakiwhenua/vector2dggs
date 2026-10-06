@@ -17,7 +17,7 @@ from rhealpixdggs.rhp_wrappers import (
 from shapely.geometry import Point, Polygon
 
 import vector2dggs.constants as const
-from vector2dggs.indexers.vectorindexer import VectorIndexer
+from vector2dggs.indexers.vectorindexer import InvalidGeometryError, VectorIndexer
 
 # rhealpixdggs's containment vocabulary (rhp_wrappers.polyfill_array)
 _CONTAIN = {
@@ -73,8 +73,17 @@ class RHPVectorIndexer(VectorIndexer[str]):
             containment=_CONTAIN[self.mode],
             min_res=RHPVectorIndexer._fill_min_res(geom, resolution),
         )
-        # an array's truthiness is ambiguous, unlike a set's - test for None
-        return [] if cells is None else cells.tolist()
+        # None, not an empty array, is rhealpixdggs refusing a malformed
+        # geometry: one shapely holds invalid, or with no area. Said only
+        # under verbose=True, so it would otherwise read as "no cells".
+        # (An array's truthiness is ambiguous, unlike a set's - test for None.)
+        if cells is None:
+            raise InvalidGeometryError(
+                f"rHEALPix rejects the polygon as {shapely.is_valid_reason(geom)}"
+                if not geom.is_valid
+                else "rHEALPix rejects the polygon as having no area"
+            )
+        return cells.tolist()
 
     @staticmethod
     def _linetrace(geom, resolution: int) -> list:

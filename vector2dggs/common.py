@@ -1,3 +1,4 @@
+import contextlib
 import json
 import logging
 import math
@@ -37,7 +38,7 @@ from vector2dggs.indexers.vectorindexer import (
 )
 from vector2dggs.indexers.vectorindexer import VectorIndexer
 
-from . import katana
+from . import katana, spikes
 
 resource: ModuleType | None
 try:
@@ -861,7 +862,7 @@ def _polyfill(
         return np.array([])
 
     # DGGS specific conversion
-    df = indexer.polyfill(df, resolution)
+    df = indexer.polyfill(df, resolution, id_col=id_col)
 
     if df.empty:
         # e.g. features smaller than a cell at this resolution
@@ -1144,6 +1145,40 @@ def _prepare_dataframe(
     return df
 
 
+def _drop_spikes(df: gpd.GeoDataFrame, tolerance_m: float) -> gpd.GeoDataFrame:
+    """
+    Remove spikes narrower than tolerance_m from every polygonal feature
+    (see spikes.drop_spikes), logging each feature changed.
+
+    Done on whole features, before bisection could cut through a sliver,
+    and before _add_boundary_rows, so that WITHIN's boundary is the one
+    actually filled. Coordinates are still in the input's own CRS.
+    """
+    polygonal = df.geometry.geom_type.isin(("Polygon", "MultiPolygon")).to_numpy()
+    if not polygonal.any():
+        return df
+    geographic = not df.crs.is_projected
+    metres_per_unit = _metres_per_unit(df.crs)
+    geometry = df.geometry.copy()
+    features, vertices = 0, 0
+    for pos in np.flatnonzero(polygonal):
+        cleaned, removed = spikes.drop_spikes(
+            geometry.iloc[pos], tolerance_m, geographic, metres_per_unit
+        )
+        if removed:
+            LOGGER.debug(
+                "Feature %s: removed %d spike vertices", df.index[pos], removed
+            )
+            geometry.iloc[pos] = cleaned
+            features += 1
+            vertices += removed
+    if features:
+        LOGGER.info(
+            "--drop-spikes removed %d vertices from %d features", vertices, features
+        )
+    return df.set_geometry(geometry)
+
+
 def _add_boundary_rows(df: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """
     Append each polygonal feature's boundary as its own linework row,
@@ -1327,6 +1362,25 @@ def _normalise_longitudes(df: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, bool]
     return df, bool(straddle.any())
 
 
+def _remove_repeated_points(geoms: np.ndarray) -> np.ndarray:
+    """
+    shapely.remove_repeated_points at const.REPEATED_POINT_TOLERANCE_DEG,
+    except that a polygon smaller than the tolerance (whose rings would
+    collapse, which GEOS refuses) is kept as it is: one geometry like that,
+    e.g. a sliver left by bisection, must not fail the whole batch.
+    """
+    try:
+        return shapely.remove_repeated_points(geoms, const.REPEATED_POINT_TOLERANCE_DEG)
+    except shapely.errors.GEOSException:
+        out = geoms.copy()
+        for i, geom in enumerate(geoms):
+            with contextlib.suppress(shapely.errors.GEOSException):
+                out[i] = shapely.remove_repeated_points(
+                    geom, const.REPEATED_POINT_TOLERANCE_DEG
+                )
+        return out
+
+
 def _clean_geometries(df: gpd.GeoDataFrame, indexer: VectorIndexer) -> gpd.GeoDataFrame:
     LOGGER.debug("Exploding geometry collections and multipolygons")
     # Correct antimeridian-crossing artifacts when the source coordinates were
@@ -1334,6 +1388,11 @@ def _clean_geometries(df: gpd.GeoDataFrame, indexer: VectorIndexer) -> gpd.GeoDa
     # backends whose polyfill isn't already geodesic.
     was_projected = df.crs is not None and not df.crs.is_geographic
     df = df.to_crs(4326)
+    # Near-duplicate vertices left by reprojection (or bisection) make a
+    # ring self-intersecting for shapely, so rHEALPix refuses it, and an
+    # invalid loop for S2 (#224). Merging them changes nothing a geometry
+    # means; points are unaffected.
+    df["geometry"] = _remove_repeated_points(df.geometry.values)
     df, had_unwrapped_crossing = _normalise_longitudes(df)
     if (was_projected or had_unwrapped_crossing) and not indexer.GEODESIC_POLYFILL:
         LOGGER.debug("Correcting antimeridian-crossing geometries")
@@ -1472,6 +1531,7 @@ def index(
     keep_attribute: tuple[str, ...] = (),
     cell_id: str = const.CellIdMode.STRING.value,
     mode: str = const.ContainmentMode.CENTRE.value,
+    drop_spikes: float | None = None,
 ) -> Path | str:
     """
     Performs multi-threaded DGGS indexing on geometries (including multipart and collections).
@@ -1506,6 +1566,7 @@ def index(
             keep_attribute,
             cell_id,
             mode,
+            drop_spikes,
         )
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
@@ -1532,6 +1593,7 @@ def _index(
     keep_attribute: tuple[str, ...] = (),
     cell_id: str = const.CellIdMode.STRING.value,
     mode: str = const.ContainmentMode.CENTRE.value,
+    drop_spikes: float | None = None,
 ) -> None:
     id_field = id_field or resolve_default_id_field(input_file, layer, con)
     indexer = idxfactory.indexer_instance(dggs, mode)
@@ -1610,6 +1672,8 @@ def _index(
                     * const.DGGS_CELL_AREA_M2_BY_RES[dggs](resolution) ** 0.5
                     / _metres_per_unit(batch.crs)
                 )
+            if drop_spikes:
+                batch = _drop_spikes(batch, drop_spikes)
             if subtracting:
                 batch = _add_boundary_rows(batch)
             batch = _run_bisection(
@@ -1652,7 +1716,8 @@ def _index(
         if not any(d.is_dir() for d in Path(output_directory).iterdir()):
             LOGGER.warning(
                 "No features were indexed (resolution %s may be too coarse for "
-                "the input); writing an empty dataset.",
+                "the input, or its geometries were skipped as invalid: see any "
+                "warnings above); writing an empty dataset.",
                 resolution,
             )
             if template is not None:
@@ -1688,7 +1753,9 @@ def _index(
         dropped = features_in - indexed_ids
         if dropped:
             LOGGER.warning(
-                "%d of %d features produced no cells at resolution %s and were omitted%s",
+                "%d of %d features produced no cells at resolution %s and were "
+                "omitted: too small for it%s, or skipped as invalid (see any "
+                "warnings above)",
                 len(dropped),
                 len(features_in),
                 resolution,

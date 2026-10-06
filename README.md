@@ -55,6 +55,9 @@ vector2dggs <dggs> [OPTIONS] VECTOR_INPUT OUTPUT_DIRECTORY
 - `--geo`: plain Parquet by default; `point` or `polygon` writes GeoParquet (v1.1.0) cell geometries instead.
 - `-m`/`--mode`: which of a polygon's cells are indexed. See [Containment modes](#containment-modes) below.
 - `--cell-id`: `string` (default) or `uint64`. DGGS with a native integer cell form (A5, H3, S2) can write cell IDs as unsigned 64-bit integers instead of text — useful where downstream tools take integer cell IDs directly (e.g. DuckDB's `h3` extension). Cell IDs are worked in the native form internally regardless of this flag; it only controls the final output rendering. String-only DGGS (rHEALPix, Geohash) reject `--cell-id uint64`.
+- `--drop-spikes METRES`: off by default. Removes polygon spikes — places where a ring runs out to a vertex and back along almost the same line — narrower than the given width, before indexing. A spike encloses practically nothing, but S2 reads each edge as a great-circle arc, which bows away from the straight line between its ends; a spike returning within that bow makes the ring cross itself on the sphere, though it is valid to a planar reading.
+
+A polygon a backend cannot index correctly is skipped with a warning naming its feature, rather than indexed wrongly: S2 refuses one whose edges cross as great-circle arcs (a spike, or a narrow inlet close to a long edge, whose arc bows further), and rHEALPix one that is invalid to shapely. Near-duplicate vertices, such as reprojection leaves, are merged first, which changes nothing a geometry means. If the feature has other parts (multipart, or cut by bisection), those are still indexed.
 
 If nothing is indexed — usually because the resolution is too coarse for the input — the run warns and writes an empty dataset: one zero-row file carrying the schema the run would have produced, so a reader sees an empty layer rather than an unreadable directory.
 
@@ -123,6 +126,15 @@ Options:
                                   wholly inside it. Linestrings and points are
                                   indexed the same way in every mode.  [default:
                                   centre]
+  --drop-spikes METRES            Remove polygon spikes - where a ring runs out
+                                  and back along almost the same line - narrower
+                                  than this many metres, before indexing. Off by
+                                  default, as it changes the input geometry. A
+                                  spike is harmless to a planar reading of a
+                                  polygon, but where edges are read as great-
+                                  circle arcs (S2) the ring can cross itself,
+                                  and the polygon is then skipped with a
+                                  warning.  [x>0]
   --tempdir PATH                  Temporary data is created during the execution
                                   of this program. This parameter allows you to
                                   control where this data will be written.

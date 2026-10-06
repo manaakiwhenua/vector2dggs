@@ -15,6 +15,11 @@ EARTH_MEAN_RADIUS_M = 6_371_008.8
 # downstream of common._clean_geometries).
 METRES_PER_DEGREE = radians(1) * EARTH_MEAN_RADIUS_M
 
+# Vertices closer than this (degrees, about 0.1 mm) are treated as one.
+# Reprojection leaves near-duplicates 1e-14 degrees apart, which make a
+# ring self-intersecting for shapely or an invalid loop for S2 (#224).
+REPEATED_POINT_TOLERANCE_DEG = 1e-9
+
 # max_open_files per pq.write_to_dataset call. Rows are written sorted by
 # partition column, so a small pool cannot fragment output; a small fixed
 # value keeps total FD use safe under any concurrency and rlimit.
@@ -322,4 +327,5 @@ DEFAULTS = {
     "geo": GeoOutputMode.NONE.value,
     "cell_id": CellIdMode.STRING.value,
     "mode": ContainmentMode.CENTRE.value,
+    "drop_spikes": None,
 }
