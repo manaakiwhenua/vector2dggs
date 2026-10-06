@@ -1,3 +1,4 @@
+import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 from typing import Generic, TypeVar
@@ -11,6 +12,11 @@ from shapely.geometry import LineString, Point, Polygon
 
 import vector2dggs.constants as const
 
+# The CLI's own logger (common.LOGGER), named rather than imported: common
+# imports this module. Configured by click_log in every process that imports
+# common, pool workers included, so warnings raised mid-fill reach the user.
+LOGGER = logging.getLogger("vector2dggs.common")
+
 # Unconstrained (not TypeVar("CellId", str, int)), so a subclass genuinely
 # accepting either form per-call (e.g. A5, which also reads back its own
 # string output as a convenience) can bind VectorIndexer[str | int] - a
@@ -20,6 +26,17 @@ CellId = TypeVar("CellId")
 
 class ContainmentModeError(ValueError):
     """Raised when a containment mode names one the backend cannot express."""
+
+    pass
+
+
+class InvalidGeometryError(ValueError):
+    """
+    Raised by a backend's polygon fill for a geometry it cannot index
+    correctly, rather than returning a wrong answer for it (S2 covering the
+    whole sphere, rHEALPix silently returning nothing). _geo_to_cells
+    skips the geometry with a warning naming its feature.
+    """
 
     pass
 
@@ -63,6 +80,8 @@ class VectorIndexer(ABC, Generic[CellId]):
         # Not validated here: an indexer is also constructed just to read
         # SUPPORTED_MODES off it. common.check_mode does the rejecting.
         self.mode = const.ContainmentMode(mode)
+        # set per call by polyfill(); read by _cells_or_skip
+        self._id_col: str | None = None
 
     @staticmethod
     def cells_to_string(cells: Iterable[CellId]) -> list[str]:
@@ -90,11 +109,17 @@ class VectorIndexer(ABC, Generic[CellId]):
                 f"library offers no equivalent test. Available: {available}."
             )
 
-    def polyfill(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
+    def polyfill(
+        self, df: gpd.GeoDataFrame, resolution: int, id_col: str | None = None
+    ) -> pd.DataFrame:
         """
         Splits df by geometry type, dispatches each non-empty subset to the
         corresponding _polyfill_* implementation, and concatenates the results.
+
+        id_col, if given, names the column holding each row's feature id,
+        so a geometry skipped as invalid can be reported by its feature.
         """
+        self._id_col = id_col
         # guards the library call itself, not just the CLI: reached through
         # the Python API, an unsupported mode would otherwise surface as a
         # KeyError from a backend's containment lookup
@@ -246,7 +271,10 @@ class VectorIndexer(ABC, Generic[CellId]):
     ) -> pd.DataFrame:
         result = (
             df.assign(
-                __cells__=df[geom_col].apply(lambda geom: cell_fn(geom, resolution))
+                __cells__=[
+                    self._cells_or_skip(cell_fn, geom, resolution, df, pos)
+                    for pos, geom in enumerate(df[geom_col])
+                ]
             )
             .drop(columns=[geom_col])
             .explode("__cells__")
@@ -258,6 +286,35 @@ class VectorIndexer(ABC, Generic[CellId]):
             # from scratch, so it's where the native dtype has to be pinned.
             result = result.astype({"__cells__": "uint64"})
         return result.set_index("__cells__").rename_axis(None)
+
+    def _cells_or_skip(self, cell_fn, geom, resolution: int, df, pos: int) -> list:
+        """
+        cell_fn's cells for geom, or none, with a warning, when the backend
+        rejects it as invalid. Warned once per geometry rather than per
+        feature: after bisection a feature's pieces are filled
+        independently, often in different processes, and only the invalid
+        piece is lost, so the rest of the feature may still be indexed.
+        """
+        try:
+            return cell_fn(geom, resolution)
+        except InvalidGeometryError as e:
+            # by position: a frame passed in directly may repeat index labels
+            feature = (
+                df[self._id_col].iloc[pos]
+                if self._id_col in df.columns
+                else df.index[pos]
+            )
+            minx, miny, maxx, maxy = geom.bounds
+            LOGGER.warning(
+                "Feature %s: polygon near (%.6f, %.6f) not indexed: %s. If the "
+                "feature has other parts (multipart, or cut by bisection), "
+                "those were indexed without it.",
+                feature,
+                (minx + maxx) / 2,
+                (miny + maxy) / 2,
+                e,
+            )
+            return []
 
     @staticmethod
     def _enforce_resolution_floor(

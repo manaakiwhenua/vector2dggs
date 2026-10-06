@@ -140,6 +140,22 @@ with contextlib.suppress(ImportError):
         TestS2ContainmentMode as TestS2ContainmentMode,
     )
 with contextlib.suppress(ImportError):
+    from .classes.degenerate_rings import (
+        TestDegenerateRingsPipeline as TestDegenerateRingsPipeline,
+    )
+with contextlib.suppress(ImportError):
+    from .classes.degenerate_rings import TestDropSpikes as TestDropSpikes
+with contextlib.suppress(ImportError):
+    from .classes.degenerate_rings import (
+        TestRHPInvalidGeometry as TestRHPInvalidGeometry,
+    )
+with contextlib.suppress(ImportError):
+    from .classes.degenerate_rings import TestS2DegenerateRings as TestS2DegenerateRings
+with contextlib.suppress(ImportError):
+    from .classes.degenerate_rings import (
+        TestSubToleranceGeometry as TestSubToleranceGeometry,
+    )
+with contextlib.suppress(ImportError):
     from .classes.empty_output import TestEmptyOutput as TestEmptyOutput
 with contextlib.suppress(ImportError):
     from .classes.empty_output import (

@@ -1,14 +1,16 @@
+import math
 from collections.abc import Iterable
 
 import geopandas as gpd
 import pandas as pd
 import pyarrow as pa
 import s2geometry as S2
-from shapely import force_2d
-from shapely.geometry import LineString, Point, Polygon
+from shapely import force_2d, remove_repeated_points
+from shapely.errors import GEOSException
+from shapely.geometry import LinearRing, LineString, Point, Polygon
 
 import vector2dggs.constants as const
-from vector2dggs.indexers.vectorindexer import VectorIndexer
+from vector2dggs.indexers.vectorindexer import InvalidGeometryError, VectorIndexer
 
 
 def _cell_from(cell: str | int) -> S2.S2CellId:
@@ -25,6 +27,31 @@ def _cell_from(cell: str | int) -> S2.S2CellId:
 
 def _cell_id(cell: S2.S2CellId) -> int:
     return cell.id()
+
+
+def _s2_loop(ring: LinearRing) -> S2.S2Loop | None:
+    """
+    A normalised S2Loop for a ring, or None if fewer than three distinct
+    vertices remain.
+
+    S2 forbids duplicate vertices, the closing one included, where a
+    shapely ring repeats its first vertex. Near-duplicates count too:
+    vertices 1e-14 degrees apart (left behind by reprojection) make an
+    invalid loop, which Normalize() cannot orient (#224). Removing them
+    changes nothing the loop means.
+    """
+    try:
+        ring = remove_repeated_points(ring, const.REPEATED_POINT_TOLERANCE_DEG)
+    except GEOSException:  # collapses: GEOS refuses a ring of under 3 points
+        return None
+    vertices = ring.coords[:-1]
+    if len(vertices) < 3:
+        return None
+    loop = S2.S2Loop(
+        [S2.S2LatLng.FromDegrees(lat, lon).ToPoint() for lon, lat in vertices]
+    )
+    loop.Normalize()
+    return loop
 
 
 class S2VectorIndexer(VectorIndexer[str | int]):
@@ -120,30 +147,29 @@ class S2VectorIndexer(VectorIndexer[str | int]):
         Not a part of the interface provided by VectorIndexer.
         """
         geom = force_2d(geom)
-        # Prepare loops: first the exterior loop, then the interior loops
-        loops = []
-        # Exterior ring
-        latlngs = [
-            S2.S2LatLng.FromDegrees(lat, lon) for lon, lat in geom.exterior.coords
-        ]
-        s2loop = S2.S2Loop([latlng.ToPoint() for latlng in latlngs])
-        s2loop.Normalize()
-        loops.append(s2loop)
+        exterior = _s2_loop(geom.exterior)
+        if exterior is None:
+            raise InvalidGeometryError("exterior ring has fewer than 3 vertices")
+        # a hole collapsed to under three vertices encloses nothing
+        holes = [loop for loop in map(_s2_loop, geom.interiors) if loop is not None]
 
-        # Interior rings (polygon holes)
-        for interior in geom.interiors:
-            interior_latlngs = [
-                S2.S2LatLng.FromDegrees(lat, lon) for lon, lat in interior.coords
-            ]
-            s2interior_loop = S2.S2Loop(
-                [latlng.ToPoint() for latlng in interior_latlngs]
-            )
-            s2interior_loop.Normalize()
-            loops.append(s2interior_loop)
-
-        # Build an S2Polygon from the loops
         s2polygon = S2.S2Polygon()
-        s2polygon.InitNested(loops)
+        s2polygon.InitNested([exterior, *holes])
+
+        # Never cover an invalid polygon. A loop whose edges cross on the
+        # sphere has no consistent inside, and Normalize() may then take
+        # its complement: the whole sphere, whose covering at a fine level
+        # exhausts memory (#224). Shapely's validity is no guide, as it
+        # reads edges as straight lines in lon/lat, not great circles: a
+        # ring can be valid in one reading and self-crossing in the other.
+        # The area test is a backstop: Normalize() leaves no valid loop
+        # larger than a hemisphere.
+        if not s2polygon.IsValid() or s2polygon.GetArea() > 2 * math.pi:
+            raise InvalidGeometryError(
+                "S2 rejects the polygon: its edges cross or are degenerate "
+                "when read as great-circle arcs (a spike is one cause, which "
+                "--drop-spikes removes)"
+            )
 
         # Use S2RegionCoverer to get the cell IDs at the specified level
         coverer = S2.S2RegionCoverer()

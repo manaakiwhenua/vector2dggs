@@ -152,6 +152,22 @@ def make_dggs_command(
         nargs=1,
     )
     @click.option(
+        "--drop-spikes",
+        "drop_spikes",
+        required=False,
+        default=const.DEFAULTS["drop_spikes"],
+        type=click.FloatRange(min=0, min_open=True),
+        metavar="METRES",
+        help=(
+            "Remove polygon spikes - where a ring runs out and back along "
+            "almost the same line - narrower than this many metres, before "
+            "indexing. Off by default, as it changes the input geometry. "
+            "A spike is harmless to a planar reading of a polygon, but where "
+            "edges are read as great-circle arcs (S2) the ring can cross "
+            "itself, and the polygon is then skipped with a warning."
+        ),
+    )
+    @click.option(
         "--tempdir",
         default=const.DEFAULTS["tempdir"],
         show_default="system temp dir",
@@ -181,6 +197,7 @@ def make_dggs_command(
         geo: str,
         cell_id: str,
         mode: str,
+        drop_spikes: float | None,
         tempdir: str | Path,
         compact: bool,
         overwrite: bool,
@@ -219,6 +236,7 @@ def make_dggs_command(
             keep_attribute=keep_attribute,
             cell_id=cell_id,
             mode=mode,
+            drop_spikes=drop_spikes,
         )
 
     command.help = (
