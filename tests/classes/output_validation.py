@@ -191,6 +191,23 @@ class TestAttributeSchemaConsistency(TestRunthrough):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 df.to_file(f"{d}/roads.gpkg", layer="roads")
+            # a true OFTBinary field (geopandas writes bytes as TEXT):
+            # a GPKG is SQLite, so add a BLOB column directly
+            import sqlite3
+
+            with sqlite3.connect(f"{d}/roads.gpkg") as sq:
+                # the rtree triggers call SpatiaLite functions plain sqlite3
+                # lacks; this test never uses spatial filtering
+                for (name,) in sq.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'trigger'"
+                    " AND name LIKE 'rtree_roads_%'"
+                ).fetchall():
+                    sq.execute(f"DROP TRIGGER {name}")
+                sq.execute("ALTER TABLE roads ADD COLUMN payload BLOB")
+                sq.execute(
+                    "UPDATE roads SET payload = CAST('P' || fid AS BLOB)"
+                    f" WHERE fid > {n}"
+                )
 
             for compact in (False, True):
                 with (
@@ -208,7 +225,7 @@ class TestAttributeSchemaConsistency(TestRunthrough):
                         False,
                         1,
                         layer="roads",
-                        keep_attribute=("status", "lanes", "oneway"),
+                        keep_attribute=("status", "lanes", "oneway", "payload"),
                         compact=compact,
                     )
                     files = list(Path(out).rglob("*.parquet"))
@@ -219,6 +236,7 @@ class TestAttributeSchemaConsistency(TestRunthrough):
                         ),
                         ("lanes", {"int64"}),
                         ("oneway", {"bool"}),
+                        ("payload", {"binary"}),
                     ):
                         types = {
                             str(pq.read_schema(f).field(column).type) for f in files
