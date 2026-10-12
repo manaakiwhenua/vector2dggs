@@ -234,3 +234,54 @@ class TestAttributeSchemaConsistency(TestRunthrough):
                             .to_pylist()
                         )
                     self.assertEqual(values, {2**53 + 3 + i for i in range(n)})
+
+    def test_list_attribute_passes_through(self):
+        # List-typed fields keep their per-batch typing for now, but must
+        # still flow through the pipeline (nested Arrow dtypes cannot be
+        # rebuilt from staged-file metadata by pandas)
+        import json
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+
+        import vector2dggs.constants as const
+        from vector2dggs import common
+
+        with tempfile.TemporaryDirectory() as d:
+            features = [
+                {
+                    "type": "Feature",
+                    "properties": {"il": None if i < 40 else [1, i]},
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            (174.0 if i < 40 else 10.0) + (i % 40) * 0.01,
+                            -41.0 if i < 40 else 50.0,
+                        ],
+                    },
+                }
+                for i in range(80)
+            ]
+            with open(f"{d}/t.geojson", "w") as fh:
+                json.dump({"type": "FeatureCollection", "features": features}, fh)
+
+            with (
+                mock.patch.object(const, "INGEST_PROBE_ROWS", 10),
+                mock.patch.object(const, "TARGET_BATCH_BYTES", 1),
+            ):
+                common.index(
+                    "h3",
+                    f"{d}/t.geojson",
+                    f"{d}/out.pq",
+                    9,
+                    None,
+                    False,
+                    1,
+                    keep_attribute=("il",),
+                    compact=False,
+                )
+            types = {
+                str(pq.read_schema(f).field("il").type)
+                for f in Path(f"{d}/out.pq").rglob("*.parquet")
+            }
+            self.assertTrue(any(t.startswith("list<") for t in types), types)

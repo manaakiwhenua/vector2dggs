@@ -1155,6 +1155,16 @@ def _read_batches(
             use_arrow=True,
             arrow_to_pandas_kwargs={"types_mapper": pd.ArrowDtype},
         )
+        # list- and struct-typed attributes stay per-batch typed: pandas
+        # cannot rebuild a nested ArrowDtype from staged-file metadata
+        nested = [
+            c
+            for c in batch.columns
+            if isinstance(batch[c].dtype, pd.ArrowDtype)
+            and pa.types.is_nested(batch[c].dtype.pyarrow_dtype)
+        ]
+        if nested:
+            batch = batch.astype(dict.fromkeys(nested, object))
         if id_is_fid:
             batch = batch.rename_axis(id_field).reset_index()
         yield batch
