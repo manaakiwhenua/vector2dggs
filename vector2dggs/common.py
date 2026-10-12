@@ -119,6 +119,30 @@ def check_requested_attributes(
         )
 
 
+def _string_attribute_fields(
+    input_file: Path | str,
+    layer: str | None,
+    con: SQLConnectionType | None,
+) -> frozenset[str]:
+    """
+    Names of the layer's declared string fields. An attribute that is NULL
+    throughout a batch arrives as an object column of None, which pyarrow
+    would type as null rather than string; the declared type decides.
+    """
+    if con is not None and layer:
+        with con.connect() as connection:
+            columns = _db_table(connection, layer).columns
+        return frozenset(
+            c.name for c in columns if isinstance(c.type, sqlalchemy.String)
+        )
+    info = pyogrio.read_info(str(input_file), layer=layer)
+    return frozenset(
+        field
+        for field, ogr_type in zip(info["fields"], info["ogr_types"], strict=True)
+        if ogr_type == "OFTString"
+    )
+
+
 def _fid_column(input_file: Path | str, layer: str | None) -> str | None:
     """
     The name of the file's FID/primary-key slot, e.g. "fid" for a plain
@@ -669,7 +693,7 @@ def _merge_partition_files(
             indexer and id_field and resolution is not None and parent_res is not None
         )
         dggs_col = f"{indexer.dggs}_{resolution:02}"
-        df = table.to_pandas()
+        df = _restore_empty_categories(table.to_pandas())
         df = indexer.compaction(
             df, resolution, list(df.columns), dggs_col, id_field, parent_res
         )
@@ -857,7 +881,7 @@ def _polyfill(
     # it there), so no reset_index() here: the staged file's own index is a
     # meaningless post-explode position, and materialising it would leak a
     # stray "index" column into every output row.
-    df = gpd.read_parquet(pq_in)
+    df = _restore_empty_categories(gpd.read_parquet(pq_in))
     if df.empty:
         return np.array([])
 
@@ -1097,7 +1121,25 @@ def _read_batches(
         rows = _next_batch_rows(batch)
 
 
-def _dictionary_encode_attributes(df: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def _restore_empty_categories(df):
+    """
+    Parquet round-trips an all-NULL string attribute as a categorical with
+    empty object-dtype categories, which pyarrow re-types as Arrow null on
+    the next write; only the declared-string path produces empty
+    categoricals, so give them back their string dtype.
+    """
+    for c in df.columns:
+        dtype = df[c].dtype
+        if isinstance(dtype, pd.CategoricalDtype) and not len(dtype.categories):
+            df[c] = df[c].astype(
+                pd.CategoricalDtype(categories=pd.Index([], dtype="string"))
+            )
+    return df
+
+
+def _dictionary_encode_attributes(
+    df: gpd.GeoDataFrame, string_fields: frozenset[str] = frozenset()
+) -> gpd.GeoDataFrame:
     """
     Cast string attribute columns (object-dtype or pandas' newer StringDtype)
     to pandas' category dtype.
@@ -1115,6 +1157,17 @@ def _dictionary_encode_attributes(df: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     the same categories object.
     """
     geom_col = df.geometry.name
+    # A declared-string column that is NULL throughout this batch is an
+    # object column of None, which fails is_string_dtype
+    declared = [
+        c
+        for c in df.columns
+        if c != geom_col
+        and c in string_fields
+        and not pd.api.types.is_string_dtype(df[c])
+    ]
+    if declared:
+        df = df.astype(dict.fromkeys(declared, "string"))
     string_cols = [
         c for c in df.columns if c != geom_col and pd.api.types.is_string_dtype(df[c])
     ]
@@ -1129,6 +1182,7 @@ def _prepare_dataframe(
     keep_attributes: bool,
     keep_attribute: tuple[str, ...] = (),
     fid_offset: int = 0,
+    string_fields: frozenset[str] = frozenset(),
 ) -> gpd.GeoDataFrame:
     if id_field:
         df = df.set_index(id_field)
@@ -1137,9 +1191,9 @@ def _prepare_dataframe(
         df.index = pd.RangeIndex(fid_offset, fid_offset + len(df), name="fid")
     if keep_attribute:
         df = df.loc[:, [c for c in keep_attribute if c in df.columns] + ["geometry"]]
-        df = _dictionary_encode_attributes(df)
+        df = _dictionary_encode_attributes(df, string_fields)
     elif keep_attributes:
-        df = _dictionary_encode_attributes(df)
+        df = _dictionary_encode_attributes(df, string_fields)
     else:
         df = df.loc[:, ["geometry"]]
     return df
@@ -1634,6 +1688,11 @@ def _index(
     )
 
     features_in: set = set()
+    string_fields = (
+        _string_attribute_fields(input_file, layer, con)
+        if keep_attributes or keep_attribute
+        else frozenset()
+    )
     blade_segment: float | None = None
     line_budget: float | None = None
     # an empty slice of the first cleaned batch, kept so that a run which
@@ -1660,7 +1719,12 @@ def _index(
                 batch, dggs, resolution, cut_threshold
             )
             batch = _prepare_dataframe(
-                batch, id_field, keep_attributes, keep_attribute, fid_offset=fid_offset
+                batch,
+                id_field,
+                keep_attributes,
+                keep_attribute,
+                fid_offset=fid_offset,
+                string_fields=string_fields,
             )
             fid_offset += len(batch)
             features_in.update(batch.index)

@@ -135,3 +135,74 @@ class TestOutputValidation(TestRunthrough):
         self._run_h3(("-co",))
         table = pq.read_table(self._parquet_files()[0])
         self.assertIn("fid", table.schema.names)
+
+
+class TestAttributeSchemaConsistency(TestRunthrough):
+    """
+    Kept-attribute columns must carry one Arrow type across every file in
+    the store, even when a batch (and so a whole partition) is NULL
+    throughout for that attribute (issue #227).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        skip_unless_backend("h3")
+        super().setUpClass()
+
+    def test_all_null_partition_matches_store_schema(self):
+        import tempfile
+        import warnings
+        from pathlib import Path
+        from unittest import mock
+
+        import geopandas as gpd
+        from shapely.geometry import Point
+
+        import vector2dggs.constants as const
+        from vector2dggs import common
+
+        with tempfile.TemporaryDirectory() as d:
+            # Two distant clusters -> distinct partition dirs; the first
+            # cluster is NULL throughout for the kept attribute, and tiny
+            # forced batches make its batches all-NULL, like a mostly-NULL
+            # column over a many-batch national dataset.
+            a = [(174.0 + i * 0.01, -41.0, None) for i in range(40)]
+            b = [
+                (10.0 + i * 0.01, 50.0, "open" if i % 2 else "closed")
+                for i in range(40)
+            ]
+            rows = a + b
+            df = gpd.GeoDataFrame(
+                {"status": [r[2] for r in rows]},
+                geometry=[Point(r[0], r[1]) for r in rows],
+                crs=4326,
+            )
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                df.to_file(f"{d}/roads.gpkg", layer="roads")
+
+            for compact in (False, True):
+                with (
+                    self.subTest(compact=compact),
+                    mock.patch.object(const, "INGEST_PROBE_ROWS", 10),
+                    mock.patch.object(const, "TARGET_BATCH_BYTES", 1),
+                ):
+                    out = f"{d}/out-{compact}.pq"
+                    common.index(
+                        "h3",
+                        f"{d}/roads.gpkg",
+                        out,
+                        9,
+                        None,
+                        False,
+                        1,
+                        layer="roads",
+                        keep_attribute=("status",),
+                        compact=compact,
+                    )
+                    types = {
+                        str(pq.read_schema(f).field("status").type)
+                        for f in Path(out).rglob("*.parquet")
+                    }
+                    self.assertEqual(len(types), 1, types)
+                    self.assertNotIn("null", types)

@@ -144,6 +144,35 @@ class TestPrepareDataframeKeepAttribute(TestCase):
         result = common._prepare_dataframe(gdf, None, False, keep_attribute=("a",))
         self.assertEqual(result["a"].dtype, "category")
 
+    def test_all_null_string_attribute_typed_from_schema(self):
+        # A batch where a declared-string attribute is NULL throughout must
+        # still come out string-valued, not Arrow null, or the store carries
+        # two types for one column and schema-binding readers fail.
+        import pandas as pd
+        import pyarrow as pa
+
+        gdf = gpd.GeoDataFrame(
+            {
+                "geometry": [Point(0, 0), Point(1, 1)],
+                "a": pd.Series([None, None], dtype=object),
+            }
+        )
+        result = common._prepare_dataframe(
+            gdf, None, False, keep_attribute=("a",), string_fields=frozenset(["a"])
+        )
+        self.assertEqual(result["a"].dtype, "category")
+        table = pa.Table.from_pandas(pd.DataFrame(result).drop(columns=["geometry"]))
+        field_type = table.schema.field("a").type
+        self.assertTrue(pa.types.is_dictionary(field_type), field_type)
+        self.assertFalse(pa.types.is_null(field_type.value_type), field_type)
+
+
+class TestStringAttributeFields(TestCase):
+    def test_string_fields_from_file_schema(self):
+        fields = common._string_attribute_fields(TEST_FILE_PATH, TEST_LAYER_NAME, None)
+        self.assertIn("Name_2018", fields)
+        self.assertNotIn("Class_2018", fields)  # OFTInteger
+
 
 class TestReadBatchesColumnSelection(TestCase):
     def test_keep_attribute_limits_columns_read(self):

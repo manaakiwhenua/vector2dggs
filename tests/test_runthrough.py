@@ -87,6 +87,9 @@ with contextlib.suppress(ImportError):
     from .classes.common_units import TestGetParentRes as TestGetParentRes
 with contextlib.suppress(ImportError):
     from .classes.common_units import TestStagedFileChunks as TestStagedFileChunks
+    from .classes.common_units import (
+        TestStringAttributeFields as TestStringAttributeFields,
+    )
 with contextlib.suppress(ImportError):
     from .classes.common_units import (
         TestPrepareDataframeKeepAttribute as TestPrepareDataframeKeepAttribute,
@@ -197,6 +200,9 @@ with contextlib.suppress(ImportError):
         TestLinetraceSetSemantics as TestLinetraceSetSemantics,
     )
 with contextlib.suppress(ImportError):
+    from .classes.output_validation import (
+        TestAttributeSchemaConsistency as TestAttributeSchemaConsistency,
+    )
     from .classes.output_validation import TestOutputValidation as TestOutputValidation
 with contextlib.suppress(ImportError):
     from .classes.polyfill_contract import (
