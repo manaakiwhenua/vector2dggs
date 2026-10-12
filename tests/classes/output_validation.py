@@ -135,3 +135,171 @@ class TestOutputValidation(TestRunthrough):
         self._run_h3(("-co",))
         table = pq.read_table(self._parquet_files()[0])
         self.assertIn("fid", table.schema.names)
+
+
+class TestAttributeSchemaConsistency(TestRunthrough):
+    """
+    Kept-attribute columns must carry one Arrow type across every file in
+    the store, even when a batch (and so a whole partition) is NULL
+    throughout for that attribute (issue #227).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        skip_unless_backend("h3")
+        super().setUpClass()
+
+    def test_all_null_partition_matches_store_schema(self):
+        import tempfile
+        import warnings
+        from pathlib import Path
+        from unittest import mock
+
+        import geopandas as gpd
+        from shapely.geometry import Point
+
+        import vector2dggs.constants as const
+        from vector2dggs import common
+
+        with tempfile.TemporaryDirectory() as d:
+            # Two distant clusters -> distinct partition dirs; the first
+            # cluster is NULL throughout for the kept attribute, and tiny
+            # forced batches make its batches all-NULL, like a mostly-NULL
+            # column over a many-batch national dataset.
+            import pandas as pd
+
+            a = [(174.0 + i * 0.01, -41.0, None) for i in range(40)]
+            b = [
+                (10.0 + i * 0.01, 50.0, "open" if i % 2 else "closed")
+                for i in range(40)
+            ]
+            rows = a + b
+            n = len(a)
+            df = gpd.GeoDataFrame(
+                {
+                    "status": [r[2] for r in rows],
+                    "lanes": pd.array(
+                        [None] * n + [2**53 + 3 + i for i in range(n)], dtype="Int64"
+                    ),
+                    "oneway": pd.array(
+                        [None] * n + [i % 2 == 0 for i in range(n)], dtype="boolean"
+                    ),
+                },
+                geometry=[Point(r[0], r[1]) for r in rows],
+                crs=4326,
+            )
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                df.to_file(f"{d}/roads.gpkg", layer="roads")
+            # a true OFTBinary field (geopandas writes bytes as TEXT):
+            # a GPKG is SQLite, so add a BLOB column directly
+            import sqlite3
+
+            with sqlite3.connect(f"{d}/roads.gpkg") as sq:
+                # the rtree triggers call SpatiaLite functions plain sqlite3
+                # lacks; this test never uses spatial filtering
+                for (name,) in sq.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'trigger'"
+                    " AND name LIKE 'rtree_roads_%'"
+                ).fetchall():
+                    sq.execute(f"DROP TRIGGER {name}")
+                sq.execute("ALTER TABLE roads ADD COLUMN payload BLOB")
+                sq.execute(
+                    "UPDATE roads SET payload = CAST('P' || fid AS BLOB)"
+                    f" WHERE fid > {n}"
+                )
+
+            for compact in (False, True):
+                with (
+                    self.subTest(compact=compact),
+                    mock.patch.object(const, "INGEST_PROBE_ROWS", 10),
+                    mock.patch.object(const, "TARGET_BATCH_BYTES", 1),
+                ):
+                    out = f"{d}/out-{compact}.pq"
+                    common.index(
+                        "h3",
+                        f"{d}/roads.gpkg",
+                        out,
+                        9,
+                        None,
+                        False,
+                        1,
+                        layer="roads",
+                        keep_attribute=("status", "lanes", "oneway", "payload"),
+                        compact=compact,
+                    )
+                    files = list(Path(out).rglob("*.parquet"))
+                    for column, expected in (
+                        (
+                            "status",
+                            {"dictionary<values=string, indices=int8, ordered=0>"},
+                        ),
+                        ("lanes", {"int64"}),
+                        ("oneway", {"bool"}),
+                        ("payload", {"binary"}),
+                    ):
+                        types = {
+                            str(pq.read_schema(f).field(column).type) for f in files
+                        }
+                        self.assertEqual(types, expected, column)
+                    # integers above 2**53 survive exactly: a float64 detour
+                    # anywhere in the pipeline would round them
+                    values = set()
+                    for f in files:
+                        values.update(
+                            pq.read_table(f, columns=["lanes"])["lanes"]
+                            .drop_null()
+                            .to_pylist()
+                        )
+                    self.assertEqual(values, {2**53 + 3 + i for i in range(n)})
+
+    def test_list_attribute_passes_through(self):
+        # List-typed fields keep their per-batch typing for now, but must
+        # still flow through the pipeline (nested Arrow dtypes cannot be
+        # rebuilt from staged-file metadata by pandas)
+        import json
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+
+        import vector2dggs.constants as const
+        from vector2dggs import common
+
+        with tempfile.TemporaryDirectory() as d:
+            features = [
+                {
+                    "type": "Feature",
+                    "properties": {"il": None if i < 40 else [1, i]},
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [
+                            (174.0 if i < 40 else 10.0) + (i % 40) * 0.01,
+                            -41.0 if i < 40 else 50.0,
+                        ],
+                    },
+                }
+                for i in range(80)
+            ]
+            with open(f"{d}/t.geojson", "w") as fh:
+                json.dump({"type": "FeatureCollection", "features": features}, fh)
+
+            with (
+                mock.patch.object(const, "INGEST_PROBE_ROWS", 10),
+                mock.patch.object(const, "TARGET_BATCH_BYTES", 1),
+            ):
+                common.index(
+                    "h3",
+                    f"{d}/t.geojson",
+                    f"{d}/out.pq",
+                    9,
+                    None,
+                    False,
+                    1,
+                    keep_attribute=("il",),
+                    compact=False,
+                )
+            types = {
+                str(pq.read_schema(f).field("il").type)
+                for f in Path(f"{d}/out.pq").rglob("*.parquet")
+            }
+            self.assertTrue(any(t.startswith("list<") for t in types), types)
