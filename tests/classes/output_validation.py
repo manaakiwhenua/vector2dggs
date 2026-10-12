@@ -166,14 +166,25 @@ class TestAttributeSchemaConsistency(TestRunthrough):
             # cluster is NULL throughout for the kept attribute, and tiny
             # forced batches make its batches all-NULL, like a mostly-NULL
             # column over a many-batch national dataset.
+            import pandas as pd
+
             a = [(174.0 + i * 0.01, -41.0, None) for i in range(40)]
             b = [
                 (10.0 + i * 0.01, 50.0, "open" if i % 2 else "closed")
                 for i in range(40)
             ]
             rows = a + b
+            n = len(a)
             df = gpd.GeoDataFrame(
-                {"status": [r[2] for r in rows]},
+                {
+                    "status": [r[2] for r in rows],
+                    "lanes": pd.array(
+                        [None] * n + [2**53 + 3 + i for i in range(n)], dtype="Int64"
+                    ),
+                    "oneway": pd.array(
+                        [None] * n + [i % 2 == 0 for i in range(n)], dtype="boolean"
+                    ),
+                },
                 geometry=[Point(r[0], r[1]) for r in rows],
                 crs=4326,
             )
@@ -197,12 +208,29 @@ class TestAttributeSchemaConsistency(TestRunthrough):
                         False,
                         1,
                         layer="roads",
-                        keep_attribute=("status",),
+                        keep_attribute=("status", "lanes", "oneway"),
                         compact=compact,
                     )
-                    types = {
-                        str(pq.read_schema(f).field("status").type)
-                        for f in Path(out).rglob("*.parquet")
-                    }
-                    self.assertEqual(len(types), 1, types)
-                    self.assertNotIn("null", types)
+                    files = list(Path(out).rglob("*.parquet"))
+                    for column, expected in (
+                        (
+                            "status",
+                            {"dictionary<values=string, indices=int8, ordered=0>"},
+                        ),
+                        ("lanes", {"int64"}),
+                        ("oneway", {"bool"}),
+                    ):
+                        types = {
+                            str(pq.read_schema(f).field(column).type) for f in files
+                        }
+                        self.assertEqual(types, expected, column)
+                    # integers above 2**53 survive exactly: a float64 detour
+                    # anywhere in the pipeline would round them
+                    values = set()
+                    for f in files:
+                        values.update(
+                            pq.read_table(f, columns=["lanes"])["lanes"]
+                            .drop_null()
+                            .to_pylist()
+                        )
+                    self.assertEqual(values, {2**53 + 3 + i for i in range(n)})

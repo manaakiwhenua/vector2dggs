@@ -119,28 +119,58 @@ def check_requested_attributes(
         )
 
 
-def _string_attribute_fields(
+# Declared field type -> pandas nullable dtype, for the types whose batch
+# dtype otherwise depends on whether the batch happens to contain a NULL
+# (string vs null; int/bool vs double). Real, date and datetime fields are
+# NULL-stable as read; binary, list and JSON fields are passed through as-is.
+_OGR_DECLARED_DTYPES = {
+    ("OFTString", "OFSTNone"): "string",
+    ("OFTString", "OFSTUUID"): "string",
+    ("OFTInteger", "OFSTNone"): "Int32",
+    ("OFTInteger", "OFSTInt16"): "Int16",
+    ("OFTInteger", "OFSTBoolean"): "boolean",
+    ("OFTInteger64", "OFSTNone"): "Int64",
+}
+
+
+def _sql_declared_dtype(sql_type: sqlalchemy.types.TypeEngine) -> str | None:
+    if isinstance(sql_type, sqlalchemy.Boolean):
+        return "boolean"
+    if isinstance(sql_type, sqlalchemy.BigInteger):
+        return "Int64"
+    if isinstance(sql_type, sqlalchemy.SmallInteger):
+        return "Int16"
+    if isinstance(sql_type, sqlalchemy.Integer):
+        return "Int32"
+    if isinstance(sql_type, sqlalchemy.String):
+        return "string"
+    return None
+
+
+def _declared_attribute_dtypes(
     input_file: Path | str,
     layer: str | None,
     con: SQLConnectionType | None,
-) -> frozenset[str]:
+) -> dict[str, str]:
     """
-    Names of the layer's declared string fields. An attribute that is NULL
-    throughout a batch arrives as an object column of None, which pyarrow
-    would type as null rather than string; the declared type decides.
+    The layer's declared field types as pandas dtypes, for the fields whose
+    read dtype is otherwise decided per batch by whether the batch contains
+    a NULL. The declared type decides instead, so every batch of one column
+    carries one Arrow type.
     """
     if con is not None and layer:
         with con.connect() as connection:
             columns = _db_table(connection, layer).columns
-        return frozenset(
-            c.name for c in columns if isinstance(c.type, sqlalchemy.String)
-        )
+        dtypes = {c.name: _sql_declared_dtype(c.type) for c in columns}
+        return {name: dt for name, dt in dtypes.items() if dt}
     info = pyogrio.read_info(str(input_file), layer=layer)
-    return frozenset(
-        field
-        for field, ogr_type in zip(info["fields"], info["ogr_types"], strict=True)
-        if ogr_type == "OFTString"
-    )
+    return {
+        field: _OGR_DECLARED_DTYPES[(ogr_type, subtype)]
+        for field, ogr_type, subtype in zip(
+            info["fields"], info["ogr_types"], info["ogr_subtypes"], strict=True
+        )
+        if (ogr_type, subtype) in _OGR_DECLARED_DTYPES
+    }
 
 
 def _fid_column(input_file: Path | str, layer: str | None) -> str | None:
@@ -1084,8 +1114,14 @@ def _read_batches(
             stmt = stmt.order_by(sqlalchemy.text("ctid"))
             offset = 0
             while offset < total:
+                # coerce_float=False keeps NULL-containing integer columns
+                # as exact Python ints rather than detouring through float64,
+                # which rounds values above 2**53
                 result = gpd.read_postgis(
-                    stmt.limit(rows).offset(offset), connection, geom_col=geom_col
+                    stmt.limit(rows).offset(offset),
+                    connection,
+                    geom_col=geom_col,
+                    coerce_float=False,
                 )
                 if geom_col != "geometry":
                     result = result.rename_geometry("geometry")
@@ -1106,6 +1142,9 @@ def _read_batches(
         columns = [id_field] if id_field and not id_is_fid else []
     offset = 0
     while offset < total:
+        # The arrow read path types every column from the layer's declared
+        # schema (an all-NULL window is typed like any other) and returns
+        # NULL-containing integer columns exactly, with no float64 detour
         batch = gpd.read_file(
             input_file,
             layer=layer,
@@ -1113,6 +1152,8 @@ def _read_batches(
             max_features=rows,
             columns=columns,
             fid_as_index=id_is_fid,
+            use_arrow=True,
+            arrow_to_pandas_kwargs={"types_mapper": pd.ArrowDtype},
         )
         if id_is_fid:
             batch = batch.rename_axis(id_field).reset_index()
@@ -1138,7 +1179,7 @@ def _restore_empty_categories(df):
 
 
 def _dictionary_encode_attributes(
-    df: gpd.GeoDataFrame, string_fields: frozenset[str] = frozenset()
+    df: gpd.GeoDataFrame, declared_dtypes: dict[str, str] | None = None
 ) -> gpd.GeoDataFrame:
     """
     Cast string attribute columns (object-dtype or pandas' newer StringDtype)
@@ -1157,17 +1198,16 @@ def _dictionary_encode_attributes(
     the same categories object.
     """
     geom_col = df.geometry.name
-    # A declared-string column that is NULL throughout this batch is an
-    # object column of None, which fails is_string_dtype
-    declared = [
-        c
-        for c in df.columns
-        if c != geom_col
-        and c in string_fields
-        and not pd.api.types.is_string_dtype(df[c])
-    ]
+    # The declared type, not the batch's NULL pattern, decides the dtype: an
+    # all-NULL batch otherwise types a string column as Arrow null, and any
+    # NULL in a batch sends its int/bool columns through float64
+    declared = {
+        c: dt
+        for c, dt in (declared_dtypes or {}).items()
+        if c in df.columns and c != geom_col and df[c].dtype != dt
+    }
     if declared:
-        df = df.astype(dict.fromkeys(declared, "string"))
+        df = df.astype(declared)
     string_cols = [
         c for c in df.columns if c != geom_col and pd.api.types.is_string_dtype(df[c])
     ]
@@ -1182,7 +1222,7 @@ def _prepare_dataframe(
     keep_attributes: bool,
     keep_attribute: tuple[str, ...] = (),
     fid_offset: int = 0,
-    string_fields: frozenset[str] = frozenset(),
+    declared_dtypes: dict[str, str] | None = None,
 ) -> gpd.GeoDataFrame:
     if id_field:
         df = df.set_index(id_field)
@@ -1191,9 +1231,9 @@ def _prepare_dataframe(
         df.index = pd.RangeIndex(fid_offset, fid_offset + len(df), name="fid")
     if keep_attribute:
         df = df.loc[:, [c for c in keep_attribute if c in df.columns] + ["geometry"]]
-        df = _dictionary_encode_attributes(df, string_fields)
+        df = _dictionary_encode_attributes(df, declared_dtypes)
     elif keep_attributes:
-        df = _dictionary_encode_attributes(df, string_fields)
+        df = _dictionary_encode_attributes(df, declared_dtypes)
     else:
         df = df.loc[:, ["geometry"]]
     return df
@@ -1688,10 +1728,10 @@ def _index(
     )
 
     features_in: set = set()
-    string_fields = (
-        _string_attribute_fields(input_file, layer, con)
+    declared_dtypes = (
+        _declared_attribute_dtypes(input_file, layer, con)
         if keep_attributes or keep_attribute
-        else frozenset()
+        else {}
     )
     blade_segment: float | None = None
     line_budget: float | None = None
@@ -1724,7 +1764,7 @@ def _index(
                 keep_attributes,
                 keep_attribute,
                 fid_offset=fid_offset,
-                string_fields=string_fields,
+                declared_dtypes=declared_dtypes,
             )
             fid_offset += len(batch)
             features_in.update(batch.index)
