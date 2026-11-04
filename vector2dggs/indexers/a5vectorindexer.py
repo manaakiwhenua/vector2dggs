@@ -45,6 +45,7 @@ class A5VectorIndexer(VectorIndexer[str | int]):
 
     def _polyfill_polygon(self, geom, resolution: int) -> list:
         interiors = [i.coords for i in geom.interiors]
+        # uncompact reads the resolution from the covering's marker.
         return list(
             set(
                 a5.uncompact(
@@ -52,8 +53,7 @@ class A5VectorIndexer(VectorIndexer[str | int]):
                         [geom.exterior.coords, *interiors],
                         resolution,
                         {"containment": _CONTAIN[self.mode]},
-                    ),
-                    resolution,
+                    )
                 )
             )
         )
@@ -89,7 +89,11 @@ class A5VectorIndexer(VectorIndexer[str | int]):
 
     def compaction(self, df, res, col_order, dggs_col, id_field, parent_res):
         def _compact(cells):
-            return list(a5.compact([int(c) for c in cells]))
+            # Drop the trailing compaction marker; it is not a cell.
+            covering = a5.compact([int(c) for c in cells])
+            if covering and a5.is_compaction_marker(covering[-1]):
+                covering.pop()
+            return covering
 
         def _child(cell, res):
             return a5.cell_to_children(int(cell), res)[0]
