@@ -37,6 +37,8 @@ A bare `pip install vector2dggs` **will not install any DGGS backends**.
 
 PostgreSQL/PostGIS input requires the `postgres` extra (e.g. `pip install vector2dggs[h3,postgres]`); it is included in `all`.
 
+The `a5` extra uses the [A5 v1 index](https://a5geo.org/blog/2026/10/14/a5-v1) (from vector2dggs 0.26.0). A5 cell IDs written by earlier versions used the v0 index and are not compatible; [`a5.migrate`](https://a5geo.org/docs/api-reference/miscellaneous#migrate) converts them.
+
 
 ## Usage
 

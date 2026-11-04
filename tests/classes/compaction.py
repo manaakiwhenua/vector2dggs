@@ -333,7 +333,9 @@ class TestA5CompactionBounds(TestCase):
         self.parent_res = 2
         # An ancestor one level coarser than parent_res, fully covered by all
         # of its grandchildren at parent_res + 1.
-        self.ancestor = a5.cell_to_parent(a5.get_res0_cells()[0], self.parent_res - 1)
+        self.ancestor = a5.cell_to_children(
+            a5.get_res0_cells()[0], self.parent_res - 1
+        )[0]
         self.res = self.parent_res + 1
         self.indexer = A5VectorIndexer(dggs="a5")
         self.cells = set(a5.cell_to_children(self.ancestor, self.res))
@@ -342,9 +344,33 @@ class TestA5CompactionBounds(TestCase):
         # Demonstrates the underlying behaviour that necessitates the floor:
         # a5.compact has no resolution floor and will compact past
         # parent_res whenever the cells fully cover a coarser ancestor.
-        unbounded = set(a5.compact(list(self.cells)))
+        covering = a5.compact(list(self.cells))
+        unbounded = set(covering[:-1])
         self.assertEqual(unbounded, {self.ancestor})
         self.assertLess(A5VectorIndexer.get_resolution(self.ancestor), self.parent_res)
+
+    def test_library_compact_ends_in_a_compaction_marker(self):
+        covering = a5.compact(list(self.cells))
+        self.assertTrue(a5.is_compaction_marker(covering[-1]))
+        self.assertFalse(a5.is_valid_cell(covering[-1]))
+
+    def test_compaction_output_contains_only_valid_cells(self):
+        dggs_col = f"a5_{self.res:02}"
+        df = pd.DataFrame(
+            {
+                "id": [1] * len(self.cells),
+                "attr": range(len(self.cells)),
+                dggs_col: pd.array(list(self.cells), dtype="uint64"),
+            }
+        )
+
+        result = self.indexer.compaction(
+            df, self.res, ["id", "attr"], dggs_col, "id", self.parent_res
+        )
+
+        markers = [c for c in result.index if a5.is_compaction_marker(int(c))]
+        self.assertEqual(markers, [])
+        self.assertTrue(all(a5.is_valid_cell(int(c)) for c in result.index))
 
     def test_children_at_res(self):
         result = self.indexer.children_at_res(self.ancestor, self.parent_res)
