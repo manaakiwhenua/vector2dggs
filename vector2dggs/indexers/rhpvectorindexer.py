@@ -14,7 +14,8 @@ from rhealpixdggs.rhp_wrappers import (
     rhp_to_geo,
     rhp_to_geo_boundary,
 )
-from shapely.geometry import Point, Polygon
+from shapely.geometry import LineString, Point, Polygon
+from shapely.geometry.base import BaseGeometry
 
 import vector2dggs.constants as const
 from vector2dggs.indexers.vectorindexer import InvalidGeometryError, VectorIndexer
@@ -46,7 +47,7 @@ class RHPVectorIndexer(VectorIndexer[str]):
     GEODESIC_POLYFILL = False
 
     @staticmethod
-    def _fill_min_res(geom, resolution: int) -> int:
+    def _fill_min_res(geom: BaseGeometry, resolution: int) -> int:
         """
         Starting resolution for polyfill's hierarchical descent: the finest
         whose cell still covers geom's bbox. Affects speed, not output.
@@ -64,7 +65,7 @@ class RHPVectorIndexer(VectorIndexer[str]):
                 return res
         return const.MIN_RHP
 
-    def _polyfill_polygon(self, geom, resolution: int) -> list:
+    def _polyfill_polygon(self, geom: Polygon, resolution: int) -> list:
         cells = polyfill_array(
             geom,
             resolution,
@@ -86,7 +87,7 @@ class RHPVectorIndexer(VectorIndexer[str]):
         return cells.tolist()
 
     @staticmethod
-    def _linetrace(geom, resolution: int) -> list:
+    def _linetrace(geom: LineString, resolution: int) -> list:
         cells = linetrace(geom, resolution, plane=False, dggs=WGS84_003)
         # linetrace returns a traversal sequence, which may revisit cells
         return list(dict.fromkeys(cells)) if cells else []

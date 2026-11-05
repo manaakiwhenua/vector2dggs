@@ -10,7 +10,7 @@ from vector2dggs.s2 import s2
 
 @click.group()
 @click.version_option(version=__version__)
-def cli():
+def cli() -> None:
     pass
 
 
@@ -21,5 +21,5 @@ cli.add_command(s2)
 cli.add_command(geohash)
 
 
-def main():
+def main() -> None:
     cli()

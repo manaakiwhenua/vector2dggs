@@ -5,10 +5,11 @@ import math
 import multiprocessing
 import shutil
 import tempfile
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from pathlib import Path, PurePath
 from types import ModuleType
+from typing import TypeVar
 from uuid import uuid4
 
 import antimeridian
@@ -27,6 +28,7 @@ import shapely
 import shapely.affinity
 import sqlalchemy
 from shapely.geometry import GeometryCollection, LineString
+from shapely.geometry.base import BaseGeometry
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError, NoSuchModuleError
 from tqdm import tqdm
@@ -54,6 +56,11 @@ SQLConnectionType = sqlalchemy.engine.Engine
 
 
 LOGGER = logging.getLogger(__name__)
+
+# A dataframe-in, same-kind-out helper keeps a GeoDataFrame a GeoDataFrame.
+_DF = TypeVar("_DF", bound=pd.DataFrame)
+# A batch cells -> geometries callable (VectorIndexer.cells_to_points/polygons).
+GeomFn = Callable[[Iterable], Iterable[BaseGeometry]]
 click_log.basic_config(LOGGER)
 click_log.ColorFormatter.colors["info"] = {"fg": "green"}
 
@@ -269,7 +276,7 @@ def resolve_default_id_field(
     return ()
 
 
-def validate_compression(ctx, param, value: str) -> str:
+def validate_compression(ctx: click.Context, param: click.Parameter, value: str) -> str:
     """
     Click callback that fails fast on an unsupported Parquet compression
     codec, by asking pyarrow directly (an in-memory, zero-row write) rather
@@ -347,11 +354,11 @@ def _commit_output(staging: Path, output_directory: Path, overwrite: bool) -> Pa
 
 
 def drop_condition(
-    df: pd.DataFrame,
+    df: _DF,
     drop_index: pd.Index,
     log_statement: str,
     warning_threshold: float = 0.01,
-):
+) -> _DF:
     LOGGER.debug(log_statement)
     _before = len(df)
     df = df.drop(drop_index)
@@ -403,7 +410,7 @@ def raise_rlimit_nofile() -> None:
 
 def write_partition(
     partition_df: pd.DataFrame,
-    geo_serialisation_method,
+    geo_serialisation_method: GeomFn | None,
     output_dir: Path,
     partition_col: str,
     dggs_col: str,
@@ -556,7 +563,7 @@ def _with_geoparquet_metadata(table: pa.Table) -> pa.Table:
     )
 
 
-def _geom_fn(indexer: VectorIndexer, geo: str):
+def _geom_fn(indexer: VectorIndexer, geo: str) -> GeomFn | None:
     """Returns a batch cells -> geometries callable, or None."""
     if geo == const.GeoOutputMode.NONE.value:
         return None
@@ -952,7 +959,7 @@ def _polyfill(
     )
 
 
-def _polyfill_star(args) -> None:
+def _polyfill_star(args: tuple) -> None:
     _polyfill(*args)
 
 
@@ -964,7 +971,7 @@ def _metres_per_unit(crs: pyproj.CRS) -> float:
     )
 
 
-def _split_linestring_at_vertices(line, budget: float) -> list:
+def _split_linestring_at_vertices(line: LineString, budget: float) -> list[LineString]:
     """
     Split a LineString at existing vertices whenever cumulative arc length
     exceeds the budget. Vertex-only cuts leave every vertex-to-vertex
@@ -1030,7 +1037,9 @@ def _blade_segment(
     return eps_m / _metres_per_unit(cut_crs)
 
 
-def bisect_geometry(geometry, cut_threshold, blade_segment=None):
+def bisect_geometry(
+    geometry: BaseGeometry, cut_threshold: float, blade_segment: float | None = None
+) -> GeometryCollection:
     cuts: list[tuple[bool, float]] = []
     pieces = katana.katana(geometry, cut_threshold, cuts=cuts)
     if blade_segment is not None:
@@ -1086,7 +1095,7 @@ def _read_batches(
     geom_col: str,
     total: int,
     keep_attribute: tuple[str, ...] = (),
-):
+) -> Iterator[gpd.GeoDataFrame]:
     """
     Yield the input in GeoDataFrame batches, so peak memory is bounded by
     the batch size rather than the input size. Row counts adapt to the
@@ -1172,7 +1181,7 @@ def _read_batches(
         rows = _next_batch_rows(batch)
 
 
-def _restore_empty_categories(df):
+def _restore_empty_categories(df: _DF) -> _DF:
     """
     Parquet round-trips an all-NULL string attribute as a categorical with
     empty object-dtype categories, which pyarrow re-types as Arrow null on
@@ -1400,7 +1409,7 @@ def _run_bisection(
     return df
 
 
-def _crosses_antimeridian(geom) -> bool:
+def _crosses_antimeridian(geom: BaseGeometry) -> bool:
     """
     Heuristically detect whether a geometry's naive bounding box suggests it
     spans the antimeridian: a geometry that genuinely crosses it produces an
@@ -1413,7 +1422,7 @@ def _crosses_antimeridian(geom) -> bool:
     return (maxx - minx) > 180
 
 
-def _fix_antimeridian_crossing(geom):
+def _fix_antimeridian_crossing(geom: BaseGeometry) -> BaseGeometry:
     """
     Split a geometry that spans the antimeridian into the equivalent
     correctly-wound multi-part geometry. Geometries that don't actually

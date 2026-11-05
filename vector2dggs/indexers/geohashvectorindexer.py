@@ -175,7 +175,9 @@ class GeohashVectorIndexer(VectorIndexer[str]):
             for suffix in product(chars, repeat=target_res - len(geohash))
         ]
 
-    def get_child_geohash(self, geohash: str, desired_length: int, child: str = "0"):
+    def get_child_geohash(
+        self, geohash: str, desired_length: int, child: str = "0"
+    ) -> str:
         """
         Get a child geohash of the specified length by extending the input geohash.
 
