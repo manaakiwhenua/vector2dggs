@@ -75,13 +75,13 @@ class GeohashVectorIndexer(VectorIndexer[str]):
         return pd.DataFrame(result)
 
     def _cell_at(self, lon: float, lat: float, resolution: int) -> str:
-        return encode(lat, lon, precision=resolution)
+        return str(encode(lat, lon, precision=resolution))
 
     def _neighbours(self, cell: str) -> list[str]:
         """
         All eight, diagonals included, so corner-only neighbours count.
         """
-        return neighbors(cell)
+        return list(neighbors(cell))
 
     def secondary_index(self, df: pd.DataFrame, parent_level: int) -> pd.DataFrame:
         """
@@ -96,7 +96,7 @@ class GeohashVectorIndexer(VectorIndexer[str]):
         self,
         df: pd.DataFrame,
         res: int,
-        col_order: list,
+        col_order: list[str],
         dggs_col: str,
         id_field: str | Sequence[str],
         parent_res: int,
@@ -204,7 +204,7 @@ class GeohashVectorIndexer(VectorIndexer[str]):
         Not a part of the interface provided by VectorIndexer.
         """
         if self.mode == const.ContainmentMode.INTERSECTS:
-            return polygon_to_geohashes(polygon, level, inner=False)
+            return set(polygon_to_geohashes(polygon, level, inner=False))
         inner: set[str] = polygon_to_geohashes(polygon, level, inner=True)
         if self.mode == const.ContainmentMode.WITHIN:
             return inner
@@ -229,7 +229,9 @@ class GeohashVectorIndexer(VectorIndexer[str]):
         """
         centres = np.array([decode_exactly(c)[:4] for c in cells])
         lat, lon, lat_err, lon_err = centres.T
-        return shapely.box(lon - lon_err, lat - lat_err, lon + lon_err, lat + lat_err)
+        return list(
+            shapely.box(lon - lon_err, lat - lat_err, lon + lon_err, lat + lat_err)
+        )
 
     @staticmethod
     def cell_to_polygon(cell: str) -> Polygon:

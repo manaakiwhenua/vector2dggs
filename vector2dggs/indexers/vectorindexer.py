@@ -25,7 +25,7 @@ LOGGER = logging.getLogger("vector2dggs.common")
 CellId = TypeVar("CellId")
 
 
-def index_keys(index: pd.Index) -> Iterator[tuple]:
+def index_keys(index: pd.Index) -> Iterator[tuple[Any, ...]]:
     """Each label as a tuple, one element per level, for Index and MultiIndex alike."""
     return zip(*(index.get_level_values(i) for i in range(index.nlevels)), strict=True)
 
@@ -178,7 +178,7 @@ class VectorIndexer(ABC, Generic[CellId]):
         self,
         df: pd.DataFrame,
         res: int,
-        col_order: list,
+        col_order: list[str],
         dggs_col: str,
         id_field: str | Sequence[str],
         parent_res: int,

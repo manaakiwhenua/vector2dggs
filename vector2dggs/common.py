@@ -9,7 +9,7 @@ from collections.abc import Callable, Iterable, Iterator, Sequence
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from pathlib import Path, PurePath
 from types import ModuleType
-from typing import TypeVar
+from typing import Any, TypeVar
 from uuid import uuid4
 
 import antimeridian
@@ -60,7 +60,7 @@ LOGGER = logging.getLogger(__name__)
 # A dataframe-in, same-kind-out helper keeps a GeoDataFrame a GeoDataFrame.
 _DF = TypeVar("_DF", bound=pd.DataFrame)
 # A batch cells -> geometries callable (VectorIndexer.cells_to_points/polygons).
-GeomFn = Callable[[Iterable], Iterable[BaseGeometry]]
+GeomFn = Callable[[Iterable[Any]], Iterable[BaseGeometry]]
 click_log.basic_config(LOGGER)
 click_log.ColorFormatter.colors["info"] = {"fg": "green"}
 
@@ -87,11 +87,11 @@ class CellIdError(ValueError):
     pass
 
 
-def check_mode(mode: str, indexer: VectorIndexer) -> None:
+def check_mode(mode: str, indexer: VectorIndexer[Any]) -> None:
     indexer.check_mode(const.ContainmentMode(mode))
 
 
-def check_cell_id(cell_id: str, indexer: VectorIndexer) -> None:
+def check_cell_id(cell_id: str, indexer: VectorIndexer[Any]) -> None:
     if (
         cell_id == const.CellIdMode.UINT64.value
         and pa.string() == indexer.CELL_ARROW_TYPE
@@ -144,7 +144,7 @@ _OGR_DECLARED_DTYPES = {
 }
 
 
-def _sql_declared_dtype(sql_type: sqlalchemy.types.TypeEngine) -> str | None:
+def _sql_declared_dtype(sql_type: sqlalchemy.types.TypeEngine[Any]) -> str | None:
     if isinstance(sql_type, sqlalchemy.Boolean):
         return "boolean"
     if isinstance(sql_type, sqlalchemy.BigInteger):
@@ -241,7 +241,7 @@ def resolve_layer(
             ", ".join(f"'{name}'" for name in names),
             names[0],
         )
-        return names[0]
+        return str(names[0])
     return layer
 
 
@@ -415,7 +415,7 @@ def write_partition(
     partition_col: str,
     dggs_col: str,
     compression: str,
-    indexer: VectorIndexer,
+    indexer: VectorIndexer[Any],
     cell_id: str,
     compact: bool,
 ) -> int:
@@ -563,7 +563,7 @@ def _with_geoparquet_metadata(table: pa.Table) -> pa.Table:
     )
 
 
-def _geom_fn(indexer: VectorIndexer, geo: str) -> GeomFn | None:
+def _geom_fn(indexer: VectorIndexer[Any], geo: str) -> GeomFn | None:
     """Returns a batch cells -> geometries callable, or None."""
     if geo == const.GeoOutputMode.NONE.value:
         return None
@@ -576,7 +576,7 @@ def _geom_fn(indexer: VectorIndexer, geo: str) -> GeomFn | None:
     )
 
 
-def _ids_in(table: pa.Table, id_fields: tuple[str, ...]) -> set[tuple]:
+def _ids_in(table: pa.Table, id_fields: tuple[str, ...]) -> set[tuple[Any, ...]]:
     """The distinct feature ids a merged partition actually contains, as tuples."""
     if any(c not in table.column_names for c in id_fields):
         return set()
@@ -636,12 +636,12 @@ def _merge_partition_files(
     compression: str,
     dggs_col: str,
     id_fields: tuple[str, ...],
-    indexer: VectorIndexer | None = None,
+    indexer: VectorIndexer[Any] | None = None,
     resolution: int | None = None,
     parent_res: int | None = None,
     geo: str | None = None,
     cell_id: str = const.CellIdMode.STRING.value,
-) -> tuple[int, set]:
+) -> tuple[int, set[tuple[Any, ...]]]:
     """
     Merges all Parquet files within a single hive partition directory into one
     file, dropping any duplicate (feature, cell) rows and returning how many
@@ -776,7 +776,7 @@ def _merge_partition_files(
 def _write_empty_output(
     output_directory: Path,
     template: gpd.GeoDataFrame,
-    indexer: VectorIndexer,
+    indexer: VectorIndexer[Any],
     resolution: int,
     parent_res: int,
     geo: str,
@@ -845,7 +845,7 @@ def _write_empty_output(
 
 
 def _merge_output(
-    indexer: VectorIndexer,
+    indexer: VectorIndexer[Any],
     output_dir: Path | str,
     resolution: int,
     parent_res: int,
@@ -855,7 +855,7 @@ def _merge_output(
     compression: str,
     processes: int,
     cell_id: str,
-) -> set[tuple]:
+) -> set[tuple[Any, ...]]:
     """
     Consolidate each hive partition directory to a single file, returning the
     feature ids present in the output (aggregating
@@ -872,7 +872,7 @@ def _merge_output(
     )
     dggs_col = f"{indexer.dggs}_{resolution:02}"
     dropped = 0
-    written: set = set()
+    written: set[tuple[Any, ...]] = set()
     with ProcessPoolExecutor(
         max_workers=max(1, processes), mp_context=_mp_context()
     ) as executor:
@@ -907,7 +907,7 @@ def _merge_output(
 
 
 def _polyfill(
-    indexer: VectorIndexer,
+    indexer: VectorIndexer[Any],
     pq_in: Path,
     resolution: int,
     parent_res: int,
@@ -959,7 +959,7 @@ def _polyfill(
     )
 
 
-def _polyfill_star(args: tuple) -> None:
+def _polyfill_star(args: tuple[Any, ...]) -> None:
     _polyfill(*args)
 
 
@@ -1021,7 +1021,7 @@ def _derive_cut_threshold(
 
 
 def _blade_segment(
-    indexer: VectorIndexer, dggs: str, resolution: int, cut_crs: pyproj.CRS
+    indexer: VectorIndexer[Any], dggs: str, resolution: int, cut_crs: pyproj.CRS
 ) -> float | None:
     """
     Max vertex spacing (in cut CRS units) along bisection cut edges. Needed
@@ -1034,7 +1034,7 @@ def _blade_segment(
     if not (indexer.GEODESIC_POLYFILL or cut_crs.is_projected):
         return None
     eps_m = max(const.DGGS_CELL_AREA_M2_BY_RES[dggs](resolution) ** 0.5 / 10, 10.0)
-    return eps_m / _metres_per_unit(cut_crs)
+    return float(eps_m / _metres_per_unit(cut_crs))
 
 
 def bisect_geometry(
@@ -1064,7 +1064,7 @@ def _feature_count(
             return connection.execute(
                 sqlalchemy.select(sqlalchemy.func.count()).select_from(tbl)
             ).scalar_one()
-    return pyogrio.read_info(str(input_file), layer=layer)["features"]
+    return int(pyogrio.read_info(str(input_file), layer=layer)["features"])
 
 
 def _approx_frame_bytes(df: gpd.GeoDataFrame) -> int:
@@ -1419,7 +1419,7 @@ def _crosses_antimeridian(geom: BaseGeometry) -> bool:
     if geom is None or geom.is_empty:
         return False
     minx, _, maxx, _ = geom.bounds
-    return (maxx - minx) > 180
+    return bool((maxx - minx) > 180)
 
 
 def _fix_antimeridian_crossing(geom: BaseGeometry) -> BaseGeometry:
@@ -1483,7 +1483,9 @@ def _remove_repeated_points(geoms: np.ndarray) -> np.ndarray:
     e.g. a sliver left by bisection, must not fail the whole batch.
     """
     try:
-        return shapely.remove_repeated_points(geoms, const.REPEATED_POINT_TOLERANCE_DEG)
+        return np.asarray(
+            shapely.remove_repeated_points(geoms, const.REPEATED_POINT_TOLERANCE_DEG)
+        )
     except shapely.errors.GEOSException:
         out = geoms.copy()
         for i, geom in enumerate(geoms):
@@ -1502,7 +1504,9 @@ def _force_2d(df: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return df
 
 
-def _clean_geometries(df: gpd.GeoDataFrame, indexer: VectorIndexer) -> gpd.GeoDataFrame:
+def _clean_geometries(
+    df: gpd.GeoDataFrame, indexer: VectorIndexer[Any]
+) -> gpd.GeoDataFrame:
     LOGGER.debug("Exploding geometry collections and multipolygons")
     # Correct antimeridian-crossing artifacts when the source coordinates were
     # unambiguous (projected CRS, or unwrapped longitudes), and only for
@@ -1587,8 +1591,8 @@ def _mp_context() -> multiprocessing.context.BaseContext:
 
 
 def _run_dggs_indexing(
-    indexer: VectorIndexer,
-    filepaths: list,
+    indexer: VectorIndexer[Any],
+    filepaths: list[Path],
     resolution: int,
     parent_res: int,
     output_dir: str,
@@ -1753,7 +1757,7 @@ def _index(
         ),
     )
 
-    features_in: set = set()
+    features_in: set[tuple[Any, ...]] = set()
     declared_dtypes = (
         _declared_attribute_dtypes(input_file, layer, con)
         if keep_attributes or keep_attribute

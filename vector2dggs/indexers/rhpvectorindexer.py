@@ -1,5 +1,6 @@
 from collections.abc import Iterable, Sequence
 from itertools import product
+from typing import cast
 
 import geopandas as gpd
 import pandas as pd
@@ -65,7 +66,7 @@ class RHPVectorIndexer(VectorIndexer[str]):
                 return res
         return const.MIN_RHP
 
-    def _polyfill_polygon(self, geom: Polygon, resolution: int) -> list:
+    def _polyfill_polygon(self, geom: Polygon, resolution: int) -> list[str]:
         cells = polyfill_array(
             geom,
             resolution,
@@ -84,10 +85,10 @@ class RHPVectorIndexer(VectorIndexer[str]):
                 if not geom.is_valid
                 else "rHEALPix rejects the polygon as having no area"
             )
-        return cells.tolist()
+        return list(cells.tolist())
 
     @staticmethod
-    def _linetrace(geom: LineString, resolution: int) -> list:
+    def _linetrace(geom: LineString, resolution: int) -> list[str]:
         cells = linetrace(geom, resolution, plane=False, dggs=WGS84_003)
         # linetrace returns a traversal sequence, which may revisit cells
         return list(dict.fromkeys(cells)) if cells else []
@@ -113,10 +114,14 @@ class RHPVectorIndexer(VectorIndexer[str]):
         return pd.DataFrame(result[result.index != ""].rename_axis(None))
 
     def cells_to_points(self, cells: Iterable[str]) -> Iterable[Point]:
-        return shapely.points(WGS84_003.centroids(list(cells), plane=False))
+        points = shapely.points(WGS84_003.centroids(list(cells), plane=False))
+        return cast(Iterable[Point], points)
 
     def cells_to_polygons(self, cells: Iterable[str]) -> Iterable[Polygon]:
-        return shapely.polygons(WGS84_003.boundary_array(list(cells), n=2, plane=False))
+        polygons = shapely.polygons(
+            WGS84_003.boundary_array(list(cells), n=2, plane=False)
+        )
+        return cast(Iterable[Polygon], polygons)
 
     def secondary_index(self, df: pd.DataFrame, parent_res: int) -> pd.DataFrame:
         """
@@ -133,7 +138,7 @@ class RHPVectorIndexer(VectorIndexer[str]):
         self,
         df: pd.DataFrame,
         res: int,
-        col_order: list,
+        col_order: list[str],
         dggs_col: str,
         id_field: str | Sequence[str],
         parent_res: int,
@@ -164,7 +169,7 @@ class RHPVectorIndexer(VectorIndexer[str]):
 
         Not a part of the interface provided by VectorIndexer.
         """
-        return rhp_compact_cells(cells)
+        return set(rhp_compact_cells(cells))
 
     @staticmethod
     def get_resolution(cell: str) -> int:
@@ -173,7 +178,7 @@ class RHPVectorIndexer(VectorIndexer[str]):
 
         Not a part of the interface provided by VectorIndexer.
         """
-        return rhp_get_resolution(cell)
+        return int(rhp_get_resolution(cell))
 
     @staticmethod
     def children_at_res(cell: str, target_res: int) -> list[str]:

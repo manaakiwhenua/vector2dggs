@@ -43,7 +43,7 @@ class A5VectorIndexer(VectorIndexer[str | int]):
     def cells_to_string(cells: Iterable[str | int]) -> list[str]:
         return [a5.u64_to_hex(int(c)) for c in cells]
 
-    def _polyfill_polygon(self, geom: Polygon, resolution: int) -> list:
+    def _polyfill_polygon(self, geom: Polygon, resolution: int) -> list[str | int]:
         interiors = [i.coords for i in geom.interiors]
         # uncompact reads the resolution from the covering's marker.
         return list(
@@ -59,7 +59,7 @@ class A5VectorIndexer(VectorIndexer[str | int]):
         )
 
     @staticmethod
-    def _linetrace(geom: LineString, resolution: int) -> list:
+    def _linetrace(geom: LineString, resolution: int) -> list[str | int]:
         # set: no documented uniqueness guarantee from line_string_to_cells
         return list(set(a5.line_string_to_cells(list(geom.coords), resolution)))
 
@@ -91,20 +91,20 @@ class A5VectorIndexer(VectorIndexer[str | int]):
         self,
         df: pd.DataFrame,
         res: int,
-        col_order: list,
+        col_order: list[str],
         dggs_col: str,
         id_field: str | Sequence[str],
         parent_res: int,
     ) -> pd.DataFrame:
         def _compact(cells: Iterable[str | int]) -> list[int]:
             # Drop the trailing compaction marker; it is not a cell.
-            covering = a5.compact([int(c) for c in cells])
+            covering: list[int] = a5.compact([int(c) for c in cells])
             if covering and a5.is_compaction_marker(covering[-1]):
                 covering.pop()
             return covering
 
         def _child(cell: str | int, res: int) -> int:
-            return a5.cell_to_children(int(cell), res)[0]
+            return int(a5.cell_to_children(int(cell), res)[0])
 
         return self.compaction_common(
             df,
@@ -126,7 +126,7 @@ class A5VectorIndexer(VectorIndexer[str | int]):
 
         Not a part of the interface provided by VectorIndexer.
         """
-        return a5.get_resolution(_as_u64(cell))
+        return int(a5.get_resolution(_as_u64(cell)))
 
     @staticmethod
     def children_at_res(cell: str | int, target_res: int) -> list[int]:
