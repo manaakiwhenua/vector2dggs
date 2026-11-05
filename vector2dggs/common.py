@@ -1485,6 +1485,14 @@ def _remove_repeated_points(geoms: np.ndarray) -> np.ndarray:
         return out
 
 
+def _force_2d(df: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    # Z/M ordinates break bisection and several backends (#231), drop them
+    geoms = df.geometry.values
+    if shapely.has_z(geoms).any() or shapely.has_m(geoms).any():
+        df[df.geometry.name] = shapely.force_2d(geoms)  # Vectorised
+    return df
+
+
 def _clean_geometries(df: gpd.GeoDataFrame, indexer: VectorIndexer) -> gpd.GeoDataFrame:
     LOGGER.debug("Exploding geometry collections and multipolygons")
     # Correct antimeridian-crossing artifacts when the source coordinates were
@@ -1778,6 +1786,7 @@ def _index(
             )
             fid_offset += len(batch)
             features_in.update(batch.index)
+            batch = _force_2d(batch)
             if line_budget is None:
                 blade_segment = _blade_segment(indexer, dggs, resolution, batch.crs)
                 # linestrings cross roughly one cell per edge-length travelled

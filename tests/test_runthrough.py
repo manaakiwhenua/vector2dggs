@@ -175,6 +175,10 @@ with contextlib.suppress(ImportError):
 with contextlib.suppress(ImportError):
     from .classes.errors import TestStagedOutput as TestStagedOutput
 with contextlib.suppress(ImportError):
+    from .classes.geometry_3d import Test3DInput as Test3DInput
+with contextlib.suppress(ImportError):
+    from .classes.geometry_3d import TestForce2D as TestForce2D
+with contextlib.suppress(ImportError):
     from .classes.batch_geometry import TestBatchCellGeometry as TestBatchCellGeometry
     from .classes.batch_geometry import TestBatchPointIndexing as TestBatchPointIndexing
     from .classes.ingest import TestBatchedIngest as TestBatchedIngest
