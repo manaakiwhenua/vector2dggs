@@ -1,6 +1,7 @@
 import unittest
 
 import geopandas as gpd
+import pyarrow as pa
 import pyarrow.parquet as pq
 import sqlalchemy
 
@@ -176,11 +177,7 @@ class TestPostGIS(TestRunthrough):
         self.assertIn("row_pk", table.schema.names)
         self.assertNotIn("fid", table.schema.names)
 
-    def test_postgis_composite_primary_key_falls_back_to_synthetic(self):
-        """A composite PK isn't auto-detected (out of scope for #193, see
-        #194); falls back to the synthetic fid, same as no PK at all."""
-        table_name = "vector2dggs_test_composite_pk_table"
-        self._table_with_primary_key(table_name, extra_pk_columns=("LCDB_UID",))
+    def _run_h3(self, table_name: str, extra: tuple[str, ...] = ()) -> pa.Table:
         h3(
             [
                 self.connection_url,
@@ -193,10 +190,28 @@ class TestPostGIS(TestRunthrough):
                 "8",
                 "-t",
                 "1",
+                *extra,
             ],
             standalone_mode=False,
         )
         files = sorted(self.output_path.rglob("*.parquet"))
         self.assertTrue(files, "No parquet files written from PostGIS input")
-        table = pq.read_table(files[0])
-        self.assertIn("fid", table.schema.names)
+        return pq.read_table(files[0])
+
+    def test_postgis_composite_primary_key_is_auto_detected(self):
+        """Every column of a composite PK is used, in key order (#194)."""
+        table_name = "vector2dggs_test_composite_pk_table"
+        self._table_with_primary_key(table_name, extra_pk_columns=("LCDB_UID",))
+        table = self._run_h3(table_name)
+        names = table.schema.names
+        self.assertNotIn("fid", names)
+        self.assertLess(names.index("row_pk"), names.index("LCDB_UID"))
+
+    def test_postgis_composite_id_field(self):
+        """An explicit composite -id over DB input, output in the order given."""
+        table_name = "vector2dggs_test_composite_id_table"
+        self._table_with_primary_key(table_name)
+        table = self._run_h3(table_name, ("-id", "LCDB_UID", "-id", "row_pk"))
+        names = table.schema.names
+        self.assertLess(names.index("LCDB_UID"), names.index("row_pk"))
+        self.assertNotIn("fid", names)

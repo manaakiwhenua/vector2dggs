@@ -523,3 +523,45 @@ class TestCompactionCommonDtypeSafety(TestCase):
 
         self.assertEqual(result.index.dtype, np.dtype("uint64"))
         self.assertEqual({int(c) for c in result.index}, {100, 2000})
+
+
+class TestCompactionCommonCompositeKey(TestCompactionCommonDtypeSafety):
+    """
+    With a composite id, siblings merge only when every key column agrees:
+    grouping on the first column alone would merge cells across features
+    that differ in the second (#194).
+    """
+
+    def _compact(self, df, id_field):
+        return self.indexer.compaction_common(
+            df,
+            res=2,
+            id_field=id_field,
+            col_order=["id", "id2", "attr"],
+            dggs_col=self.DGGS_COL,
+            compact_func=self._compact_func,
+            cell_to_child_func=self._cell_to_child_func,
+            parent_res=1,
+            get_resolution_func=self._get_resolution_func,
+            children_at_res_func=self._children_at_res_func,
+        )
+
+    def test_siblings_split_across_second_key_do_not_merge(self):
+        df = self.df.assign(id2=["p", "p", "q", "p"])
+        result = self._compact(df, ("id", "id2"))
+        self.assertEqual({int(c) for c in result.index}, {1000, 1001, 1002, 2000})
+        self.assertEqual(list(result.columns), ["id", "id2", "attr"])
+
+    def test_siblings_sharing_whole_key_merge(self):
+        df = self.df.assign(id2=["p", "p", "p", "p"])
+        result = self._compact(df, ("id", "id2"))
+        self.assertEqual({int(c) for c in result.index}, {100, 2000})
+        self.assertEqual(
+            set(zip(result["id"], result["id2"], strict=True)),
+            {("A", "p"), ("B", "p")},
+        )
+
+    def test_plain_string_id_still_accepted(self):
+        df = self.df.assign(id2=["p", "p", "q", "p"])
+        result = self._compact(df, "id")
+        self.assertEqual({int(c) for c in result.index}, {100, 2000})

@@ -13,6 +13,7 @@ from shapely.geometry import Point, box
 import vector2dggs.constants as const
 from vector2dggs import common
 from vector2dggs.indexers.h3vectorindexer import H3VectorIndexer
+from vector2dggs.indexers.vectorindexer import index_keys
 
 from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME
 
@@ -122,26 +123,26 @@ class TestCheckRequestedAttributes(TestCase):
 class TestPrepareDataframeKeepAttribute(TestCase):
     def test_keep_attribute_overrides_keep_attributes_false(self):
         gdf = gpd.GeoDataFrame({"geometry": [Point(0, 0)], "a": [1], "b": [2]})
-        result = common._prepare_dataframe(gdf, None, False, keep_attribute=("a",))
+        result = common._prepare_dataframe(gdf, (), False, keep_attribute=("a",))
         self.assertEqual(sorted(result.columns), ["a", "geometry"])
 
     def test_keep_attribute_ignores_columns_not_present(self):
         gdf = gpd.GeoDataFrame({"geometry": [Point(0, 0)], "a": [1]})
         result = common._prepare_dataframe(
-            gdf, None, False, keep_attribute=("a", "missing")
+            gdf, (), False, keep_attribute=("a", "missing")
         )
         self.assertEqual(sorted(result.columns), ["a", "geometry"])
 
     def test_no_keep_attribute_falls_back_to_boolean(self):
         gdf = gpd.GeoDataFrame({"geometry": [Point(0, 0)], "a": [1]})
-        kept_all = common._prepare_dataframe(gdf.copy(), None, True)
+        kept_all = common._prepare_dataframe(gdf.copy(), (), True)
         self.assertIn("a", kept_all.columns)
-        kept_none = common._prepare_dataframe(gdf.copy(), None, False)
+        kept_none = common._prepare_dataframe(gdf.copy(), (), False)
         self.assertNotIn("a", kept_none.columns)
 
     def test_keep_attribute_columns_are_dictionary_encoded(self):
         gdf = gpd.GeoDataFrame({"geometry": [Point(0, 0)], "a": ["x"], "b": ["y"]})
-        result = common._prepare_dataframe(gdf, None, False, keep_attribute=("a",))
+        result = common._prepare_dataframe(gdf, (), False, keep_attribute=("a",))
         self.assertEqual(result["a"].dtype, "category")
 
     def test_all_null_string_attribute_typed_from_schema(self):
@@ -158,7 +159,7 @@ class TestPrepareDataframeKeepAttribute(TestCase):
             }
         )
         result = common._prepare_dataframe(
-            gdf, None, False, keep_attribute=("a",), declared_dtypes={"a": "string"}
+            gdf, (), False, keep_attribute=("a",), declared_dtypes={"a": "string"}
         )
         self.assertEqual(result["a"].dtype, "category")
         table = pa.Table.from_pandas(pd.DataFrame(result).drop(columns=["geometry"]))
@@ -188,7 +189,7 @@ class TestDeclaredAttributeDtypes(TestCase):
         )
         result = common._prepare_dataframe(
             gdf,
-            None,
+            (),
             False,
             keep_attribute=("n", "b"),
             declared_dtypes={"n": "Int64", "b": "boolean"},
@@ -206,7 +207,7 @@ class TestReadBatchesColumnSelection(TestCase):
                 TEST_LAYER_NAME,
                 None,
                 False,
-                None,
+                (),
                 "geometry",
                 10,
                 keep_attribute=("LCDB_UID",),
@@ -218,7 +219,7 @@ class TestReadBatchesColumnSelection(TestCase):
     def test_default_keep_attributes_false_only_reads_geometry(self):
         batch = next(
             common._read_batches(
-                TEST_FILE_PATH, TEST_LAYER_NAME, None, False, None, "geometry", 10
+                TEST_FILE_PATH, TEST_LAYER_NAME, None, False, (), "geometry", 10
             )
         )
         self.assertEqual(list(batch.columns), ["geometry"])
@@ -264,15 +265,15 @@ class TestFidColumnIdField(TestCase):
         self.assertNotIn("facility_id", info["fields"])
 
     def test_check_id_field_accepts_fid_column(self):
-        common.check_id_field("facility_id", self.gpkg_path, "facilities", None)
+        common.check_id_field(("facility_id",), self.gpkg_path, "facilities", None)
 
     def test_check_id_field_accepts_regular_field(self):
-        common.check_id_field("name", self.gpkg_path, "facilities", None)
+        common.check_id_field(("name",), self.gpkg_path, "facilities", None)
 
     def test_check_id_field_rejects_unknown_field(self):
         with self.assertRaises(common.IdFieldError):
             common.check_id_field(
-                "not_a_real_column", self.gpkg_path, "facilities", None
+                ("not_a_real_column",), self.gpkg_path, "facilities", None
             )
 
     def test_read_batches_recovers_fid_column_values(self):
@@ -282,7 +283,7 @@ class TestFidColumnIdField(TestCase):
                 "facilities",
                 None,
                 False,
-                "facility_id",
+                ("facility_id",),
                 "geometry",
                 3,
             )
@@ -297,7 +298,7 @@ class TestFidColumnIdField(TestCase):
                 "facilities",
                 None,
                 False,
-                "name",
+                ("name",),
                 "geometry",
                 3,
             )
@@ -311,20 +312,68 @@ class TestFidColumnIdField(TestCase):
                 "facilities",
                 None,
                 False,
-                "facility_id",
+                ("facility_id",),
                 "geometry",
                 3,
             )
         )
-        result = common._prepare_dataframe(batch, "facility_id", False)
+        result = common._prepare_dataframe(batch, ("facility_id",), False)
         self.assertEqual(result.index.name, "facility_id")
         self.assertEqual(sorted(result.index), [101, 102, 103])
 
     def test_resolve_default_id_field_uses_fid_column(self):
         self.assertEqual(
             common.resolve_default_id_field(self.gpkg_path, "facilities", None),
-            "facility_id",
+            ("facility_id",),
         )
+
+    # -- composite ids (#194) --
+
+    def test_check_id_field_accepts_composite_of_fid_and_field(self):
+        common.check_id_field(
+            ("facility_id", "name"), self.gpkg_path, "facilities", None
+        )
+
+    def test_check_id_field_rejects_duplicates(self):
+        with self.assertRaisesRegex(common.IdFieldError, "Duplicate.*name"):
+            common.check_id_field(("name", "name"), self.gpkg_path, "facilities", None)
+
+    def test_check_id_field_names_unknown_member_of_composite(self):
+        with self.assertRaisesRegex(common.IdFieldError, "nope"):
+            common.check_id_field(("name", "nope"), self.gpkg_path, "facilities", None)
+
+    def test_read_batches_composite_of_fid_and_regular_column(self):
+        batch = next(
+            common._read_batches(
+                self.gpkg_path,
+                "facilities",
+                None,
+                False,
+                ("facility_id", "name"),
+                "geometry",
+                3,
+            )
+        )
+        self.assertEqual(
+            sorted(zip(batch["facility_id"], batch["name"], strict=True)),
+            [(101, "a"), (102, "b"), (103, "c")],
+        )
+
+    def test_prepare_dataframe_composite_index_in_given_order(self):
+        batch = next(
+            common._read_batches(
+                self.gpkg_path,
+                "facilities",
+                None,
+                False,
+                ("name", "facility_id"),
+                "geometry",
+                3,
+            )
+        )
+        result = common._prepare_dataframe(batch, ("name", "facility_id"), False)
+        self.assertEqual(result.index.names, ["name", "facility_id"])
+        self.assertEqual(set(result.index), {("a", 101), ("b", 102), ("c", 103)})
 
 
 class TestResolveDefaultIdFieldNoFid(TestCase):
@@ -347,10 +396,10 @@ class TestResolveDefaultIdFieldNoFid(TestCase):
     def tearDown(self):
         self._tmpdir.cleanup()
 
-    def test_falls_back_to_none(self):
+    def test_falls_back_to_empty(self):
         with self.assertLogs(common.LOGGER, level="WARNING"):
             result = common.resolve_default_id_field(self.shp_path, None, None)
-        self.assertIsNone(result)
+        self.assertEqual(result, ())
 
 
 class TestDropCondition(TestCase):
@@ -520,10 +569,10 @@ class TestDictionaryEncodeAttributes(TestCase):
     def test_prepare_dataframe_encodes_only_when_keeping_attributes(self):
         gdf = gpd.GeoDataFrame({"geometry": [Point(0, 0)], "class": ["forest"]})
 
-        kept = common._prepare_dataframe(gdf.copy(), None, keep_attributes=True)
+        kept = common._prepare_dataframe(gdf.copy(), (), keep_attributes=True)
         self.assertEqual(kept["class"].dtype, "category")
 
-        dropped = common._prepare_dataframe(gdf.copy(), None, keep_attributes=False)
+        dropped = common._prepare_dataframe(gdf.copy(), (), keep_attributes=False)
         self.assertNotIn("class", dropped.columns)
 
 
@@ -577,7 +626,7 @@ class TestMergePartitionFilesDtypeSafety(TestCase):
             )
 
             common._merge_partition_files(
-                partition_dir, compression="snappy", dggs_col="cell", id_col="fid"
+                partition_dir, compression="snappy", dggs_col="cell", id_fields=("fid",)
             )
 
             merged = list(partition_dir.glob("*.parquet"))
@@ -606,7 +655,7 @@ class TestDropDuplicateCells(TestCase):
 
     def test_exact_duplicates_collapse_to_one(self):
         table = _pairs_table([1, 1, 2], ["a", "a", "b"], extra=["x", "x", "y"])
-        result = common._drop_duplicate_cells(table, "fid", "h3_09")
+        result = common._drop_duplicate_cells(table, ("fid",), "h3_09")
         self.assertEqual(result.num_rows, 2)
         self.assertEqual(result.column("fid").to_pylist(), [1, 2])
         self.assertEqual(result.column("h3_09").to_pylist(), ["a", "b"])
@@ -616,36 +665,58 @@ class TestDropDuplicateCells(TestCase):
         # overlapping features legitimately share cells; only the pair is
         # what has to be unique
         table = _pairs_table([1, 2], ["a", "a"])
-        result = common._drop_duplicate_cells(table, "fid", "h3_09")
+        result = common._drop_duplicate_cells(table, ("fid",), "h3_09")
         self.assertEqual(result.num_rows, 2)
 
     def test_same_feature_with_different_cells_is_kept(self):
         table = _pairs_table([1, 1], ["a", "b"])
-        result = common._drop_duplicate_cells(table, "fid", "h3_09")
+        result = common._drop_duplicate_cells(table, ("fid",), "h3_09")
         self.assertEqual(result.num_rows, 2)
 
     def test_row_order_is_preserved(self):
         # write_partition sorts by partition value so each parent cell's
         # rows stay contiguous; deduplication must not reshuffle that
         table = _pairs_table([3, 1, 3, 2, 1], ["c", "a", "c", "b", "a"])
-        result = common._drop_duplicate_cells(table, "fid", "h3_09")
+        result = common._drop_duplicate_cells(table, ("fid",), "h3_09")
         self.assertEqual(result.column("h3_09").to_pylist(), ["c", "a", "b"])
 
     def test_unduplicated_table_is_returned_unchanged(self):
         table = _pairs_table([1, 2, 3], ["a", "b", "c"])
-        self.assertIs(common._drop_duplicate_cells(table, "fid", "h3_09"), table)
+        self.assertIs(common._drop_duplicate_cells(table, ("fid",), "h3_09"), table)
 
     def test_schema_metadata_survives(self):
         table = _pairs_table([1, 1], ["a", "a"]).replace_schema_metadata(
             {b"geo": b"{}"}
         )
-        result = common._drop_duplicate_cells(table, "fid", "h3_09")
+        result = common._drop_duplicate_cells(table, ("fid",), "h3_09")
         self.assertEqual(result.num_rows, 1)
         self.assertEqual(result.schema.metadata.get(b"geo"), b"{}")
 
     def test_missing_key_column_is_a_no_op(self):
         table = pa.table({"h3_09": ["a", "a"]})
-        self.assertIs(common._drop_duplicate_cells(table, "fid", "h3_09"), table)
+        self.assertIs(common._drop_duplicate_cells(table, ("fid",), "h3_09"), table)
+
+
+class TestCompositeIdKeys(TestCase):
+    """Feature keys are tuples on both sides of the dropped-feature count (#194)."""
+
+    def test_drop_duplicate_cells_composite_dedups_only_full_key_matches(self):
+        table = pa.table({"a": [1, 1, 1], "b": ["x", "x", "y"], "h3_09": ["c"] * 3})
+        result = common._drop_duplicate_cells(table, ("a", "b"), "h3_09")
+        self.assertEqual(result.num_rows, 2)
+        self.assertEqual(result.column("b").to_pylist(), ["x", "y"])
+
+    def test_index_keys_are_tuples_for_index_and_multiindex(self):
+        single = pd.Index([1, 2], name="a")
+        self.assertEqual(set(index_keys(single)), {(1,), (2,)})
+        multi = pd.MultiIndex.from_tuples([(1, "x"), (2, "y")], names=["a", "b"])
+        self.assertEqual(set(index_keys(multi)), {(1, "x"), (2, "y")})
+
+    def test_ids_in_matches_index_keys_shape(self):
+        table = pa.table({"a": [1, 1, 2], "b": ["x", "x", "y"], "h3_09": ["c"] * 3})
+        self.assertEqual(common._ids_in(table, ("a", "b")), {(1, "x"), (2, "y")})
+        self.assertEqual(common._ids_in(table, ("a",)), {(1,), (2,)})
+        self.assertEqual(common._ids_in(table, ("a", "missing")), set())
 
 
 class TestMergePartitionFilesDeduplication(TestCase):
@@ -665,10 +736,13 @@ class TestMergePartitionFilesDeduplication(TestCase):
             partition_dir = Path(d)
             self._write(partition_dir, "part-0.parquet", [1, 1, 2], ["a", "a", "b"])
             dropped, ids = common._merge_partition_files(
-                partition_dir, compression="snappy", dggs_col="h3_09", id_col="fid"
+                partition_dir,
+                compression="snappy",
+                dggs_col="h3_09",
+                id_fields=("fid",),
             )
             self.assertEqual(dropped, 1)
-            self.assertEqual(ids, {1, 2})
+            self.assertEqual(ids, {(1,), (2,)})
             merged = list(partition_dir.glob("*.parquet"))
             self.assertEqual(len(merged), 1)
             self.assertEqual(pq.read_table(merged[0]).num_rows, 2)
@@ -681,10 +755,13 @@ class TestMergePartitionFilesDeduplication(TestCase):
             self._write(partition_dir, "part-0.parquet", [1, 2], ["a", "b"])
             self._write(partition_dir, "part-1.parquet", [1, 3], ["a", "c"])
             dropped, ids = common._merge_partition_files(
-                partition_dir, compression="snappy", dggs_col="h3_09", id_col="fid"
+                partition_dir,
+                compression="snappy",
+                dggs_col="h3_09",
+                id_fields=("fid",),
             )
             self.assertEqual(dropped, 1)
-            self.assertEqual(ids, {1, 2, 3})
+            self.assertEqual(ids, {(1,), (2,), (3,)})
             merged = list(partition_dir.glob("*.parquet"))
             self.assertEqual(len(merged), 1)
             table = pq.read_table(merged[0])
@@ -708,10 +785,13 @@ class TestMergePartitionFilesDeduplication(TestCase):
             self._write(partition_dir, "part-0.parquet", [1, 2], ["a", "b"])
             before = {f.name for f in partition_dir.glob("*.parquet")}
             dropped, ids = common._merge_partition_files(
-                partition_dir, compression="snappy", dggs_col="h3_09", id_col="fid"
+                partition_dir,
+                compression="snappy",
+                dggs_col="h3_09",
+                id_fields=("fid",),
             )
             self.assertEqual(dropped, 0)
             # reported even though the file was left alone: the ids present
             # in the output are what the dropped-feature count is taken from
-            self.assertEqual(ids, {1, 2})
+            self.assertEqual(ids, {(1,), (2,)})
             self.assertEqual({f.name for f in partition_dir.glob("*.parquet")}, before)

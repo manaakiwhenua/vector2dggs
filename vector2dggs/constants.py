@@ -317,7 +317,7 @@ def default_threads() -> int:
 
 
 DEFAULTS = {
-    "id": None,
+    "id": (),
     "k": False,
     "t": default_threads(),
     "cp": "snappy",

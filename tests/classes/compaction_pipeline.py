@@ -1,9 +1,13 @@
+import warnings
 from collections import Counter
 from unittest import TestCase
 
+import geopandas as gpd
 import h3 as h3lib
 import pandas as pd
+from shapely.geometry import box
 
+from vector2dggs.h3 import h3
 from vector2dggs.indexers.h3vectorindexer import H3VectorIndexer
 
 from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME
@@ -77,4 +81,64 @@ class TestCompactionAcrossPartitions(TestRunthrough):
             0,
             f"{unmerged_septets} complete sibling sets were left uncompacted "
             "(feature cells split across dask partitions?)",
+        )
+
+
+class TestCompositeIdCompaction(TestRunthrough):
+    """
+    Compaction groups on the joint key of a composite -id (#194): three
+    polygons keyed (1,x), (1,y), (2,x), the two a=1 ones overlapping, so
+    neither column is unique alone. Merging siblings on `a` alone would
+    surface cells of (1,x) under (1,y) and the per-key expansion below would
+    no longer reproduce the uncompacted output.
+    """
+
+    RES, PARENT_RES = 9, 5
+
+    def _run(self, src, out, extra=()):
+        h3(
+            [str(src), str(out), "-r", str(self.RES), "-pr", str(self.PARENT_RES)]
+            + ["-id", "a", "-id", "b", "-t", "1", *extra],
+            standalone_mode=False,
+        )
+        return pd.read_parquet(out)
+
+    @staticmethod
+    def _cells_by_key(df, expand_to=None):
+        out: dict[tuple, set[str]] = {}
+        for cell, a, b in zip(df.index, df["a"], df["b"], strict=True):
+            cells = (
+                h3lib.cell_to_children(cell, expand_to)
+                if expand_to is not None and h3lib.get_resolution(cell) < expand_to
+                else [cell]
+            )
+            out.setdefault((a, b), set()).update(cells)
+        return out
+
+    def test_compaction_groups_on_joint_key(self):
+        src = self.output_path.parent / "composite.gpkg"
+        gdf = gpd.GeoDataFrame(
+            {
+                "a": [1, 1, 2],
+                "b": ["x", "y", "x"],
+                "geometry": [
+                    box(174.70, -41.30, 174.74, -41.26),
+                    box(174.72, -41.28, 174.76, -41.24),  # overlaps the first
+                    box(174.80, -41.30, 174.84, -41.26),
+                ],
+            },
+            crs=4326,
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            gdf.to_file(src, layer="x")
+
+        flat = self._run(src, self.output_path / "flat")
+        compact = self._run(src, self.output_path / "compact", ("-co",))
+
+        self.assertEqual(list(compact.columns), ["a", "b", "h3_05"])
+        self.assertLess(len(compact), len(flat))
+        self.assertEqual(len(compact[["a", "b"]].drop_duplicates()), 3)
+        self.assertEqual(
+            self._cells_by_key(compact, expand_to=self.RES), self._cells_by_key(flat)
         )

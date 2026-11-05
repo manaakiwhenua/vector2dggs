@@ -130,6 +130,28 @@ class TestErrors(TestRunthrough):
         table = pq.read_table(next(Path(self.output_path).rglob("*.parquet")))
         self.assertIn("fid", table.schema.names)
 
+    def _h3_with_ids(self, *id_args):
+        h3(
+            [
+                TEST_FILE_PATH,
+                str(self.output_path),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "8",
+                *id_args,
+            ],
+            standalone_mode=False,
+        )
+
+    def test_duplicate_id_field_raises(self):
+        with self.assertRaisesRegex(common.IdFieldError, "Duplicate"):
+            self._h3_with_ids("-id", "LCDB_UID", "-id", "LCDB_UID")
+
+    def test_unknown_member_of_composite_id_raises(self):
+        with self.assertRaisesRegex(common.IdFieldError, "not_a_real_column"):
+            self._h3_with_ids("-id", "LCDB_UID", "-id", "not_a_real_column")
+
     def test_unknown_dggs_raises(self):
         with self.assertRaises(ValueError):
             indexer_instance("not_a_real_dggs")

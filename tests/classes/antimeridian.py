@@ -46,7 +46,7 @@ class TestAntimeridian(TestRunthrough):
         gdf = gpd.read_file(
             TEST_ANTIMERIDIAN_FILE_PATH, layer=TEST_ANTIMERIDIAN_LAYER_NAME
         )
-        gdf = _prepare_dataframe(gdf, None, False)
+        gdf = _prepare_dataframe(gdf, (), False)
         cut_threshold = _derive_cut_threshold(gdf, indexer.dggs, 0)
         df = _run_bisection(gdf, cut_threshold, 1)
         return _clean_geometries(df, indexer)

@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 
 import a5
 import geopandas as gpd
@@ -87,7 +87,15 @@ class A5VectorIndexer(VectorIndexer[str | int]):
         ).astype("uint64")
         return df
 
-    def compaction(self, df, res, col_order, dggs_col, id_field, parent_res):
+    def compaction(
+        self,
+        df: pd.DataFrame,
+        res: int,
+        col_order: list,
+        dggs_col: str,
+        id_field: str | Sequence[str],
+        parent_res: int,
+    ) -> pd.DataFrame:
         def _compact(cells):
             # Drop the trailing compaction marker; it is not a cell.
             covering = a5.compact([int(c) for c in cells])
