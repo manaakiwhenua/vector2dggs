@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 
 import geopandas as gpd
 import h3
@@ -96,7 +96,15 @@ class H3VectorIndexer(VectorIndexer[str | int]):
         ).astype("uint64")
         return df
 
-    def compaction(self, df, res, col_order, dggs_col, id_field, parent_res):
+    def compaction(
+        self,
+        df: pd.DataFrame,
+        res: int,
+        col_order: list,
+        dggs_col: str,
+        id_field: str | Sequence[str],
+        parent_res: int,
+    ) -> pd.DataFrame:
         def _compact(cells):
             return basic_int.compact_cells([int(c) for c in cells])
 
