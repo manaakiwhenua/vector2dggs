@@ -46,26 +46,28 @@ class H3VectorIndexer(VectorIndexer[str | int]):
     def cells_to_string(cells: Iterable[str | int]) -> list[str]:
         return [h3.int_to_str(int(c)) for c in cells]
 
-    def _polyfill_polygon(self, geom: Polygon, resolution: int) -> list:
+    def _polyfill_polygon(self, geom: Polygon, resolution: int) -> list[str | int]:
         if self.mode == const.ContainmentMode.CENTRE:
-            return basic_int.geo_to_cells(mapping(geom), resolution)
-        return basic_int.h3shape_to_cells_experimental(
-            basic_int.geo_to_h3shape(mapping(geom)),
-            resolution,
-            _CONTAIN[self.mode],
+            return list(basic_int.geo_to_cells(mapping(geom), resolution))
+        return list(
+            basic_int.h3shape_to_cells_experimental(
+                basic_int.geo_to_h3shape(mapping(geom)),
+                resolution,
+                _CONTAIN[self.mode],
+            )
         )
 
     def _cell_at(self, lon: float, lat: float, resolution: int) -> int:
-        return basic_int.latlng_to_cell(lat, lon, resolution)
+        return int(basic_int.latlng_to_cell(lat, lon, resolution))
 
     def _neighbours(self, cell: str | int) -> list[int]:
         """
         Hexagons have no vertex-only neighbours, so the edge-adjacent disk
         is already what _cover_segment needs.
         """
-        return basic_int.grid_disk(_as_int(cell), 1)
+        return list(basic_int.grid_disk(_as_int(cell), 1))
 
-    def _linetrace(self, geom: LineString, resolution: int) -> list:
+    def _linetrace(self, geom: LineString, resolution: int) -> list[str | int]:
         """
         h3-py has no line cover: grid_path_cells walks a route between two
         cells, not the cells a line occupies.
@@ -100,16 +102,16 @@ class H3VectorIndexer(VectorIndexer[str | int]):
         self,
         df: pd.DataFrame,
         res: int,
-        col_order: list,
+        col_order: list[str],
         dggs_col: str,
         id_field: str | Sequence[str],
         parent_res: int,
     ) -> pd.DataFrame:
         def _compact(cells: Iterable[str | int]) -> list[int]:
-            return basic_int.compact_cells([int(c) for c in cells])
+            return list(basic_int.compact_cells([int(c) for c in cells]))
 
         def _child(cell: str | int, res: int) -> int:
-            return basic_int.cell_to_center_child(int(cell), res)
+            return int(basic_int.cell_to_center_child(int(cell), res))
 
         return self.compaction_common(
             df,
@@ -131,7 +133,7 @@ class H3VectorIndexer(VectorIndexer[str | int]):
 
         Not a part of the interface provided by VectorIndexer.
         """
-        return basic_int.get_resolution(_as_int(cell))
+        return int(basic_int.get_resolution(_as_int(cell)))
 
     @staticmethod
     def children_at_res(cell: str | int, target_res: int) -> list[int]:
@@ -141,7 +143,7 @@ class H3VectorIndexer(VectorIndexer[str | int]):
 
         Not a part of the interface provided by VectorIndexer.
         """
-        return basic_int.cell_to_children(_as_int(cell), target_res)
+        return list(basic_int.cell_to_children(_as_int(cell), target_res))
 
     @staticmethod
     def cell_to_point(cell: str | int) -> Point:

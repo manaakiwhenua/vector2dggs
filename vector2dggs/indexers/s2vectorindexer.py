@@ -26,7 +26,7 @@ def _cell_from(cell: str | int) -> S2.S2CellId:
 
 
 def _cell_id(cell: S2.S2CellId) -> int:
-    return cell.id()
+    return int(cell.id())
 
 
 def _s2_loop(ring: LinearRing) -> S2.S2Loop | None:
@@ -105,7 +105,7 @@ class S2VectorIndexer(VectorIndexer[str | int]):
         self,
         df: pd.DataFrame,
         res: int,
-        col_order: list,
+        col_order: list[str],
         dggs_col: str,
         id_field: str | Sequence[str],
         parent_res: int,
@@ -211,7 +211,7 @@ class S2VectorIndexer(VectorIndexer[str | int]):
         Not a part of the interface provided by VectorIndexer.
         """
         cell_center = S2.S2Cell(cell).GetCenter()
-        return polygon.Contains(cell_center)
+        return bool(polygon.Contains(cell_center))
 
     def cells_from_linestring(self, linestring: LineString, level: int) -> list[int]:
         """
@@ -258,7 +258,7 @@ class S2VectorIndexer(VectorIndexer[str | int]):
 
         Not a part of the interface provided by VectorIndexer.
         """
-        return _cell_from(cell).level()
+        return int(_cell_from(cell).level())
 
     @staticmethod
     def children_at_res(cell: str | int, target_level: int) -> list[int]:
