@@ -49,6 +49,10 @@ with contextlib.suppress(ImportError):
     )
 with contextlib.suppress(ImportError):
     from .classes.compaction import (
+        TestCompactionCommonCompositeKey as TestCompactionCommonCompositeKey,
+    )
+with contextlib.suppress(ImportError):
+    from .classes.compaction import (
         TestGeohashCompactionBounds as TestGeohashCompactionBounds,
     )
 with contextlib.suppress(ImportError):
@@ -65,6 +69,8 @@ with contextlib.suppress(ImportError):
     )
 with contextlib.suppress(ImportError):
     from .classes.common_units import TestCommitOutput as TestCommitOutput
+with contextlib.suppress(ImportError):
+    from .classes.common_units import TestCompositeIdKeys as TestCompositeIdKeys
 with contextlib.suppress(ImportError):
     from .classes.common_units import (
         TestDictionaryEncodeAttributes as TestDictionaryEncodeAttributes,
@@ -117,6 +123,10 @@ with contextlib.suppress(ImportError):
 with contextlib.suppress(ImportError):
     from .classes.compaction_pipeline import (
         TestCompactionEmptyPartition as TestCompactionEmptyPartition,
+    )
+with contextlib.suppress(ImportError):
+    from .classes.compaction_pipeline import (
+        TestCompositeIdCompaction as TestCompositeIdCompaction,
     )
 with contextlib.suppress(ImportError):
     from .classes.containment_mode import (

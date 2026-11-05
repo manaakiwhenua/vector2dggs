@@ -42,11 +42,10 @@ def make_dggs_command(
     @click.option(
         "-id",
         "--id_field",
-        required=False,
+        multiple=True,
         default=const.DEFAULTS["id"],
         type=str,
-        help="Field to use as an ID; defaults to the input's own internal ID if it has one (e.g. a GPKG's FID column, or a DB table's single-column primary key), otherwise falls back to a constructed 0...n index on the original feature order.",
-        nargs=1,
+        help="Field to use as an ID; repeat for a composite ID (one output column per field, in the order given). Defaults to the input's own internal ID if it has one (e.g. a GPKG's FID column, or a DB table's primary key, every column of a composite key), otherwise falls back to a constructed 0...n index on the original feature order.",
     )
     @click.option(
         "-k",
@@ -187,7 +186,7 @@ def make_dggs_command(
         output_directory: str | Path,
         resolution: str,
         parent_res: str,
-        id_field: str | None,
+        id_field: tuple[str, ...],
         keep_attributes: bool,
         keep_attribute: tuple[str, ...],
         processes: int,

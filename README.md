@@ -52,8 +52,8 @@ vector2dggs <dggs> [OPTIONS] VECTOR_INPUT OUTPUT_DIRECTORY
 
 - `-r`/`--resolution`: the target DGGS resolution. Each output row is one (feature, cell) pair; by default a cell is included when its centre point falls inside the feature, uniformly across all backends (see `-m`/`--mode`).
 - `-pr`/`--parent_res`: a coarser resolution used to partition the output (hive directories such as `h3_03=…`); defaults to a fixed offset below the target resolution.
-- `-id`/`--id_field`: the feature identifier carried into the output. Defaults to the input's own internal ID where one exists (a GPKG's FID column, or a DB table's single-column primary key); otherwise falls back to a synthetic index tied to row position in the read order — stable across repeated runs of the same unchanged input, but not portable to a different export/copy of the same data. Rows sharing an id are treated as one feature.
-- `-co`/`--compact`: merges complete sets of sibling cells belonging to one feature (grouped by whichever id_field is in play, explicit, auto-detected, or synthetic), to no coarser than the parent resolution. Compacted output expands back to exactly the full-resolution result.
+- `-id`/`--id_field`: the feature identifier carried into the output. Repeat it for a composite identifier (`-id region -id parcel_no`): each field becomes an output column, in the order given, and rows sharing the whole key are treated as one feature. Defaults to the input's own internal ID where one exists (a GPKG's FID column, or a DB table's primary key, every column of a composite one); otherwise falls back to a synthetic index tied to row position in the read order — stable across repeated runs of the same unchanged input, but not portable to a different export/copy of the same data.
+- `-co`/`--compact`: merges complete sets of sibling cells belonging to one feature (grouped by whichever id_field is in play, explicit, auto-detected, or synthetic, and by the joint key when it is composite), to no coarser than the parent resolution. Compacted output expands back to exactly the full-resolution result.
 - `--geo`: plain Parquet by default; `point` or `polygon` writes GeoParquet (v1.1.0) cell geometries instead.
 - `-m`/`--mode`: which of a polygon's cells are indexed. See [Containment modes](#containment-modes) below.
 - `--cell-id`: `string` (default) or `uint64`. DGGS with a native integer cell form (A5, H3, S2) can write cell IDs as unsigned 64-bit integers instead of text — useful where downstream tools take integer cell IDs directly (e.g. DuckDB's `h3` extension). Cell IDs are worked in the native form internally regardless of this flag; it only controls the final output rendering. String-only DGGS (rHEALPix, Geohash) reject `--cell-id uint64`.
@@ -82,10 +82,12 @@ Options:
   -pr, --parent_res [0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15]
                                   H3 parent resolution for the output partition.
                                   Defaults to resolution - 6
-  -id, --id_field TEXT            Field to use as an ID; defaults to the input's
-                                  own internal ID if it has one (e.g. a GPKG's
-                                  FID column, or a DB table's single-column
-                                  primary key), otherwise falls back to a
+  -id, --id_field TEXT            Field to use as an ID; repeat for a composite
+                                  ID (one output column per field, in the order
+                                  given). Defaults to the input's own internal
+                                  ID if it has one (e.g. a GPKG's FID column, or
+                                  a DB table's primary key, every column of a
+                                  composite key), otherwise falls back to a
                                   constructed 0...n index on the original
                                   feature order.
   -k, --keep_attributes           Retain attributes in output. The default is to
@@ -196,7 +198,7 @@ Compaction is supported with the `-co/--compact` argument. A complete set of sib
 
 ![The same land cover indexed to rHEALPix resolution 13, before and after compaction](docs/imgs/compaction-example.png "The same land cover indexed to rHEALPix resolution 13, before and after compaction")
 
-Compaction respects overlapping polygons by considering each feature independently. This does mean that the index of the result is not necessarily unique (unless your input is a vector _coverage_, i.e. it does not have overlaps — as the example above is, so each of its cells belongs to exactly one feature). Where features do overlap, a cell covered by two of them appears once per feature.
+Compaction respects overlapping polygons by considering each feature independently, a feature being the rows that share an id (the whole key, for a composite `-id`). This does mean that the index of the result is not necessarily unique (unless your input is a vector _coverage_, i.e. it does not have overlaps — as the example above is, so each of its cells belongs to exactly one feature). Where features do overlap, a cell covered by two of them appears once per feature.
 
 ### For development
 
@@ -257,6 +259,12 @@ Indexing small polygons without losing any of them (see [Containment modes](#con
 
 ```bash
 vector2dggs s2 -id parcel_id -r 16 -m intersects ./parcels.gpkg ./parcels.parquet
+```
+
+With a composite identifier, compacting per feature on the joint key:
+
+```bash
+vector2dggs h3 -id region -id parcel_no -co -r 12 ./parcels.gpkg ./parcels.parquet
 ```
 
 With a PostgreSQL/PostGIS connection:

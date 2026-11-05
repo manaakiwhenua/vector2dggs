@@ -1,5 +1,5 @@
 import math
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 
 import geopandas as gpd
 import pandas as pd
@@ -107,7 +107,7 @@ class S2VectorIndexer(VectorIndexer[str | int]):
         res: int,
         col_order: list,
         dggs_col: str,
-        id_field: str,
+        id_field: str | Sequence[str],
         parent_res: int,
     ) -> pd.DataFrame:
         """

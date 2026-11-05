@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from itertools import product
 
 import geopandas as gpd
@@ -134,7 +134,7 @@ class RHPVectorIndexer(VectorIndexer[str]):
         res: int,
         col_order: list,
         dggs_col: str,
-        id_field: str,
+        id_field: str | Sequence[str],
         parent_res: int,
     ) -> pd.DataFrame:
         """

@@ -5,7 +5,7 @@ import math
 import multiprocessing
 import shutil
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from pathlib import Path, PurePath
 from types import ModuleType
@@ -36,7 +36,11 @@ import vector2dggs.indexerfactory as idxfactory
 from vector2dggs.indexers.vectorindexer import (
     ContainmentModeError as ContainmentModeError,
 )
-from vector2dggs.indexers.vectorindexer import VectorIndexer
+from vector2dggs.indexers.vectorindexer import (
+    VectorIndexer,
+    as_id_fields,
+    index_keys,
+)
 
 from . import katana, spikes
 
@@ -184,22 +188,26 @@ def _fid_column(input_file: Path | str, layer: str | None) -> str | None:
 
 
 def check_id_field(
-    id_field: str | None,
+    id_fields: Sequence[str],
     input_file: Path | str,
     layer: str | None,
     con: SQLConnectionType | None,
 ) -> None:
-    if not id_field:
+    if not id_fields:
         return
+    dupes = sorted({f for f in id_fields if id_fields.count(f) > 1})
+    if dupes:
+        raise IdFieldError(f"Duplicate -id/--id_field: {', '.join(dupes)}")
     if layer and con:
         with con.connect() as connection:
             available = set(_db_table(connection, layer).columns.keys())
     else:
         info = pyogrio.read_info(str(input_file), layer=layer)
         available = set(info["fields"]) | {info.get("fid_column")}
-    if id_field not in available:
+    unknown = [f for f in id_fields if f not in available]
+    if unknown:
         raise IdFieldError(
-            f"Unknown -id/--id_field '{id_field}'. "
+            f"Unknown -id/--id_field: {', '.join(unknown)}. "
             f"Available: {', '.join(sorted(c for c in available if c))}"
         )
 
@@ -234,31 +242,31 @@ def resolve_default_id_field(
     input_file: Path | str,
     layer: str | None,
     con: SQLConnectionType | None,
-) -> str | None:
+) -> tuple[str, ...]:
     """
     When -id/--id_field isn't given, prefer a real internal ID over a
     constructed 0...n sequence: a file's physically-stored FID column, or
-    a DB table's single-column primary key. Falls back to None (the
-    caller's synthetic-sequence path) with a warning when neither is
-    available, e.g. Shapefile, or a composite/missing DB primary key.
+    a DB table's primary key (every column of a composite one). Falls back
+    to () (the caller's synthetic-sequence path) with a warning when
+    neither is available, e.g. Shapefile, or a DB table with no primary key.
     """
     if layer and con:
         with con.connect() as connection:
             pk_cols = list(_db_table(connection, layer).primary_key.columns)
-        if len(pk_cols) == 1:
-            return pk_cols[0].name
+        if pk_cols:
+            return tuple(c.name for c in pk_cols)
     else:
         fid_col = _fid_column(input_file, layer)
         if fid_col:
-            return fid_col
+            return (fid_col,)
     LOGGER.warning(
         "No internal ID found (no physically-stored FID column, or no "
-        "single-column primary key); using a constructed 0...n index tied "
+        "primary key); using a constructed 0...n index tied "
         "to row position in the read order, which won't match a different "
         "export/copy of this data. Pass -id/--id_field to use a specific "
         "field instead."
     )
-    return None
+    return ()
 
 
 def validate_compression(ctx, param, value: str) -> str:
@@ -561,14 +569,17 @@ def _geom_fn(indexer: VectorIndexer, geo: str):
     )
 
 
-def _ids_in(table: pa.Table, id_col: str) -> set:
-    """The distinct feature ids a merged partition actually contains."""
-    if id_col not in table.column_names:
+def _ids_in(table: pa.Table, id_fields: tuple[str, ...]) -> set[tuple]:
+    """The distinct feature ids a merged partition actually contains, as tuples."""
+    if any(c not in table.column_names for c in id_fields):
         return set()
-    return set(table.column(id_col).unique().to_pylist())
+    distinct = table.select(list(id_fields)).group_by(list(id_fields)).aggregate([])
+    return set(zip(*(distinct.column(c).to_pylist() for c in id_fields), strict=True))
 
 
-def _drop_duplicate_cells(table: pa.Table, id_col: str, dggs_col: str) -> pa.Table:
+def _drop_duplicate_cells(
+    table: pa.Table, id_fields: tuple[str, ...], dggs_col: str
+) -> pa.Table:
     """
     Enforce the one-row-per-(feature, cell) contract, keeping the first of
     each group and leaving row order otherwise untouched.
@@ -585,18 +596,19 @@ def _drop_duplicate_cells(table: pa.Table, id_col: str, dggs_col: str) -> pa.Tab
     """
     if table.num_rows < 2:
         return table
-    if id_col not in table.column_names or dggs_col not in table.column_names:
+    keys = [*id_fields, dggs_col]
+    if any(c not in table.column_names for c in keys):
         return table
 
     edged = const.EDGE_COLUMN in table.column_names
     positions = pa.array(np.arange(table.num_rows, dtype=np.int64))
-    keyed = table.select(
-        [id_col, dggs_col] + ([const.EDGE_COLUMN] if edged else [])
-    ).append_column("__row__", positions)
+    keyed = table.select(keys + ([const.EDGE_COLUMN] if edged else [])).append_column(
+        "__row__", positions
+    )
     aggregations = [("__row__", "min")]
     if edged:
         aggregations.append((const.EDGE_COLUMN, "any"))
-    groups = keyed.group_by([id_col, dggs_col]).aggregate(aggregations)
+    groups = keyed.group_by(keys).aggregate(aggregations)
     if edged:
         # a cell the boundary passes through is not within the feature
         groups = groups.filter(
@@ -616,11 +628,10 @@ def _merge_partition_files(
     partition_dir: Path,
     compression: str,
     dggs_col: str,
-    id_col: str,
+    id_fields: tuple[str, ...],
     indexer: VectorIndexer | None = None,
     resolution: int | None = None,
     parent_res: int | None = None,
-    id_field: str | None = None,
     geo: str | None = None,
     cell_id: str = const.CellIdMode.STRING.value,
 ) -> tuple[int, set]:
@@ -693,12 +704,12 @@ def _merge_partition_files(
     table = pa.concat_tables(tables)
 
     edged = const.EDGE_COLUMN in table.column_names
-    resolved = _drop_duplicate_cells(table, id_col, dggs_col)
+    resolved = _drop_duplicate_cells(table, id_fields, dggs_col)
     dropped = table.num_rows - resolved.num_rows
     table = resolved
     if len(files) == 1 and not compacting and not dropped and not edged:
         # nothing to merge and nothing to drop: leave the file as written
-        return 0, _ids_in(table, id_col)
+        return 0, _ids_in(table, id_fields)
 
     if base_geo_meta is not None:
         col_meta = base_geo_meta["columns"]["geometry"].copy()
@@ -720,12 +731,12 @@ def _merge_partition_files(
 
     if compacting:
         assert (
-            indexer and id_field and resolution is not None and parent_res is not None
+            indexer and id_fields and resolution is not None and parent_res is not None
         )
         dggs_col = f"{indexer.dggs}_{resolution:02}"
         df = _restore_empty_categories(table.to_pandas())
         df = indexer.compaction(
-            df, resolution, list(df.columns), dggs_col, id_field, parent_res
+            df, resolution, list(df.columns), dggs_col, id_fields, parent_res
         )
         geom_fn = _geom_fn(indexer, geo) if geo else None
         if geom_fn is not None:
@@ -752,7 +763,7 @@ def _merge_partition_files(
     pq.write_table(table, merged, compression=compression)
     for f in files:
         f.unlink()
-    return dropped, _ids_in(table, id_col)
+    return dropped, _ids_in(table, id_fields)
 
 
 def _write_empty_output(
@@ -831,13 +842,13 @@ def _merge_output(
     output_dir: Path | str,
     resolution: int,
     parent_res: int,
-    id_field: str | None,
+    id_fields: tuple[str, ...],
     compact: bool,
     geo: str,
     compression: str,
     processes: int,
     cell_id: str,
-) -> set:
+) -> set[tuple]:
     """
     Consolidate each hive partition directory to a single file, returning the
     feature ids present in the output (aggregating
@@ -864,11 +875,10 @@ def _merge_output(
                 d,
                 compression,
                 dggs_col,
-                id_field or "fid",
+                id_fields,
                 indexer=indexer if compact else None,
                 resolution=resolution if compact else None,
                 parent_res=parent_res if compact else None,
-                id_field=id_field if compact else None,
                 geo=geo if compact else None,
                 cell_id=cell_id,
             )
@@ -896,39 +906,36 @@ def _polyfill(
     parent_res: int,
     output_directory: str,
     compression: str,
-    id_col: str,
+    id_fields: tuple[str, ...],
     geo: str,
     compact: bool,
     cell_id: str,
-) -> np.ndarray:
+) -> None:
     """
     Reads a geoparquet piece file, performs polyfilling (for Polygon),
     linetracing (for LineString), or indexing (for Point), and writes the
     cells hive-partitioned by parent cell directly into the output
-    directory. Returns the ids of features that produced at least one cell.
+    directory.
     """
-    # id_col is already a plain column by this point (_clean_geometries put
-    # it there), so no reset_index() here: the staged file's own index is a
-    # meaningless post-explode position, and materialising it would leak a
-    # stray "index" column into every output row.
+    # The id fields are already plain columns by this point (_clean_geometries
+    # put them there), so no reset_index() here: the staged file's own index
+    # is a meaningless post-explode position, and materialising it would leak
+    # a stray "index" column into every output row.
     df = _restore_empty_categories(gpd.read_parquet(pq_in))
     if df.empty:
-        return np.array([])
+        return
 
     # DGGS specific conversion
-    df = indexer.polyfill(df, resolution, id_col=id_col)
+    df = indexer.polyfill(df, resolution, id_col=id_fields)
 
     if df.empty:
         # e.g. features smaller than a cell at this resolution
-        return np.array([])
+        return
 
     df.index.rename(f"{indexer.dggs}_{resolution:02}", inplace=True)
 
     # Secondary (parent) index, used for hive partitioning
     df = indexer.secondary_index(df, parent_res)
-
-    # Computed before write_partition, which may mutate/filter df in place
-    indexed_ids = df[id_col].unique()
 
     # With compaction, geometry is serialised after compacting (merge step)
     geom_fn = None if compact else _geom_fn(indexer, geo)
@@ -943,11 +950,10 @@ def _polyfill(
         cell_id,
         compact,
     )
-    return indexed_ids
 
 
-def _polyfill_star(args) -> np.ndarray:
-    return _polyfill(*args)
+def _polyfill_star(args) -> None:
+    _polyfill(*args)
 
 
 def _metres_per_unit(crs: pyproj.CRS) -> float:
@@ -1076,7 +1082,7 @@ def _read_batches(
     layer: str | None,
     con: SQLConnectionType | None,
     keep_attributes: bool,
-    id_field: str | None,
+    id_fields: tuple[str, ...],
     geom_col: str,
     total: int,
     keep_attribute: tuple[str, ...] = (),
@@ -1088,9 +1094,9 @@ def _read_batches(
     const.TARGET_BATCH_BYTES from each previous batch's footprint — so
     vertex-heavy features get proportionally smaller batches.
 
-    Only the columns actually needed (id_field, geometry, and whichever of
-    keep_attributes/keep_attribute apply) are read from the source. When
-    id_field names the file's FID/primary-key slot (e.g. Kart working
+    Only the columns actually needed (id_fields, geometry, and whichever of
+    keep_attributes/keep_attribute apply) are read from the source. When an
+    id field names the file's FID/primary-key slot (e.g. Kart working
     copies, which promote the dataset PK there) rather than a regular
     field, it's read via fid_as_index instead of columns=, since a FID
     slot never appears in either.
@@ -1100,16 +1106,12 @@ def _read_batches(
         with con.connect() as connection:
             tbl = _db_table(connection, layer)
             if keep_attribute:
-                cols = dict.fromkeys(
-                    [geom_col, *([id_field] if id_field else []), *keep_attribute]
-                )
+                cols = dict.fromkeys([geom_col, *id_fields, *keep_attribute])
                 stmt = sqlalchemy.select(*(tbl.c[c] for c in cols))
             elif keep_attributes:
                 stmt = tbl.select()
-            elif id_field:
-                stmt = sqlalchemy.select(tbl.c[id_field], tbl.c[geom_col])
             else:
-                stmt = sqlalchemy.select(tbl.c[geom_col])
+                stmt = sqlalchemy.select(*(tbl.c[c] for c in (*id_fields, geom_col)))
             # ctid ordering makes OFFSET/LIMIT a stable partition of the table
             stmt = stmt.order_by(sqlalchemy.text("ctid"))
             offset = 0
@@ -1129,17 +1131,15 @@ def _read_batches(
                 offset += len(result)
                 rows = _next_batch_rows(result)
         return
-    id_is_fid = bool(id_field) and id_field == _fid_column(input_file, layer)
+    fid_col = _fid_column(input_file, layer)
+    id_is_fid = fid_col is not None and fid_col in id_fields
+    regular_ids = [f for f in id_fields if f != fid_col]
     if keep_attribute:
-        columns = list(
-            dict.fromkeys(
-                [*keep_attribute, *([id_field] if id_field and not id_is_fid else [])]
-            )
-        )
+        columns = list(dict.fromkeys([*keep_attribute, *regular_ids]))
     elif keep_attributes:
         columns = None
     else:
-        columns = [id_field] if id_field and not id_is_fid else []
+        columns = regular_ids
     offset = 0
     while offset < total:
         # The arrow read path types every column from the layer's declared
@@ -1166,7 +1166,7 @@ def _read_batches(
         if nested:
             batch = batch.astype(dict.fromkeys(nested, object))
         if id_is_fid:
-            batch = batch.rename_axis(id_field).reset_index()
+            batch = batch.rename_axis(fid_col).reset_index()
         yield batch
         offset += len(batch)
         rows = _next_batch_rows(batch)
@@ -1228,14 +1228,14 @@ def _dictionary_encode_attributes(
 
 def _prepare_dataframe(
     df: gpd.GeoDataFrame,
-    id_field: str | None,
+    id_fields: tuple[str, ...],
     keep_attributes: bool,
     keep_attribute: tuple[str, ...] = (),
     fid_offset: int = 0,
     declared_dtypes: dict[str, str] | None = None,
 ) -> gpd.GeoDataFrame:
-    if id_field:
-        df = df.set_index(id_field)
+    if id_fields:
+        df = df.set_index(list(id_fields))
     else:
         df = df.reset_index(drop=True)
         df.index = pd.RangeIndex(fid_offset, fid_offset + len(df), name="fid")
@@ -1585,11 +1585,11 @@ def _run_dggs_indexing(
     output_dir: str,
     compression: str,
     processes: int,
-    id_col: str,
+    id_fields: tuple[str, ...],
     geo: str,
     compact: bool,
     cell_id: str,
-) -> set:
+) -> None:
     LOGGER.debug("DGGS indexing by spatial partitions with resolution: %d", resolution)
     args = [
         (
@@ -1599,14 +1599,13 @@ def _run_dggs_indexing(
             parent_res,
             output_dir,
             compression,
-            id_col,
+            id_fields,
             geo,
             compact,
             cell_id,
         )
         for filepath in filepaths
     ]
-    indexed_ids: set = set()
     with ProcessPoolExecutor(
         max_workers=max(1, processes), mp_context=_mp_context()
     ) as executor:
@@ -1615,11 +1614,10 @@ def _run_dggs_indexing(
             as_completed(futures), total=len(futures), desc="DGGS indexing"
         ):
             try:
-                indexed_ids.update(future.result())
+                future.result()
             except Exception as e:
                 LOGGER.error(f"Task failed with {e}")
                 raise e
-    return indexed_ids
 
 
 def index(
@@ -1633,7 +1631,7 @@ def index(
     *,
     cut_threshold: None | float = None,
     compression: str = "snappy",
-    id_field: str | None = None,
+    id_field: str | Sequence[str] | None = None,
     con: SQLConnectionType | None = None,
     layer: str | None = None,
     geom_col: str = "geom",
@@ -1669,7 +1667,7 @@ def index(
             cut_threshold,
             processes,
             compression,
-            id_field,
+            as_id_fields(id_field),
             con,
             layer,
             geom_col,
@@ -1696,7 +1694,7 @@ def _index(
     cut_threshold: None | float,
     processes: int,
     compression: str,
-    id_field: str | None,
+    id_fields: tuple[str, ...],
     con: SQLConnectionType | None,
     layer: str | None,
     geom_col: str,
@@ -1707,7 +1705,8 @@ def _index(
     mode: str = const.ContainmentMode.CENTRE.value,
     drop_spikes: float | None = None,
 ) -> None:
-    id_field = id_field or resolve_default_id_field(input_file, layer, con)
+    id_fields = id_fields or resolve_default_id_field(input_file, layer, con)
+    output_ids = id_fields or ("fid",)  # the synthetic index's column name
     indexer = idxfactory.indexer_instance(dggs, mode)
     check_cell_id(cell_id, indexer)
     check_mode(mode, indexer)
@@ -1767,7 +1766,7 @@ def _index(
             layer,
             con,
             keep_attributes,
-            id_field,
+            id_fields,
             geom_col,
             total,
             keep_attribute,
@@ -1778,14 +1777,14 @@ def _index(
             )
             batch = _prepare_dataframe(
                 batch,
-                id_field,
+                id_fields,
                 keep_attributes,
                 keep_attribute,
                 fid_offset=fid_offset,
                 declared_dtypes=declared_dtypes,
             )
             fid_offset += len(batch)
-            features_in.update(batch.index)
+            features_in.update(index_keys(batch.index))
             batch = _force_2d(batch)
             if line_budget is None:
                 blade_segment = _blade_segment(indexer, dggs, resolution, batch.crs)
@@ -1831,7 +1830,7 @@ def _index(
             str(output_directory),
             compression,
             processes,
-            id_field or "fid",
+            output_ids,
             geo,
             compact,
             cell_id,
@@ -1866,7 +1865,7 @@ def _index(
             output_directory,
             resolution,
             parent_res,
-            id_field or "fid",
+            output_ids,
             compact,
             geo,
             compression,

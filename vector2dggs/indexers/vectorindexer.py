@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from typing import Generic, TypeVar
 
 import geopandas as gpd
@@ -22,6 +22,17 @@ LOGGER = logging.getLogger("vector2dggs.common")
 # string output as a convenience) can bind VectorIndexer[str | int] - a
 # union - which a constrained TypeVar disallows as a binding.
 CellId = TypeVar("CellId")
+
+
+def index_keys(index: pd.Index) -> Iterator[tuple]:
+    """Each label as a tuple, one element per level, for Index and MultiIndex alike."""
+    return zip(*(index.get_level_values(i) for i in range(index.nlevels)), strict=True)
+
+
+def as_id_fields(id_field: str | Sequence[str] | None) -> tuple[str, ...]:
+    if id_field is None:
+        return ()
+    return (id_field,) if isinstance(id_field, str) else tuple(id_field)
 
 
 class ContainmentModeError(ValueError):
@@ -81,7 +92,7 @@ class VectorIndexer(ABC, Generic[CellId]):
         # SUPPORTED_MODES off it. common.check_mode does the rejecting.
         self.mode = const.ContainmentMode(mode)
         # set per call by polyfill(); read by _cells_or_skip
-        self._id_col: str | None = None
+        self._id_cols: tuple[str, ...] = ()
 
     @staticmethod
     def cells_to_string(cells: Iterable[CellId]) -> list[str]:
@@ -110,16 +121,19 @@ class VectorIndexer(ABC, Generic[CellId]):
             )
 
     def polyfill(
-        self, df: gpd.GeoDataFrame, resolution: int, id_col: str | None = None
+        self,
+        df: gpd.GeoDataFrame,
+        resolution: int,
+        id_col: str | Sequence[str] | None = None,
     ) -> pd.DataFrame:
         """
         Splits df by geometry type, dispatches each non-empty subset to the
         corresponding _polyfill_* implementation, and concatenates the results.
 
-        id_col, if given, names the column holding each row's feature id,
+        id_col, if given, names the column(s) holding each row's feature id,
         so a geometry skipped as invalid can be reported by its feature.
         """
-        self._id_col = id_col
+        self._id_cols = as_id_fields(id_col)
         # guards the library call itself, not just the CLI: reached through
         # the Python API, an unsupported mode would otherwise surface as a
         # KeyError from a backend's containment lookup
@@ -165,7 +179,7 @@ class VectorIndexer(ABC, Generic[CellId]):
         res: int,
         col_order: list,
         dggs_col: str,
-        id_field: str,
+        id_field: str | Sequence[str],
         parent_res: int,
     ) -> pd.DataFrame: ...
 
@@ -299,11 +313,11 @@ class VectorIndexer(ABC, Generic[CellId]):
             return cell_fn(geom, resolution)
         except InvalidGeometryError as e:
             # by position: a frame passed in directly may repeat index labels
-            feature = (
-                df[self._id_col].iloc[pos]
-                if self._id_col in df.columns
-                else df.index[pos]
-            )
+            if self._id_cols and all(c in df.columns for c in self._id_cols):
+                values = tuple(df[c].iloc[pos] for c in self._id_cols)
+                feature = values[0] if len(values) == 1 else values
+            else:
+                feature = df.index[pos]
             minx, miny, maxx, maxy = geom.bounds
             LOGGER.warning(
                 "Feature %s: polygon near (%.6f, %.6f) not indexed: %s. If the "
@@ -339,7 +353,7 @@ class VectorIndexer(ABC, Generic[CellId]):
         self,
         df: pd.DataFrame,
         res: int,
-        id_field: str,
+        id_field: str | Sequence[str],
         col_order: list[str],
         dggs_col: str,
         compact_func: Callable[[Iterable[CellId]], Iterable[CellId]],
@@ -356,6 +370,7 @@ class VectorIndexer(ABC, Generic[CellId]):
         a cell coarser than parent_res.
         """
         df = df.reset_index(drop=False)
+        id_cols = list(as_id_fields(id_field))
         # Captured before any construction below, so a fresh pd.Series built
         # from a plain Python list of cell IDs (e.g. parent_for_pair below)
         # can be pinned to it explicitly. Left to inference, pandas picks
@@ -370,9 +385,9 @@ class VectorIndexer(ABC, Generic[CellId]):
             # misbehaves on empty frames (object-dtype mask)
             return df.set_index(dggs_col)[col_order]
 
-        feature_cell_groups = (
-            df.groupby(id_field)[dggs_col].apply(lambda x: set(x)).to_dict()
-        )
+        # keys as tuples whatever the key count: pandas gives scalars for one
+        grouped = df.groupby(id_cols)[dggs_col].apply(set)
+        feature_cell_groups = dict(zip(index_keys(grouped.index), grouped, strict=True))
         feature_cell_compact = {
             id: set(compact_func(cells)) for id, cells in feature_cell_groups.items()
         }
@@ -393,17 +408,17 @@ class VectorIndexer(ABC, Generic[CellId]):
             for id in feature_cell_groups
         }
 
-        pairs = pd.MultiIndex.from_arrays([df[id_field], df[dggs_col]])
+        pairs = pd.MultiIndex.from_arrays([*(df[c] for c in id_cols), df[dggs_col]])
 
         # Rows kept as-is: their (id, cell) survived compaction unchanged
-        keep = [(id, cell) for id, cells in uncompressable.items() for cell in cells]
+        keep = [(*id, cell) for id, cells in uncompressable.items() for cell in cells]
         keep_mask = pairs.isin(keep) if keep else np.zeros(len(df), dtype=bool)
         uncompressable_df = df[keep_mask].set_index(dggs_col)
 
         # Rows compressed: one representative child row per compacted cell,
         # with the fine cell replaced by its compacted parent
         compression_mapping = {
-            (id, cell_to_child_func(cell, res)): cell
+            (*id, cell_to_child_func(cell, res)): cell
             for id, cells in compressable.items()
             if cells
             for cell in cells

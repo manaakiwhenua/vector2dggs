@@ -1,5 +1,6 @@
 import json
 
+import pandas as pd
 import pyarrow.parquet as pq
 
 from vector2dggs.h3 import h3
@@ -104,6 +105,19 @@ class TestOutputValidation(TestRunthrough):
         table = pq.read_table(self._parquet_files()[0])
         self.assertIn("LCDB_UID", table.schema.names)
         self.assertIn("Name_2018", table.schema.names)
+
+    def test_id_field_repeated_for_composite_id(self):
+        """-id can be repeated: one output column per field, in the order given,
+        and rows are features by the joint key (#194)."""
+        self._run_h3(("-id", "Name_2018", "-id", "EditAuthor", "-r", "10"))
+        df = pd.concat(pd.read_parquet(f) for f in self._parquet_files())
+        names = list(df.columns)
+        self.assertLess(names.index("Name_2018"), names.index("EditAuthor"))
+        self.assertNotIn("fid", names)
+        self.assertNotIn("index", names)
+        pairs = df[["Name_2018", "EditAuthor"]].drop_duplicates()
+        # 5 joint keys in the fixture, against 4 and 2 for either column alone
+        self.assertEqual(len(pairs), 5)
 
     def test_keep_attribute_overrides_keep_attributes_flag(self):
         """-ka takes precedence over -k when both are given."""
