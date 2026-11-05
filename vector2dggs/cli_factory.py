@@ -200,7 +200,7 @@ def make_dggs_command(
         tempdir: str | Path,
         compact: bool,
         overwrite: bool,
-    ):
+    ) -> None:
         tempfile.tempdir = str(tempdir) if tempdir is not None else tempfile.tempdir
         common.raise_rlimit_nofile()
 

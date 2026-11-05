@@ -1,7 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Sequence
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 import geopandas as gpd
 import numpy as np
@@ -9,6 +9,7 @@ import pandas as pd
 import pyarrow as pa
 import shapely
 from shapely.geometry import LineString, Point, Polygon
+from shapely.geometry.base import BaseGeometry
 
 import vector2dggs.constants as const
 
@@ -227,7 +228,7 @@ class VectorIndexer(ABC, Generic[CellId]):
         """
         raise NotImplementedError
 
-    def _cover_line(self, geom, resolution: int) -> list[CellId]:
+    def _cover_line(self, geom: LineString, resolution: int) -> list[CellId]:
         """
         Every cell a line passes through, for backends whose library has
         no cover of its own (S2 and rHEALPix do, and override _linetrace).
@@ -281,7 +282,11 @@ class VectorIndexer(ABC, Generic[CellId]):
         return found
 
     def _geo_to_cells(
-        self, df: gpd.GeoDataFrame, resolution: int, cell_fn, geom_col: str
+        self,
+        df: gpd.GeoDataFrame,
+        resolution: int,
+        cell_fn: Callable[[Any, int], Iterable[CellId]],
+        geom_col: str,
     ) -> pd.DataFrame:
         result = (
             df.assign(
@@ -301,7 +306,14 @@ class VectorIndexer(ABC, Generic[CellId]):
             result = result.astype({"__cells__": "uint64"})
         return result.set_index("__cells__").rename_axis(None)
 
-    def _cells_or_skip(self, cell_fn, geom, resolution: int, df, pos: int) -> list:
+    def _cells_or_skip(
+        self,
+        cell_fn: Callable[[Any, int], Iterable[CellId]],
+        geom: BaseGeometry,
+        resolution: int,
+        df: pd.DataFrame,
+        pos: int,
+    ) -> Iterable[CellId]:
         """
         cell_fn's cells for geom, or none, with a warning, when the backend
         rejects it as invalid. Warned once per geometry rather than per
@@ -361,7 +373,7 @@ class VectorIndexer(ABC, Generic[CellId]):
         parent_res: int,
         get_resolution_func: Callable[[CellId], int],
         children_at_res_func: Callable[[CellId, int], Iterable[CellId]],
-    ):
+    ) -> pd.DataFrame:
         """
         Compacts a dataframe up to a given low resolution (parent_res), from an existing maximum resolution (res).
 

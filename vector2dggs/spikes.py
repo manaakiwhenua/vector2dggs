@@ -13,9 +13,12 @@ cannot index it (#224).
 import numpy as np
 import shapely
 from shapely.geometry import MultiPolygon, Polygon
+from shapely.geometry.base import BaseGeometry
 
 
-def _sliver_widths(pts: np.ndarray, geographic: bool, metres_per_unit: float):
+def _sliver_widths(
+    pts: np.ndarray, geographic: bool, metres_per_unit: float
+) -> tuple[np.ndarray, np.ndarray]:
     """
     For each vertex of an open ring: whether it is a tip (its two edges
     meet at an acute angle), and the width in metres of the sliver it
@@ -42,7 +45,10 @@ def _sliver_widths(pts: np.ndarray, geographic: bool, metres_per_unit: float):
 
 
 def _drop_ring_spikes(
-    ring, tolerance_m: float, geographic: bool, metres_per_unit: float
+    ring: shapely.LinearRing,
+    tolerance_m: float,
+    geographic: bool,
+    metres_per_unit: float,
 ) -> tuple[np.ndarray | None, int]:
     """
     The ring's coordinates with spike tips removed, or None if fewer than
@@ -99,8 +105,8 @@ def _drop_polygon_spikes(
 
 
 def drop_spikes(
-    geom, tolerance_m: float, geographic: bool, metres_per_unit: float
-) -> tuple[object, int]:
+    geom: BaseGeometry, tolerance_m: float, geographic: bool, metres_per_unit: float
+) -> tuple[BaseGeometry, int]:
     """
     geom with the tips of spikes narrower than tolerance_m removed from
     every ring, and the number of vertices removed. Non-polygonal

@@ -262,7 +262,7 @@ MAX_CELLS_PER_STAGED_FILE = 500_000
 DEFAULT_CUT_CELLS_PER_PIECE = 5000
 
 
-def DEFAULT_AREA_THRESHOLD_M2(dggs, resolution):
+def DEFAULT_AREA_THRESHOLD_M2(dggs: str, resolution: int) -> float:
     return DEFAULT_CUT_CELLS_PER_PIECE * DGGS_CELL_AREA_M2_BY_RES[dggs](resolution)
 
 

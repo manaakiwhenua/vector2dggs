@@ -14,6 +14,7 @@ Modifications copyright (c) 2023-2026 Manaaki Whenua - Landcare Research; substa
 """
 
 from bisect import bisect_left
+from collections.abc import Sequence
 from math import ceil, floor
 
 from shapely import has_m, has_z
@@ -123,7 +124,7 @@ def densify_cut_edges(
             0 <= j < len(lines) and abs(lines[j] - value) <= tol for j in (i - 1, i)
         )
 
-    def densify(coords) -> list[tuple[float, float]]:
+    def densify(coords: Sequence[tuple[float, float]]) -> list[tuple[float, float]]:
         out = [coords[0]]
         for (x0, y0), (x1, y1) in zip(coords, coords[1:], strict=False):
             along_x = y0 == y1 and on_cut(h_cuts, y0)

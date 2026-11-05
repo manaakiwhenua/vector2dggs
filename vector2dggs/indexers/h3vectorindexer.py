@@ -7,7 +7,7 @@ import pandas as pd
 import pyarrow as pa
 import shapely
 from h3.api import basic_int
-from shapely.geometry import Point, Polygon, mapping
+from shapely.geometry import LineString, Point, Polygon, mapping
 
 import vector2dggs.constants as const
 from vector2dggs.indexers.vectorindexer import VectorIndexer
@@ -46,7 +46,7 @@ class H3VectorIndexer(VectorIndexer[str | int]):
     def cells_to_string(cells: Iterable[str | int]) -> list[str]:
         return [h3.int_to_str(int(c)) for c in cells]
 
-    def _polyfill_polygon(self, geom, resolution: int) -> list:
+    def _polyfill_polygon(self, geom: Polygon, resolution: int) -> list:
         if self.mode == const.ContainmentMode.CENTRE:
             return basic_int.geo_to_cells(mapping(geom), resolution)
         return basic_int.h3shape_to_cells_experimental(
@@ -65,7 +65,7 @@ class H3VectorIndexer(VectorIndexer[str | int]):
         """
         return basic_int.grid_disk(_as_int(cell), 1)
 
-    def _linetrace(self, geom, resolution: int) -> list:
+    def _linetrace(self, geom: LineString, resolution: int) -> list:
         """
         h3-py has no line cover: grid_path_cells walks a route between two
         cells, not the cells a line occupies.
@@ -105,10 +105,10 @@ class H3VectorIndexer(VectorIndexer[str | int]):
         id_field: str | Sequence[str],
         parent_res: int,
     ) -> pd.DataFrame:
-        def _compact(cells):
+        def _compact(cells: Iterable[str | int]) -> list[int]:
             return basic_int.compact_cells([int(c) for c in cells])
 
-        def _child(cell, res):
+        def _child(cell: str | int, res: int) -> int:
             return basic_int.cell_to_center_child(int(cell), res)
 
         return self.compaction_common(
