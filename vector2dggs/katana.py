@@ -16,7 +16,7 @@ Modifications copyright (c) 2023-2026 Manaaki Whenua - Landcare Research; substa
 from bisect import bisect_left
 from math import ceil, floor
 
-from shapely import force_2d, has_m, has_z
+from shapely import has_m, has_z
 from shapely.geometry import (
     GeometryCollection,
     LinearRing,
@@ -35,7 +35,6 @@ def katana(
     threshold: float,
     count: int = 0,
     max_recursion_depth: int = 250,
-    check_2D: bool = True,
     cuts: list[tuple[bool, float]] | None = None,
 ) -> list[BaseGeometry]:
     """
@@ -49,11 +48,10 @@ def katana(
 
     if (geometry is None) or (geometry.is_empty):
         return []
+    if count == 0 and (has_z(geometry) or has_m(geometry)):
+        raise ValueError("katana requires 2D (XY) geometry; see common._force_2d")
     if isinstance(geometry, LinearRing):
         geometry = Polygon(geometry)
-    if check_2D and (has_z(geometry) or has_m(geometry)):
-        geometry = force_2d(geometry)
-        check_2D = False  # No further 2D check needed
     if not geometry.is_valid:
         geometry = make_valid(geometry)
         if geometry.geom_type == "GeometryCollection":
@@ -96,7 +94,6 @@ def katana(
                         threshold,
                         count + 1,
                         max_recursion_depth=max_recursion_depth,
-                        check_2D=check_2D,
                         cuts=cuts,
                     )
                 )

@@ -1,4 +1,4 @@
-from shapely import has_z, wkt
+from shapely import wkt
 from shapely.geometry import LinearRing, Polygon
 
 from vector2dggs.katana import katana
@@ -47,11 +47,13 @@ class TestKatana(TestRunthrough):
         pieces = katana(ring, threshold=1000.0)
         self.assertEqual([p.geom_type for p in pieces], ["Polygon"])
 
-    def test_3d_input_is_flattened(self):
-        poly = Polygon([(0, 0, 5), (10, 0, 5), (10, 10, 5), (0, 10, 5)])
-        pieces = katana(poly, threshold=30.0)
-        self.assertGreater(len(pieces), 1)
-        self.assertFalse(any(has_z(p) for p in pieces))
+    def test_non_2d_input_is_rejected(self):
+        with self.assertRaises(ValueError):
+            katana(Polygon([(0, 0, 5), (10, 0, 5), (10, 10, 5), (0, 10, 5)]), 30.0)
+        with self.assertRaises(ValueError):
+            katana(
+                wkt.loads("POLYGON M ((0 0 1, 10 0 1, 10 10 1, 0 10 1, 0 0 1))"), 30.0
+            )
 
     def test_invalid_bowtie_is_made_valid(self):
         bowtie = Polygon([(0, 0), (10, 10), (10, 0), (0, 10)])  # self-intersecting
