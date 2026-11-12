@@ -1,6 +1,6 @@
 # vector2dggs
 
-[![pypi](https://img.shields.io/pypi/v/vector2dggs?label=vector2dggs)](https://pypi.org/project/vector2dggs/)
+[![pypi](https://img.shields.io/pypi/v/vector2dggs?label=vector2dggs)](https://pypi.org/project/vector2dggs/) [![DOI](https://zenodo.org/badge/619451613.svg)](https://doi.org/10.5281/zenodo.24149888)
 
 Python-based CLI tool to index vector files to DGGS in parallel, writing out to Parquet.
 
