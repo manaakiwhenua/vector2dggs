@@ -2,7 +2,11 @@
 name = "vector2dggs"
 version = "0.26.1"
 description = "CLI DGGS indexer for vector geospatial data"
-authors = ["James Ardo <ardoj@landcareresearch.co.nz>"]
+authors = [
+    "James Ardo <ardoj@landcareresearch.co.nz>",
+    "Nicoletta De Maio",
+    "Richard Law <lawr@landcareresearch.co.nz>"
+]
 maintainers = ["Richard Law <lawr@landcareresearch.co.nz>"]
 readme = "README.md"
 license = "LGPL-3.0-or-later"
