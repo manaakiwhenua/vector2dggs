@@ -214,6 +214,8 @@ with contextlib.suppress(ImportError):
         TestLinetraceSetSemantics as TestLinetraceSetSemantics,
     )
 with contextlib.suppress(ImportError):
+    from .classes.output_order import TestOutputOrder as TestOutputOrder
+with contextlib.suppress(ImportError):
     from .classes.output_validation import (
         TestAttributeSchemaConsistency as TestAttributeSchemaConsistency,
     )

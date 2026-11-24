@@ -777,13 +777,12 @@ class TestMergePartitionFilesDeduplication(TestCase):
                 [(1, "a"), (2, "b"), (3, "c")],
             )
 
-    def test_clean_single_file_is_left_untouched(self):
-        # the pre-existing no-work shortcut: one file, nothing to drop, so
-        # no rewrite (and the file keeps its name)
+    def test_clean_single_file_is_rewritten_in_cell_order(self):
+        # one file, nothing to drop: still rewritten, so that every output
+        # file is in cell ID order with the cell column delta-encoded
         with tempfile.TemporaryDirectory() as d:
             partition_dir = Path(d)
-            self._write(partition_dir, "part-0.parquet", [1, 2], ["a", "b"])
-            before = {f.name for f in partition_dir.glob("*.parquet")}
+            self._write(partition_dir, "part-0.parquet", [2, 1], ["b", "a"])
             dropped, ids = common._merge_partition_files(
                 partition_dir,
                 compression="snappy",
@@ -791,7 +790,17 @@ class TestMergePartitionFilesDeduplication(TestCase):
                 id_fields=("fid",),
             )
             self.assertEqual(dropped, 0)
-            # reported even though the file was left alone: the ids present
-            # in the output are what the dropped-feature count is taken from
             self.assertEqual(ids, {(1,), (2,)})
-            self.assertEqual({f.name for f in partition_dir.glob("*.parquet")}, before)
+            files = list(partition_dir.glob("*.parquet"))
+            self.assertEqual(len(files), 1)
+            self.assertNotEqual(files[0].name, "part-0.parquet")
+            table = pq.read_table(files[0])
+            self.assertEqual(table.column("h3_09").to_pylist(), ["a", "b"])
+            self.assertEqual(table.column("fid").to_pylist(), [1, 2])
+            encodings = (
+                pq.ParquetFile(files[0])
+                .metadata.row_group(0)
+                .column(table.schema.get_field_index("h3_09"))
+                .encodings
+            )
+            self.assertIn("DELTA_BYTE_ARRAY", encodings)
