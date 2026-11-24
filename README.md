@@ -188,6 +188,8 @@ So `intersects` and `within` are exact with respect to each backend's own model 
 
 Output is in the Apache Parquet format, a directory with one file per partition. With `--geo point` or `--geo polygon` output will be written as GeoParquet (v1.1.0) with the respective geometry types. GeoParquet can be visualised using desktop GIS tools.
 
+Within each file, rows are sorted by cell ID and the cell ID column is written with Parquet's delta encoding (`DELTA_BINARY_PACKED` for `--cell-id uint64`, `DELTA_BYTE_ARRAY` for strings). Sorted cell IDs differ from their neighbours by small, regular increments, so the identifier column, which would otherwise dominate a file, costs a few bits per row. These are standard Parquet (v2) encodings, read by pyarrow, DuckDB, Polars, Spark, GDAL and R's arrow among others.
+
 The Apache Parquet output is indexed by an ID column (which you can specify), so it should be ready for two intended use-cases:
 - Joining attribute data from the original feature-level data onto computed DGGS cells.
 - Joining other data to this output on the DGGS cell ID. (The output has a column like `{dggs}_\d`, e.g. `h3_09` or `h3_12` according to the target resolution, zero-padded to account for the maximum resolution of the DGGS).

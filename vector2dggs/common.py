@@ -1,4 +1,5 @@
 import contextlib
+import io
 import json
 import logging
 import math
@@ -631,6 +632,32 @@ def _drop_duplicate_cells(
     return kept.drop_columns([const.EDGE_COLUMN]) if edged else kept
 
 
+def _cell_column_encoding(schema: pa.Schema, cell_col: str) -> dict:
+    """pyarrow writer options that delta-encode the cell ID column.
+
+    Sorted cell IDs step by small regular increments (or share long prefixes,
+    as strings), which DELTA_BINARY_PACKED / DELTA_BYTE_ARRAY store in a few
+    bits each; the default encoding stores them whole. Naming an encoding
+    requires dictionary encoding to be listed per column, so every other leaf
+    column is named, keeping the default for all of them.
+    """
+    buf = io.BytesIO()
+    pq.write_table(schema.empty_table(), buf)
+    leaves = pq.ParquetFile(buf).schema
+    others = [
+        leaves.column(i).path
+        for i in range(len(leaves))
+        if leaves.column(i).path != cell_col
+    ]
+    integer = pa.types.is_integer(schema.field(cell_col).type)
+    return {
+        "use_dictionary": others,
+        "column_encoding": {
+            cell_col: "DELTA_BINARY_PACKED" if integer else "DELTA_BYTE_ARRAY"
+        },
+    }
+
+
 def _merge_partition_files(
     partition_dir: Path,
     compression: str,
@@ -644,8 +671,9 @@ def _merge_partition_files(
 ) -> tuple[int, set[tuple[Any, ...]]]:
     """
     Merges all Parquet files within a single hive partition directory into one
-    file, dropping any duplicate (feature, cell) rows and returning how many
-    were dropped together with the feature ids that survived. Preserves and correctly aggregates GeoParquet 'geo' metadata
+    file, sorted by cell ID with the cell column delta-encoded, dropping any
+    duplicate (feature, cell) rows and returning how many were dropped
+    together with the feature ids that survived. Preserves and correctly aggregates GeoParquet 'geo' metadata
     (bbox, geometry_types) if present. When a compactor is given, the merged
     rows are compacted here — the hive write already routes a parent cell's
     every row into this directory, and the resolution floor stops compaction
@@ -655,7 +683,7 @@ def _merge_partition_files(
 
     Deduplication belongs here because a cell and its duplicates share a
     parent, so the hive write has already gathered them into this one
-    directory. A single-file directory with nothing to drop is left alone.
+    directory.
     """
     compacting = indexer is not None
     files = sorted(partition_dir.glob("*.parquet"))
@@ -710,13 +738,9 @@ def _merge_partition_files(
     tables = [t.cast(unified_schema) for t in tables]
     table = pa.concat_tables(tables)
 
-    edged = const.EDGE_COLUMN in table.column_names
     resolved = _drop_duplicate_cells(table, id_fields, dggs_col)
     dropped = table.num_rows - resolved.num_rows
     table = resolved
-    if len(files) == 1 and not compacting and not dropped and not edged:
-        # nothing to merge and nothing to drop: leave the file as written
-        return 0, _ids_in(table, id_fields)
 
     if base_geo_meta is not None:
         col_meta = base_geo_meta["columns"]["geometry"].copy()
@@ -766,8 +790,17 @@ def _merge_partition_files(
         if geom_fn is not None:
             table = _with_geoparquet_metadata(table)
 
+    # Cell ID order: the delta-encoded ID column and the compression of every
+    # other column both depend on neighbours being adjacent, and neither the
+    # staged files nor compaction's output are in any particular order.
+    table = table.sort_by(dggs_col)
     merged = partition_dir / f"part.0-{uuid4().hex}.parquet"
-    pq.write_table(table, merged, compression=compression)
+    pq.write_table(
+        table,
+        merged,
+        compression=compression,
+        **_cell_column_encoding(table.schema, dggs_col),
+    )
     for f in files:
         f.unlink()
     return dropped, _ids_in(table, id_fields)
