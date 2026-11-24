@@ -632,7 +632,7 @@ def _drop_duplicate_cells(
     return kept.drop_columns([const.EDGE_COLUMN]) if edged else kept
 
 
-def _cell_column_encoding(schema: pa.Schema, cell_col: str) -> dict:
+def _cell_column_encoding(schema: pa.Schema, cell_col: str) -> dict[str, Any]:
     """pyarrow writer options that delta-encode the cell ID column.
 
     Sorted cell IDs step by small regular increments (or share long prefixes,
