@@ -2005,15 +2005,15 @@ idna2008 = ["idna"]
 
 [[package]]
 name = "rhealpixdggs"
-version = "0.8.5"
+version = "1.0.0"
 description = "An implementation of the rHEALPix discrete global grid system"
 optional = true
 python-versions = ">=3.11"
 groups = ["main"]
 markers = "extra == \"rhp\" or extra == \"all\""
 files = [
-    {file = "rhealpixdggs-0.8.5-py3-none-any.whl", hash = "sha256:625abec6aff4c85da2384e1f024b58ba76b23a4d47db71c933f7322456d6f807"},
-    {file = "rhealpixdggs-0.8.5.tar.gz", hash = "sha256:e2cafc0993080013a21cdc4bfb4095983df40a241db2739aa4e6bfaa4d27f162"},
+    {file = "rhealpixdggs-1.0.0-py3-none-any.whl", hash = "sha256:a54bd0d0624eec2961ab1167b66486e104f10eccc2d110b3c63640811f61c16d"},
+    {file = "rhealpixdggs-1.0.0.tar.gz", hash = "sha256:939491022f1786ae0908df5b99a46b229b70323267e04a1dd14481a4fbddbee4"},
 ]
 
 [package.dependencies]
@@ -2021,6 +2021,9 @@ numpy = ">=2.0"
 pyproj = ">=3.6"
 scipy = ">=1.11"
 shapely = ">=2.1"
+
+[package.extras]
+harmonics = ["ducc0 (>=0.41)"]
 
 [[package]]
 name = "rich"
@@ -2730,4 +2733,4 @@ s2 = ["s2geometry"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "12a9e497a2cc4669cc2babc57c274fb7c93e3be02e129eeb3791e8a9fa7fb77e"
+content-hash = "b9222d6d7c5aca27926f0592ceaeb9de5980fbeec1e7a02cf10dc5b1a224533d"
