@@ -10,8 +10,7 @@ from pyogrio.errors import DataLayerError
 from shapely.geometry import Polygon
 
 from vector2dggs import common
-from vector2dggs.geohash import geohash
-from vector2dggs.h3 import h3
+from vector2dggs.commands import geohash, h3
 from vector2dggs.indexerfactory import indexer_instance
 
 from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME

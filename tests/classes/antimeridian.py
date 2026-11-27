@@ -5,6 +5,7 @@ import geopandas as gpd
 import pyarrow.parquet as pq
 from shapely.geometry import Polygon
 
+from vector2dggs.commands import h3, rhp
 from vector2dggs.common import (
     _clean_geometries,
     _derive_cut_threshold,
@@ -12,9 +13,7 @@ from vector2dggs.common import (
     _prepare_dataframe,
     _run_bisection,
 )
-from vector2dggs.h3 import h3
 from vector2dggs.indexerfactory import indexer_instance
-from vector2dggs.rHP import rhp
 
 from ..data.datapaths import (
     TEST_ANTIMERIDIAN_FILE_PATH,
@@ -135,7 +134,15 @@ class TestUnwrappedLongitudes(TestCase):
     antimeridian handling (geodesic polyfill, or the pre-split fix).
     """
 
-    RESOLUTIONS = {"h3": 7, "rhp": 7, "s2": 12, "a5": 12, "geohash": 5}
+    RESOLUTIONS = {
+        "h3": 7,
+        "rhp": 7,
+        "s2": 12,
+        "a5": 12,
+        "geohash": 5,
+        "isea9r": 7,
+        "healpix": 12,
+    }
 
     def _backends(self):
         for dggs, res in self.RESOLUTIONS.items():

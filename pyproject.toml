@@ -36,6 +36,7 @@ s2geometry = { version = "^0.14.0", optional = true}
 rusty-polygon-geohasher = { version = "^0.2.3", optional = true}
 python-geohash = { version = "^0.8.5", optional = true}
 pya5 = { version = "^1.0.0", optional = true }
+dggal = { version = "^0.0.7", optional = true }
 psycopg2-binary = { version = "^2.9.9", optional = true }
 antimeridian = "^0.4.8"
 
@@ -85,6 +86,15 @@ rhp = ["rhealpixdggs"]
 s2 = ["s2geometry"]
 a5 = ["pya5"]
 geohash = ["rusty-polygon-geohasher", "python-geohash"]
+isea4r = ["dggal"]
+ivea4r = ["dggal"]
+rtea4r = ["dggal"]
+isea9r = ["dggal"]
+ivea9r = ["dggal"]
+rtea9r = ["dggal"]
+healpix = ["dggal"]
+healpix_nuniq = ["dggal"]
 postgres = ["psycopg2-binary"]
 # Convenience extras
-all = ["h3", "rhealpixdggs", "s2geometry", "rusty-polygon-geohasher", "python-geohash", "pya5", "psycopg2-binary"]
+dggal = ["dggal"]
+all = ["h3", "rhealpixdggs", "s2geometry", "rusty-polygon-geohasher", "python-geohash", "pya5", "dggal", "psycopg2-binary"]

@@ -11,9 +11,8 @@ from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME
 from .base import TestRunthrough, skip_unless_backend
 
 OGC_URI = "https://www.opengis.net/def/dggrs/OGC/1.0/rHEALPix"
-BACKENDS = ("h3", "rhp", "s2", "a5", "geohash")
-RES = {"h3": 8, "s2": 13, "a5": 15, "rhp": 8, "geohash": 6}
-MODULES = {"rhp": "rHP"}
+BACKENDS = ("h3", "rhp", "s2", "a5", "geohash", "isea9r", "healpix")
+RES = {"h3": 8, "s2": 13, "a5": 15, "rhp": 8, "geohash": 6, "isea9r": 8, "healpix": 13}
 
 
 def _installed():
@@ -39,7 +38,7 @@ class TestDatasetMetadata(TestRunthrough):
     """
 
     def _run(self, dggs: str, out: Path, extra=()) -> list[Path]:
-        module = importlib.import_module(f"vector2dggs.{MODULES.get(dggs, dggs)}")
+        module = importlib.import_module("vector2dggs.commands")
         getattr(module, dggs)(
             [
                 TEST_FILE_PATH,

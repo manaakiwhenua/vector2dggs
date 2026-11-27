@@ -7,7 +7,7 @@ import h3 as h3lib
 import pandas as pd
 from shapely.geometry import box
 
-from vector2dggs.h3 import h3
+from vector2dggs.commands import h3
 from vector2dggs.indexers.h3vectorindexer import H3VectorIndexer
 
 from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME

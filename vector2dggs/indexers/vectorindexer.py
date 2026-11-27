@@ -156,8 +156,7 @@ class VectorIndexer(ABC, Generic[CellId]):
             raise NotImplementedError(f"'{self.dggs}' has no integer cell form")
         return np.asarray(list(cells), dtype=np.uint64)
 
-    @staticmethod
-    def cells_to_string(cells: Iterable[CellId]) -> list[str]:
+    def cells_to_string(self, cells: Iterable[CellId]) -> list[str]:
         """
         Renders this backend's working cell-id form as its canonical string
         form. The default is a no-op passthrough, since CELL_ARROW_TYPE ==
@@ -267,6 +266,15 @@ class VectorIndexer(ABC, Generic[CellId]):
         """
         return [self.cell_to_polygon(c) for c in cells]
 
+    def _cells_to_test_polygons(self, cells: Iterable[CellId]) -> Iterable[Any]:
+        """
+        Outlines for the containment tests (the line cover). The same as the
+        output outlines unless a backend's edges curve enough in
+        longitude/latitude to need a finer outline for testing than for
+        writing.
+        """
+        return self.cells_to_polygons(cells)
+
     @abstractmethod
     def get_resolution(self, cell: CellId) -> int: ...
 
@@ -334,7 +342,8 @@ class VectorIndexer(ABC, Generic[CellId]):
             if not candidates:
                 break
             hits = shapely.intersects(
-                np.asarray(self.cells_to_polygons(candidates), dtype=object), segment
+                np.asarray(self._cells_to_test_polygons(candidates), dtype=object),
+                segment,
             )
             frontier = [c for c, hit in zip(candidates, hits, strict=True) if hit]
             found.update(frontier)

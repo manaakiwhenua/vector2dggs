@@ -8,12 +8,12 @@ from shapely.geometry import LineString, Point, Polygon
 
 import vector2dggs.constants as const
 from vector2dggs.common import _force_2d
+from vector2dggs.indexerfactory import indexer_instance
 
 from .base import TestRunthrough, skip_unless_backend
 
-BACKENDS = ("h3", "rhp", "s2", "a5", "geohash")
-RES = {"h3": 8, "s2": 13, "a5": 15, "rhp": 8, "geohash": 6}
-MODULES = {"rhp": "rHP"}  # CLI module names that differ from the DGGS key
+BACKENDS = ("h3", "rhp", "s2", "a5", "geohash", "isea9r", "healpix")
+RES = {"h3": 8, "s2": 13, "a5": 15, "rhp": 8, "geohash": 6, "isea9r": 8, "healpix": 13}
 
 
 def _features_3d() -> gpd.GeoDataFrame:
@@ -81,7 +81,10 @@ class TestForce2D(TestCase):
 
 def _bisected_polygon_3d(dggs: str) -> Polygon:
     """A 3D square just over the default bisection threshold for dggs at RES."""
-    side = 1.3 * const.DEFAULT_AREA_THRESHOLD_M2(dggs, RES[dggs]) ** 0.5 / 111_000
+    threshold = const.DEFAULT_CUT_CELLS_PER_PIECE * indexer_instance(dggs).cell_area_m2(
+        RES[dggs]
+    )
+    side = 1.3 * threshold**0.5 / 111_000
     lon, lat = 174.7, -41.3
     return Polygon(
         [
@@ -100,7 +103,7 @@ class Test3DInput(TestRunthrough):
     """
 
     def _run(self, dggs: str, src, out) -> int:
-        module = importlib.import_module(f"vector2dggs.{MODULES.get(dggs, dggs)}")
+        module = importlib.import_module("vector2dggs.commands")
         getattr(module, dggs)(
             [str(src), str(out), "-r", str(RES[dggs]), "-t", "1"],
             standalone_mode=False,

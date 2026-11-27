@@ -5,7 +5,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import sqlalchemy
 
-from vector2dggs.h3 import h3
+from vector2dggs.commands import h3
 
 from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME
 from .base import TestRunthrough

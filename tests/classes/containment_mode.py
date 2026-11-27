@@ -6,7 +6,7 @@ from shapely.geometry import LineString, Point, Polygon, box
 
 import vector2dggs.constants as const
 from vector2dggs import common
-from vector2dggs.a5 import a5
+from vector2dggs.commands import a5
 from vector2dggs.indexerfactory import indexer_instance
 
 from .base import skip_unless_backend
@@ -14,7 +14,16 @@ from .base import skip_unless_backend
 # Fine enough that the test polygon spans several cells either way, coarse
 # enough that every mode stays cheap (A5 subdivides fastest, hence its
 # lower level here than the equivalent-scale ones elsewhere).
-RES = {"h3": 8, "s2": 13, "a5": 15, "rhp": 8, "geohash": 6}
+RES = {
+    "h3": 8,
+    "s2": 13,
+    "a5": 15,
+    "rhp": 8,
+    "geohash": 6,
+    "isea9r": 8,
+    "healpix": 13,
+    "isea4r": 13,
+}
 
 # Several cells across at every RES above, with a boundary that cuts through
 # cells rather than following them, so the three modes must disagree.
@@ -173,6 +182,14 @@ class TestRHPContainmentMode(ContainmentModeScenarios, TestCase):
 
 class TestGeohashContainmentMode(ContainmentModeScenarios, TestCase):
     DGGS = "geohash"
+
+
+class TestISEA9RContainmentMode(ContainmentModeScenarios, TestCase):
+    DGGS = "isea9r"
+
+
+class TestHEALPixContainmentMode(ContainmentModeScenarios, TestCase):
+    DGGS = "healpix"
 
 
 class TestA5WithinUnsupported(TestCase):
