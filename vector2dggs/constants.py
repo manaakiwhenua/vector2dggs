@@ -4,11 +4,11 @@ from math import radians
 
 MIN_H3, MAX_H3 = 0, 15
 MIN_RHP, MAX_RHP = 0, 15
-# rhealpixdggs presets rhp can index to; the first is the default. --grid
-# also takes a registered DGGRS URI, or a parameter spec matching
-# RHP_GRID_SPEC: north square, south square, N_side, optional central
-# meridian, e.g. 003, 113, 123@50 (WGS84_003_OGC is 003@50).
-RHP_GRIDS = ("WGS84_003_OGC", "WGS84_003")
+# rhp indexes to a registered DGGRS by URI (default: OGC rHEALPix), or to a
+# WGS84 grid from a parameter spec matching RHP_GRID_SPEC: north square,
+# south square, N_side, optional central meridian, e.g. 003, 113, 123@50.
+# The OGC grid is 003@50.
+RHP_DEFAULT_GRID = "https://www.opengis.net/def/dggrs/OGC/1.0/rHEALPix"
 RHP_GRID_SPEC = r"^(?P<north>[0-3])(?P<south>[0-3])(?P<n_side>[0-9])(?:@(?P<lon_0>-?[0-9]+(?:\.[0-9]+)?))?$"
 MIN_S2, MAX_S2 = 0, 30
 MIN_GEOHASH, MAX_GEOHASH = 1, 12

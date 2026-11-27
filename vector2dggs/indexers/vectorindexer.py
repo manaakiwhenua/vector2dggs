@@ -83,9 +83,9 @@ class VectorIndexer(ABC, Generic[CellId]):
     # linestring and point indexing are identical in every mode.
     SUPPORTED_MODES: frozenset[const.ContainmentMode] = frozenset(const.ContainmentMode)
 
-    # Named grid variants this backend can index to (--grid); empty when the
-    # backend has exactly one grid.
-    GRIDS: tuple[str, ...] = ()
+    # The --grid value a backend with several grids uses by default; None
+    # when the backend has exactly one grid.
+    GRID_DEFAULT: str | None = None
 
     def __init__(
         self,
@@ -94,7 +94,7 @@ class VectorIndexer(ABC, Generic[CellId]):
         grid: str | None = None,
     ):
         self.dggs = dggs
-        if grid is not None and not self.GRIDS:
+        if grid is not None and self.GRID_DEFAULT is None:
             raise ValueError(f"'{dggs}' has one grid; --grid does not apply")
         self.grid_name = grid
         # Not validated here: an indexer is also constructed just to read

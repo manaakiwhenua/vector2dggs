@@ -8,7 +8,7 @@ import geopandas as gpd
 import pandas as pd
 import shapely
 from rhealpixdggs.conversion import compact_cells as rhp_compact_cells
-from rhealpixdggs.dggs import WGS84_003, WGS84_003_OGC, RHEALPixDGGS
+from rhealpixdggs.dggs import WGS84_003_OGC, RHEALPixDGGS
 from rhealpixdggs.ellipsoids import WGS84_ELLIPSOID, Ellipsoid
 from rhealpixdggs.rhp_wrappers import (
     linetrace,
@@ -42,10 +42,8 @@ _CELL_WIDTH_M = tuple(
 # rhealpixdggs calls here run under ProcessPoolExecutor workers or the main
 # process only, never multiple threads in one process, so no lock is needed.
 
-_GRIDS: dict[str, RHEALPixDGGS] = {
-    "WGS84_003_OGC": WGS84_003_OGC,
-    "WGS84_003": WGS84_003,
-}
+# Registered grids, so a spec with their parameters keeps their codespace.
+_REGISTERED = (WGS84_003_OGC,)
 
 
 def _params(grid: RHEALPixDGGS) -> tuple[int, int, int, float]:
@@ -60,34 +58,39 @@ def _params(grid: RHEALPixDGGS) -> tuple[int, int, int, float]:
 @cache
 def _resolve_grid(value: str | None) -> RHEALPixDGGS:
     """
-    A preset by name, a registered DGGRS by URI, or a parameter spec
-    (const.RHP_GRID_SPEC). A spec with a preset's parameters is that preset,
-    so its codespace is kept. ValueError otherwise.
+    A registered DGGRS by URI, or a WGS84 grid from a parameter spec
+    (const.RHP_GRID_SPEC). A spec with a registered grid's parameters is
+    that grid, so its codespace is kept. ValueError otherwise.
     """
-    value = value or const.RHP_GRIDS[0]
+    value = value or const.RHP_DEFAULT_GRID
     if value.startswith(("http://", "https://")):
-        return RHEALPixDGGS.from_uri(value)
-    if value in _GRIDS:
-        return _GRIDS[value]
+        return _canonical(RHEALPixDGGS.from_uri(value))
     spec = re.match(const.RHP_GRID_SPEC, value)
     if spec is None:
         raise ValueError(
-            f"Unknown rHEALPix grid '{value}'. Options: {', '.join(const.RHP_GRIDS)}, "
-            "a registered DGGRS URI, or <north><south><N_side>[@<lon_0>] such as 113"
+            f"Unknown rHEALPix grid '{value}': neither a registered DGGRS URI "
+            "nor <north><south><N_side>[@<lon_0>] such as 003 or 123@50"
         )
     north, south, n_side = (int(spec[k]) for k in ("north", "south", "n_side"))
     lon_0 = float(spec["lon_0"] or 0)
     if n_side != 3:
         raise ValueError(f"rHEALPix N_side {n_side} is not supported; only 3 is")
-    for preset in _GRIDS.values():
-        if _params(preset) == (north, south, n_side, lon_0):
-            return preset
-    return RHEALPixDGGS(
-        ellipsoid=Ellipsoid(a=WGS84_ELLIPSOID.a, f=WGS84_ELLIPSOID.f, lon_0=lon_0),
-        N_side=n_side,
-        north_square=north,
-        south_square=south,
+    return _canonical(
+        RHEALPixDGGS(
+            ellipsoid=Ellipsoid(a=WGS84_ELLIPSOID.a, f=WGS84_ELLIPSOID.f, lon_0=lon_0),
+            N_side=n_side,
+            north_square=north,
+            south_square=south,
+        )
     )
+
+
+def _canonical(grid: RHEALPixDGGS) -> RHEALPixDGGS:
+    """The registered object for a grid with a registered grid's parameters."""
+    for registered in _REGISTERED:
+        if _params(registered) == _params(grid):
+            return registered
+    return grid
 
 
 class RHPVectorIndexer(VectorIndexer[str]):
@@ -96,7 +99,7 @@ class RHPVectorIndexer(VectorIndexer[str]):
     """
 
     GEODESIC_POLYFILL = False
-    GRIDS = const.RHP_GRIDS
+    GRID_DEFAULT = const.RHP_DEFAULT_GRID
 
     def __init__(
         self,

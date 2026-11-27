@@ -18,19 +18,17 @@ def make_dggs_command(
     max_res: int,
     int_cells: bool = False,
     modes: tuple[str, ...] = const.CONTAINMENT_MODES,
-    grids: tuple[str, ...] = (),
+    grid_default: str | None = None,
 ) -> click.Command:
     res_choices = list(map(str, range(min_res, max_res + 1)))
 
     def _validate_grid(ctx: click.Context, param: click.Parameter, value: str) -> str:
-        if (
-            value in grids
-            or value.startswith(("http://", "https://"))
-            or re.match(const.RHP_GRID_SPEC, value)
+        if value.startswith(("http://", "https://")) or re.match(
+            const.RHP_GRID_SPEC, value
         ):
             return value
         raise click.BadParameter(
-            f"'{value}' is not one of {', '.join(grids)}, a DGGRS URI, or a "
+            f"'{value}' is neither a DGGRS URI nor a "
             "<north><south><N_side>[@<lon_0>] spec such as 113 or 123@50"
         )
 
@@ -39,19 +37,20 @@ def make_dggs_command(
         click.option(
             "--grid",
             required=False,
-            default=grids[0],
+            default=grid_default,
             type=str,
             callback=_validate_grid,
-            metavar="NAME|URI|SPEC",
+            metavar="URI|SPEC",
             help=(
-                f"{display_name} grid to index to: one of {', '.join(grids)} "
-                "(the first is the OGC-registered grid), a registered DGGRS "
-                "URI, or <north square><south square><N_side>[@<central "
-                "meridian>], e.g. 113 or 123@50 (N_side 3 only). Grids name "
-                "different cells, so output is only meaningful with its grid."
+                f"{display_name} grid to index to: a registered DGGRS URI (the "
+                "default is the OGC-registered grid), or <north square><south "
+                "square><N_side>[@<central meridian>], e.g. 003 for the "
+                "central meridian at 0, 113, or 123@50 (N_side 3 only). Grids "
+                "name different cells, so output is only meaningful with its "
+                "grid."
             ),
         )
-        if grids
+        if grid_default
         else (lambda command: command)
     )
 

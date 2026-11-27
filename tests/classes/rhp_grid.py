@@ -49,15 +49,6 @@ class TestRhpGridOption(TestRunthrough):
     def test_default_is_the_ogc_grid(self):
         self.assertEqual(self._cells(self.output_path / "default"), {NZ_OGC})
 
-    def test_named_presets(self):
-        self.assertEqual(
-            self._cells(self.output_path / "ogc", ("--grid", "WGS84_003_OGC")),
-            {NZ_OGC},
-        )
-        self.assertEqual(
-            self._cells(self.output_path / "std", ("--grid", "WGS84_003")), {NZ_STD}
-        )
-
     def test_registered_uri_either_scheme(self):
         for uri in (OGC_URI, OGC_URI.replace("https://", "http://")):
             with self.subTest(uri=uri):
@@ -76,7 +67,7 @@ class TestRhpGridOption(TestRunthrough):
             False,
             1,
             layer="pt",
-            grid="WGS84_003",
+            grid="003",
         )
         self.assertEqual(set(pd.read_parquet(self.output_path / "lib").index), {NZ_STD})
 
@@ -84,9 +75,10 @@ class TestRhpGridOption(TestRunthrough):
         with self.assertRaisesRegex(ValueError, OGC_URI):
             self._cells(self.output_path / "bad", ("--grid", "https://example.org/x"))
 
-    def test_non_preset_non_uri_is_rejected_at_the_cli(self):
-        with self.assertRaisesRegex(click.BadParameter, "WGS84_003"):
-            self._cells(self.output_path / "bad", ("--grid", "lon0"))
+    def test_unrecognised_form_is_rejected_at_the_cli(self):
+        # library preset names are deliberately not a form
+        with self.assertRaisesRegex(click.BadParameter, "DGGRS URI"):
+            self._cells(self.output_path / "bad", ("--grid", "WGS84_003"))
 
     def test_spec_form(self):
         self.assertEqual(
@@ -116,7 +108,7 @@ class TestRhpGridOption(TestRunthrough):
                 standalone_mode=False,
             )
         with self.assertRaises(ValueError):
-            indexer_instance("h3", grid="WGS84_003")
+            indexer_instance("h3", grid="003")
 
 
 class TestRhpGridGeometry(TestCase):
@@ -124,20 +116,19 @@ class TestRhpGridGeometry(TestCase):
 
     def setUp(self):
         skip_unless_backend("rhp")
-        self.ogc = indexer_instance("rhp", grid=const.RHP_GRIDS[0])
-        self.std = indexer_instance("rhp", grid="WGS84_003")
+        self.ogc = indexer_instance("rhp", grid=const.RHP_DEFAULT_GRID)
+        self.std = indexer_instance("rhp", grid="003")
 
     def _cell(self, indexer, point, resolution):
         df = gpd.GeoDataFrame({"fid": [1], "geometry": [point]}, crs=4326)
         return indexer._polyfill_points(df, resolution).index[0]
 
-    def test_default_resolves_to_the_ogc_preset(self):
+    def test_default_resolves_to_the_ogc_grid(self):
         self.assertEqual(indexer_instance("rhp").grid.codespace, OGC_URI)
         self.assertIsNone(self.std.grid.codespace)
 
-    def test_spec_matching_a_preset_keeps_its_codespace(self):
+    def test_spec_matching_a_registered_grid_keeps_its_codespace(self):
         self.assertIs(indexer_instance("rhp", grid="003@50").grid, self.ogc.grid)
-        self.assertIs(indexer_instance("rhp", grid="003").grid, self.std.grid)
         custom = indexer_instance("rhp", grid="123@50").grid
         self.assertIsNone(custom.codespace)
         self.assertEqual((custom.north_square, custom.south_square), (1, 2))
