@@ -7,11 +7,11 @@ import h3 as h3lib
 import pandas as pd
 from shapely.geometry import box
 
-from vector2dggs.h3 import h3
+from vector2dggs.commands import h3
 from vector2dggs.indexers.h3vectorindexer import H3VectorIndexer
 
 from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME
-from .base import TestRunthrough
+from .base import TestRunthrough, skip_unless_backend
 
 
 class TestCompactionEmptyPartition(TestCase):
@@ -142,3 +142,41 @@ class TestCompositeIdCompaction(TestRunthrough):
         self.assertEqual(
             self._cells_by_key(compact, expand_to=self.RES), self._cells_by_key(flat)
         )
+
+
+class TestWithinCompactionEmptyPartition(TestRunthrough):
+    """
+    within subtracts the boundary's cells after the fill, which can empty a
+    partition directory; the compaction merge must still write it (as a
+    typed, zero-row file) rather than fail on an untyped empty index.
+    """
+
+    def test_h3_within_compact_geo_writes_every_partition(self):
+        skip_unless_backend("h3")
+        h3(
+            [
+                TEST_FILE_PATH,
+                str(self.output_path),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "11",
+                "-pr",
+                "9",
+                "-m",
+                "within",
+                "-co",
+                "--geo",
+                "polygon",
+                "-t",
+                "1",
+            ],
+            standalone_mode=False,
+        )
+        files = sorted(self.output_path.rglob("*.parquet"))
+        self.assertTrue(files)
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        types = {pq.read_schema(f).field("h3_11").type for f in files}
+        self.assertTrue(types <= {pa.string(), pa.large_utf8()}, types)

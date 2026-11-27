@@ -10,7 +10,7 @@ from vector2dggs.indexerfactory import indexer_instance
 
 from .base import skip_unless_backend
 
-RES = {"h3": 9, "s2": 14, "rhp": 9, "geohash": 6}
+RES = {"h3": 9, "s2": 14, "rhp": 9, "geohash": 6, "isea9r": 9, "healpix": 14}
 
 # A closed ring and an open line, both with diagonal runs: a path-based
 # tracer survives axis-aligned geometry and fails on diagonals, where it

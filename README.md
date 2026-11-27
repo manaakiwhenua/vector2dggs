@@ -12,6 +12,7 @@ Currently this tool supports the following DGGSs:
 - [rHEALPix](https://datastore.landcareresearch.co.nz/dataset/rhealpix-discrete-global-grid-system) (the [OGC-registered grid](https://www.opengis.net/def/dggrs/OGC/1.0/rHEALPix) by default; see `--grid`)
 - [S2](https://s2geometry.io/)
 - [A5](https://a5geo.org/)
+- Via [DGGAL](https://dggal.org): ISEA4R, IVEA4R, RTEA4R, ISEA9R, IVEA9R, RTEA9R, HEALPix and HEALPix (NUNIQ identifiers)
 
 ... and the following geocode systems:
 
@@ -31,7 +32,7 @@ If you want all possible:
 pip install vector2dggs[all]
 ```
 
-If you want only a subset, use the pattern `pip install vector2dggs[rhp]` (for one) or `pip install vector2dggs[h3,s2]` (for multiple).
+If you want only a subset, use the pattern `pip install vector2dggs[rhp]` (for one) or `pip install vector2dggs[h3,s2]` (for multiple). The DGGAL grids have one extra each (`isea9r`, `healpix`, ...) or `dggal` for all of them.
 
 A bare `pip install vector2dggs` **will not install any DGGS backends**.
 
@@ -42,7 +43,7 @@ The `a5` extra uses the [A5 v1 index](https://a5geo.org/blog/2026/10/14/a5-v1) (
 
 ## Usage
 
-All commands (`h3`, `rhp`, `s2`, `a5`, `geohash`) share the same interface:
+All commands (`h3`, `rhp`, `s2`, `a5`, `geohash`, and the DGGAL grids `isea4r`, `ivea4r`, `rtea4r`, `isea9r`, `ivea9r`, `rtea9r`, `healpix`, `healpix_nuniq`) share the same interface:
 
 ```bash
 vector2dggs <dggs> [OPTIONS] VECTOR_INPUT OUTPUT_DIRECTORY
@@ -179,8 +180,8 @@ If you have arrived from raster tooling, `intersects` is what rasterio's `all_to
 
 A DGGS cell has no canonical rendering as either a point or an area, so each mode above is explicit about which it tests, and each backend answers with its own:
 
-- **Centre point.** rHEALPix uses the cell's nucleus; geohash the midpoint of its box; H3, S2 and A5 their own cell centres.
-- **Area.** A geohash cell is a longitude/latitude aligned box, bounded by parallels and meridians, so it is exactly what it appears to be; H3's cells are decided in longitude/latitude too; S2 and A5 work on a sphere, where cell edges are great-circle arcs; a rHEALPix cell is an exact quadrilateral in its own projection, which on the ellipsoid stays longitude/latitude aligned for equatorial cells but gives polar cells curved edges that are sampled.
+- **Centre point.** rHEALPix uses the cell's nucleus; geohash the midpoint of its box; H3, S2, A5 and the DGGAL grids their own cell centres.
+- **Area.** A geohash cell is a longitude/latitude aligned box, bounded by parallels and meridians, so it is exactly what it appears to be; H3's cells are decided in longitude/latitude too; S2 and A5 work on a sphere, where cell edges are great-circle arcs; a rHEALPix cell is an exact quadrilateral in its own projection, which on the ellipsoid stays longitude/latitude aligned for equatorial cells but gives polar cells curved edges that are sampled. A DGGAL zone's edges are curves in longitude/latitude; `intersects` and `within` test DGGAL's refined outline (120 points), while `--geo polygon` writes only the zone's corners joined by straight edges, so neighbouring output polygons can show slivers of gap or overlap at coarse resolutions.
 
 So `intersects` and `within` are exact with respect to each backend's own model of a cell's extent, and near a feature's boundary different backends will not necessarily agree about the same cell — which is a property of the grids, not a defect in any one of them. The feature's own edges are read under the same model: as straight lines in longitude/latitude by H3, geohash and rHEALPix, and as great-circle arcs by S2 and A5. For short edges the two readings barely differ, but they are not interchangeable at length: a 40° edge at 60°N passes 170 km from where the great circle between its endpoints runs.
 

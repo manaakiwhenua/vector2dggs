@@ -5,7 +5,7 @@ delta-encoded, for both ID forms, both output kinds, and with compaction.
 
 import pyarrow.parquet as pq
 
-from vector2dggs.h3 import h3
+from vector2dggs.commands import h3
 
 from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME
 from .base import TestRunthrough, skip_unless_backend

@@ -4,12 +4,8 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 import vector2dggs.constants as const
-from vector2dggs.a5 import a5
-from vector2dggs.geohash import geohash
-from vector2dggs.h3 import h3
+from vector2dggs.commands import a5, geohash, h3, healpix, isea4r, isea9r, rhp, s2
 from vector2dggs.indexerfactory import indexer_instance
-from vector2dggs.rHP import rhp
-from vector2dggs.s2 import s2
 
 from ..data.datapaths import (
     TEST_FILE_PATH,
@@ -371,3 +367,27 @@ class TestGeohash(RunthroughScenarios, TestRunthrough):
     POLYGON_RES = "6"
     LINE_RES = "6"
     WITHIN_RES = "8"
+
+
+class TestISEA9R(RunthroughScenarios, TestRunthrough):
+    DGGS = "isea9r"
+    COMMAND = staticmethod(isea9r)
+    POLYGON_RES = "8"
+    LINE_RES = "10"
+    WITHIN_RES = "12"
+
+
+class TestHEALPix(RunthroughScenarios, TestRunthrough):
+    DGGS = "healpix"
+    COMMAND = staticmethod(healpix)
+    POLYGON_RES = "13"
+    LINE_RES = "15"
+    WITHIN_RES = "17"
+
+
+class TestISEA4R(RunthroughScenarios, TestRunthrough):
+    DGGS = "isea4r"
+    COMMAND = staticmethod(isea4r)
+    POLYGON_RES = "13"
+    LINE_RES = "15"
+    WITHIN_RES = "17"

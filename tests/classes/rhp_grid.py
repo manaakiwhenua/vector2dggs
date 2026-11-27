@@ -10,9 +10,8 @@ from shapely.geometry import Point
 
 import vector2dggs.constants as const
 from vector2dggs import common
-from vector2dggs.h3 import h3
+from vector2dggs.commands import h3, rhp
 from vector2dggs.indexerfactory import indexer_instance
-from vector2dggs.rHP import rhp
 
 from .base import TestRunthrough, skip_unless_backend
 

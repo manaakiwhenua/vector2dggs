@@ -131,6 +131,10 @@ with contextlib.suppress(ImportError):
         TestCompositeIdCompaction as TestCompositeIdCompaction,
     )
 with contextlib.suppress(ImportError):
+    from .classes.compaction_pipeline import (
+        TestWithinCompactionEmptyPartition as TestWithinCompactionEmptyPartition,
+    )
+with contextlib.suppress(ImportError):
     from .classes.containment_mode import (
         TestA5ContainmentMode as TestA5ContainmentMode,
     )
@@ -256,6 +260,21 @@ with contextlib.suppress(ImportError):
     from .classes.runthrough import TestH3 as TestH3
     from .classes.runthrough import TestRHP as TestRHP
     from .classes.runthrough import TestS2 as TestS2
+with contextlib.suppress(ImportError):
+    from .classes.runthrough import TestHEALPix as TestHEALPix
+    from .classes.runthrough import TestISEA4R as TestISEA4R
+    from .classes.runthrough import TestISEA9R as TestISEA9R
+with contextlib.suppress(ImportError):
+    from .classes.containment_mode import (
+        TestHEALPixContainmentMode as TestHEALPixContainmentMode,
+    )
+    from .classes.containment_mode import (
+        TestISEA9RContainmentMode as TestISEA9RContainmentMode,
+    )
+with contextlib.suppress(ImportError):
+    from .classes.dggal import TestHEALPixGrid as TestHEALPixGrid
+    from .classes.dggal import TestISEA4RGrid as TestISEA4RGrid
+    from .classes.dggal import TestISEA9RGrid as TestISEA9RGrid
 
 
 class TestAggregatorCompleteness(unittest.TestCase):

@@ -8,9 +8,17 @@ from vector2dggs.indexerfactory import indexer_instance
 
 from .base import skip_unless_backend
 
-RES = {"h3": 8, "s2": 13, "a5": 17, "rhp": 8, "geohash": 6}
+RES = {"h3": 8, "s2": 13, "a5": 17, "rhp": 8, "geohash": 6, "isea9r": 8, "healpix": 13}
 # fine enough that multiple cell centres fall inside the test hole
-HOLE_RES = {"h3": 10, "s2": 15, "a5": 18, "rhp": 9, "geohash": 7}
+HOLE_RES = {
+    "h3": 10,
+    "s2": 15,
+    "a5": 18,
+    "rhp": 9,
+    "geohash": 7,
+    "isea9r": 10,
+    "healpix": 15,
+}
 
 
 class TestPolyfillTokenContract(TestCase):

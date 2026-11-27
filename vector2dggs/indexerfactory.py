@@ -10,6 +10,17 @@ INDEXER_LOOKUP: dict[str, tuple[str, str]] = {
     "geohash": ("vector2dggs.indexers.geohashvectorindexer", "GeohashVectorIndexer"),
     "s2": ("vector2dggs.indexers.s2vectorindexer", "S2VectorIndexer"),
     "a5": ("vector2dggs.indexers.a5vectorindexer", "A5VectorIndexer"),
+    "isea4r": ("vector2dggs.indexers.dggalvectorindexer", "ISEA4RVectorIndexer"),
+    "ivea4r": ("vector2dggs.indexers.dggalvectorindexer", "IVEA4RVectorIndexer"),
+    "rtea4r": ("vector2dggs.indexers.dggalvectorindexer", "RTEA4RVectorIndexer"),
+    "isea9r": ("vector2dggs.indexers.dggalvectorindexer", "ISEA9RVectorIndexer"),
+    "ivea9r": ("vector2dggs.indexers.dggalvectorindexer", "IVEA9RVectorIndexer"),
+    "rtea9r": ("vector2dggs.indexers.dggalvectorindexer", "RTEA9RVectorIndexer"),
+    "healpix": ("vector2dggs.indexers.dggalvectorindexer", "HEALPixVectorIndexer"),
+    "healpix_nuniq": (
+        "vector2dggs.indexers.dggalvectorindexer",
+        "HEALPixNUNIQVectorIndexer",
+    ),
 }
 
 

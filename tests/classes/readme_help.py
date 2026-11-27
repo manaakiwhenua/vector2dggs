@@ -4,7 +4,7 @@ from unittest import TestCase
 
 from click.testing import CliRunner
 
-from vector2dggs.h3 import h3
+from vector2dggs.commands import h3
 
 README = Path(__file__).parents[2] / "README.md"
 

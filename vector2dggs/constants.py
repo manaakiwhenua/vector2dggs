@@ -15,15 +15,33 @@ RHP_GRID_SPEC = r"^(?P<north>[0-3])(?P<south>[0-3])(?P<n_side>[23])(?:@(?P<lon_0
 MIN_S2, MAX_S2 = 0, 30
 MIN_GEOHASH, MAX_GEOHASH = 1, 12
 MIN_A5, MAX_A5 = 0, 30
+# DGGAL grids: getMaxDGGRSZoneLevel
+MIN_ISEA4R, MAX_ISEA4R = 0, 25
+MIN_IVEA4R, MAX_IVEA4R = 0, 25
+MIN_RTEA4R, MAX_RTEA4R = 0, 25
+MIN_ISEA9R, MAX_ISEA9R = 0, 16
+MIN_IVEA9R, MAX_IVEA9R = 0, 16
+MIN_RTEA9R, MAX_RTEA9R = 0, 16
+MIN_HEALPIX, MAX_HEALPIX = 0, 26
+MIN_HEALPIX_NUNIQ, MAX_HEALPIX_NUNIQ = 0, 26
 DGGS_MAX_RES = {
     "h3": MAX_H3,
     "rhp": MAX_RHP,
     "s2": MAX_S2,
     "geohash": MAX_GEOHASH,
     "a5": MAX_A5,
+    "isea4r": MAX_ISEA4R,
+    "ivea4r": MAX_IVEA4R,
+    "rtea4r": MAX_RTEA4R,
+    "isea9r": MAX_ISEA9R,
+    "ivea9r": MAX_IVEA9R,
+    "rtea9r": MAX_RTEA9R,
+    "healpix": MAX_HEALPIX,
+    "healpix_nuniq": MAX_HEALPIX_NUNIQ,
 }
 
 EARTH_MEAN_RADIUS_M = 6_371_008.8
+EARTH_AUTHALIC_RADIUS_M = 6_371_007.180918  # WGS84; equal-area grids' sphere
 
 # Metres per degree of latitude/longitude on a sphere of the above radius.
 # For cheap scale estimates on geometries already in EPSG:4326 (everything
@@ -108,6 +126,14 @@ DEFAULT_DGGS_PARENT_RES = {
     ),
     "s2": lambda resolution: max(MIN_S2, (resolution - DEFAULT_PARENT_OFFSET)),
     "a5": lambda resolution: max(MIN_A5, (resolution - DEFAULT_PARENT_OFFSET)),
+    "isea4r": lambda resolution: max(0, resolution - DEFAULT_PARENT_OFFSET),
+    "ivea4r": lambda resolution: max(0, resolution - DEFAULT_PARENT_OFFSET),
+    "rtea4r": lambda resolution: max(0, resolution - DEFAULT_PARENT_OFFSET),
+    "isea9r": lambda resolution: max(0, resolution - DEFAULT_PARENT_OFFSET),
+    "ivea9r": lambda resolution: max(0, resolution - DEFAULT_PARENT_OFFSET),
+    "rtea9r": lambda resolution: max(0, resolution - DEFAULT_PARENT_OFFSET),
+    "healpix": lambda resolution: max(0, resolution - DEFAULT_PARENT_OFFSET),
+    "healpix_nuniq": lambda resolution: max(0, resolution - DEFAULT_PARENT_OFFSET),
 }
 
 DEFAULT_PARENT_OFFSET = 6
