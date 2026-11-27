@@ -3,10 +3,25 @@ from enum import StrEnum, unique
 from math import radians
 
 MIN_H3, MAX_H3 = 0, 15
-MIN_RHP, MAX_RHP = 0, 15
+# N_side 2's maximum; N_side 3 stops at 15, enforced per grid by the indexer
+MIN_RHP, MAX_RHP = 0, 24
+# rhp indexes to a registered DGGRS by URI (default: OGC rHEALPix), or to a
+# WGS84 grid from a parameter spec matching RHP_GRID_SPEC: north square,
+# south square, N_side (2 or 3, the two with index strings), optional
+# central meridian, e.g. 003, 113, 123@50.
+# The OGC grid is 003@50.
+RHP_DEFAULT_GRID = "https://www.opengis.net/def/dggrs/OGC/1.0/rHEALPix"
+RHP_GRID_SPEC = r"^(?P<north>[0-3])(?P<south>[0-3])(?P<n_side>[23])(?:@(?P<lon_0>-?[0-9]+(?:\.[0-9]+)?))?$"
 MIN_S2, MAX_S2 = 0, 30
 MIN_GEOHASH, MAX_GEOHASH = 1, 12
 MIN_A5, MAX_A5 = 0, 30
+DGGS_MAX_RES = {
+    "h3": MAX_H3,
+    "rhp": MAX_RHP,
+    "s2": MAX_S2,
+    "geohash": MAX_GEOHASH,
+    "a5": MAX_A5,
+}
 
 EARTH_MEAN_RADIUS_M = 6_371_008.8
 
@@ -152,6 +167,8 @@ H3_CELLS_MAX_AREA_KM2_BY_LEVEL = {
     15: 0.000001080,
 }
 
+# Planar (projected) areas, ~18% above the ellipsoidal ones the rhp indexer
+# now reports through cell_area_m2; kept for tests and the other tables' shape
 RHP_CELLS_AREA_KM2_BY_LEVEL = {
     0: 100151150.62856922,
     1: 11127905.62539658,
@@ -328,4 +345,5 @@ DEFAULTS = {
     "cell_id": CellIdMode.STRING.value,
     "mode": ContainmentMode.CENTRE.value,
     "drop_spikes": None,
+    "grid": None,
 }

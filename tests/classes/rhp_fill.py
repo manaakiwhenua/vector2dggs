@@ -11,7 +11,6 @@ from ..data.datapaths import TEST_DISPERSED_FILE_PATH, TEST_DISPERSED_LAYER_NAME
 from .base import skip_unless_backend
 
 try:
-    from rhealpixdggs.dggs import WGS84_003
     from rhealpixdggs.rhp_wrappers import polyfill_array
 
     from vector2dggs.indexers import rhpvectorindexer
@@ -33,17 +32,18 @@ class TestRHPFillMinRes(TestCase):
 
     def setUp(self):
         skip_unless_backend("rhp")
+        self.indexer = RHPVectorIndexer(dggs="rhp")
 
     def test_picks_finest_resolution_containing_bbox(self):
         # ~1km box at the equator: finest resolution whose cell is still at
         # least as wide as the bbox, but no finer.
         geom = box(0.0, 0.0, 0.009, 0.009)  # ~1km x 1km at the equator
-        min_res = RHPVectorIndexer._fill_min_res(geom, 12)
+        min_res = self.indexer._fill_min_res(geom, 12)
         span_m = 0.009 * const.METRES_PER_DEGREE
-        cell_width = const.DGGS_CELL_AREA_M2_BY_RES["rhp"](min_res) ** 0.5
+        cell_width = self.indexer.cell_area_m2(min_res) ** 0.5
         self.assertGreaterEqual(cell_width, span_m)
-        if min_res < const.MAX_RHP:
-            next_width = const.DGGS_CELL_AREA_M2_BY_RES["rhp"](min_res + 1) ** 0.5
+        if min_res < self.indexer.max_res:
+            next_width = self.indexer.cell_area_m2(min_res + 1) ** 0.5
             self.assertLess(next_width, span_m)
 
     def test_within_upstream_bounds(self):
@@ -57,7 +57,7 @@ class TestRHPFillMinRes(TestCase):
         for geom in geoms:
             for resolution in (0, 1, 5, 9, const.MAX_RHP):
                 with self.subTest(geom=geom.wkt, resolution=resolution):
-                    min_res = RHPVectorIndexer._fill_min_res(geom, resolution)
+                    min_res = self.indexer._fill_min_res(geom, resolution)
                     self.assertGreaterEqual(min_res, 0)
                     self.assertLessEqual(min_res, resolution)
 
@@ -79,19 +79,19 @@ class TestRHPFillMinRes(TestCase):
         antimeridian_spanning = box(-180.0, -10.0, 180.0, 10.0)
         for geom in (north_pole, south_pole, antimeridian_spanning):
             with self.subTest(geom=geom.wkt):
-                self.assertEqual(RHPVectorIndexer._fill_min_res(geom, 9), 0)
+                self.assertEqual(self.indexer._fill_min_res(geom, 9), 0)
 
     def test_near_pole_but_not_touching_is_unaffected(self):
         # Confirms the clamp is on the boundary condition, not "near a pole"
         # generally - a geometry that merely approaches a pole should still
         # get a deep min_res like any other small geometry.
         near_pole = box(0.0, 89.97, 0.01, 89.98)
-        min_res = RHPVectorIndexer._fill_min_res(near_pole, 9)
+        min_res = self.indexer._fill_min_res(near_pole, 9)
         self.assertGreater(min_res, 0)
 
     def test_large_geometry_starts_coarse(self):
         large = box(160.0, -47.0, 179.0, -34.0)  # ~13 degrees, NZ-scale
-        min_res = RHPVectorIndexer._fill_min_res(large, 9)
+        min_res = self.indexer._fill_min_res(large, 9)
         self.assertLessEqual(min_res, 1)
 
 
@@ -124,7 +124,7 @@ class TestRHPFillEquivalence(TestCase):
                         geom,
                         resolution,
                         plane=False,
-                        dggs=WGS84_003,
+                        dggs=indexer.grid,
                         containment=containment,
                         min_res=min_res,
                     )
@@ -176,7 +176,7 @@ class TestRHPFillPerformance(TestCase):
     def test_min_res_is_passed_to_polyfill(self):
         geom = box(174.7, -41.30, 174.701, -41.299)
         resolution = 10
-        expected = RHPVectorIndexer._fill_min_res(geom, resolution)
+        expected = self.indexer._fill_min_res(geom, resolution)
         self.assertGreater(expected, 0)
         with mock.patch(
             "vector2dggs.indexers.rhpvectorindexer.polyfill_array",

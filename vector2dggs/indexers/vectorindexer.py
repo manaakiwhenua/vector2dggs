@@ -83,17 +83,38 @@ class VectorIndexer(ABC, Generic[CellId]):
     # linestring and point indexing are identical in every mode.
     SUPPORTED_MODES: frozenset[const.ContainmentMode] = frozenset(const.ContainmentMode)
 
+    # The --grid value a backend with several grids uses by default; None
+    # when the backend has exactly one grid.
+    GRID_DEFAULT: str | None = None
+
     def __init__(
         self,
         dggs: str,
         mode: str = const.ContainmentMode.CENTRE.value,
+        grid: str | None = None,
     ):
         self.dggs = dggs
+        if grid is not None and self.GRID_DEFAULT is None:
+            raise ValueError(f"'{dggs}' has one grid; --grid does not apply")
+        self.grid_name = grid
         # Not validated here: an indexer is also constructed just to read
         # SUPPORTED_MODES off it. common.check_mode does the rejecting.
         self.mode = const.ContainmentMode(mode)
         # set per call by polyfill(); read by _cells_or_skip
         self._id_cols: tuple[str, ...] = ()
+
+    def cell_area_m2(self, resolution: int) -> float:
+        """
+        Area of one cell at resolution, for the pipeline's sizing heuristics
+        (bisection threshold, line budget, staged-file size). From the
+        per-backend tables; a backend whose grids differ overrides this.
+        """
+        return float(const.DGGS_CELL_AREA_M2_BY_RES[self.dggs](resolution))
+
+    @property
+    def max_res(self) -> int:
+        """Finest resolution this indexer's grid supports."""
+        return const.DGGS_MAX_RES[self.dggs]
 
     @staticmethod
     def cells_to_string(cells: Iterable[CellId]) -> list[str]:
@@ -184,13 +205,13 @@ class VectorIndexer(ABC, Generic[CellId]):
         parent_res: int,
     ) -> pd.DataFrame: ...
 
-    @staticmethod
+    # Instance methods, as a backend with several grids needs the instance;
+    # a single-grid backend may implement them as staticmethods.
     @abstractmethod
-    def cell_to_point(cell: CellId) -> Point: ...
+    def cell_to_point(self, cell: CellId) -> Point: ...
 
-    @staticmethod
     @abstractmethod
-    def cell_to_polygon(cell: CellId) -> Polygon: ...
+    def cell_to_polygon(self, cell: CellId) -> Polygon: ...
 
     def cells_to_points(self, cells: Iterable[CellId]) -> Iterable[Point]:
         """
@@ -206,13 +227,11 @@ class VectorIndexer(ABC, Generic[CellId]):
         """
         return [self.cell_to_polygon(c) for c in cells]
 
-    @staticmethod
     @abstractmethod
-    def get_resolution(cell: CellId) -> int: ...
+    def get_resolution(self, cell: CellId) -> int: ...
 
-    @staticmethod
     @abstractmethod
-    def children_at_res(cell: CellId, target_res: int) -> Iterable[CellId]: ...
+    def children_at_res(self, cell: CellId, target_res: int) -> Iterable[CellId]: ...
 
     def _cell_at(self, lon: float, lat: float, resolution: int) -> CellId:
         """

@@ -110,6 +110,15 @@ def check_resolutions(resolution: str | int, parent_res: None | str | int) -> No
         )
 
 
+def check_resolution_range(resolution: int, indexer: VectorIndexer[Any]) -> None:
+    """The CLI bounds -r by backend; a backend with several grids may be finer."""
+    if resolution > indexer.max_res:
+        raise ValueError(
+            f"Resolution {resolution} exceeds {indexer.max_res}, the finest this "
+            f"{indexer.dggs} grid supports"
+        )
+
+
 def check_requested_attributes(
     keep_attribute: tuple[str, ...],
     input_file: Path | str,
@@ -1030,8 +1039,7 @@ def _split_linestring_at_vertices(line: LineString, budget: float) -> list[LineS
 
 def _derive_cut_threshold(
     df: pd.DataFrame,
-    dggs: str,
-    resolution: int,
+    cell_area_m2: float,
     cut_threshold: None | float = None,
 ) -> float:
     # cut_threshold == 0 disables bisection entirely
@@ -1043,7 +1051,7 @@ def _derive_cut_threshold(
 
     if cut_threshold is None:
         metres_per_unit = _metres_per_unit(df.crs)
-        cut_threshold_m2 = const.DEFAULT_AREA_THRESHOLD_M2(dggs, int(resolution))
+        cut_threshold_m2 = const.DEFAULT_CUT_CELLS_PER_PIECE * cell_area_m2
         cut_threshold = cut_threshold_m2 / metres_per_unit**2
         LOGGER.debug(
             f"Using default cut_threshold of {cut_threshold} "
@@ -1054,7 +1062,7 @@ def _derive_cut_threshold(
 
 
 def _blade_segment(
-    indexer: VectorIndexer[Any], dggs: str, resolution: int, cut_crs: pyproj.CRS
+    indexer: VectorIndexer[Any], resolution: int, cut_crs: pyproj.CRS
 ) -> float | None:
     """
     Max vertex spacing (in cut CRS units) along bisection cut edges. Needed
@@ -1066,7 +1074,7 @@ def _blade_segment(
     """
     if not (indexer.GEODESIC_POLYFILL or cut_crs.is_projected):
         return None
-    eps_m = max(const.DGGS_CELL_AREA_M2_BY_RES[dggs](resolution) ** 0.5 / 10, 10.0)
+    eps_m = max(indexer.cell_area_m2(resolution) ** 0.5 / 10, 10.0)
     return float(eps_m / _metres_per_unit(cut_crs))
 
 
@@ -1578,7 +1586,7 @@ def _clean_geometries(
 
 
 def _staged_file_chunks(
-    batch: gpd.GeoDataFrame, dggs: str, resolution: int, max_rows: int
+    batch: gpd.GeoDataFrame, cell_area_m2: float, max_rows: int
 ) -> Iterator[tuple[int, int]]:
     """
     Yield (start, end) row-position ranges bundling batch into successive
@@ -1598,7 +1606,6 @@ def _staged_file_chunks(
         axis = batch.crs.axis_info[0]
         metres_per_unit = axis.unit_conversion_factor * const.EARTH_MEAN_RADIUS_M
         bbox_area = bbox_area * metres_per_unit**2
-    cell_area_m2 = const.DGGS_CELL_AREA_M2_BY_RES[dggs](resolution)
     est_cells = np.maximum(1.0, bbox_area.to_numpy() / cell_area_m2)
 
     start = 0
@@ -1688,6 +1695,7 @@ def index(
     cell_id: str = const.CellIdMode.STRING.value,
     mode: str = const.ContainmentMode.CENTRE.value,
     drop_spikes: float | None = None,
+    grid: str | None = None,
 ) -> Path | str:
     """
     Performs multi-threaded DGGS indexing on geometries (including multipart and collections).
@@ -1723,6 +1731,7 @@ def index(
             cell_id,
             mode,
             drop_spikes,
+            grid,
         )
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
@@ -1750,12 +1759,15 @@ def _index(
     cell_id: str = const.CellIdMode.STRING.value,
     mode: str = const.ContainmentMode.CENTRE.value,
     drop_spikes: float | None = None,
+    grid: str | None = None,
 ) -> None:
     id_fields = id_fields or resolve_default_id_field(input_file, layer, con)
     output_ids = id_fields or ("fid",)  # the synthetic index's column name
-    indexer = idxfactory.indexer_instance(dggs, mode)
+    indexer = idxfactory.indexer_instance(dggs, mode, grid)
     check_cell_id(cell_id, indexer)
     check_mode(mode, indexer)
+    check_resolution_range(resolution, indexer)
+    cell_area_m2 = indexer.cell_area_m2(resolution)
     # WITHIN is never asked of a backend, whose answer would be per-piece:
     # a cell wholly inside a feature need not be wholly inside any one
     # piece it was cut into. The pipeline composes it instead, filling the
@@ -1764,7 +1776,7 @@ def _index(
     # survives cutting because neither term is taken from a piece.
     subtracting = indexer.mode == const.ContainmentMode.WITHIN
     fill_indexer = (
-        idxfactory.indexer_instance(dggs, const.ContainmentMode.INTERSECTS.value)
+        idxfactory.indexer_instance(dggs, const.ContainmentMode.INTERSECTS.value, grid)
         if subtracting
         else indexer
     )
@@ -1818,9 +1830,7 @@ def _index(
             keep_attribute,
         ):
             pbar.update(len(batch))
-            cut_threshold = _derive_cut_threshold(
-                batch, dggs, resolution, cut_threshold
-            )
+            cut_threshold = _derive_cut_threshold(batch, cell_area_m2, cut_threshold)
             batch = _prepare_dataframe(
                 batch,
                 id_fields,
@@ -1833,11 +1843,11 @@ def _index(
             features_in.update(index_keys(batch.index))
             batch = _force_2d(batch)
             if line_budget is None:
-                blade_segment = _blade_segment(indexer, dggs, resolution, batch.crs)
+                blade_segment = _blade_segment(indexer, resolution, batch.crs)
                 # linestrings cross roughly one cell per edge-length travelled
                 line_budget = (
                     const.DEFAULT_CUT_CELLS_PER_PIECE
-                    * const.DGGS_CELL_AREA_M2_BY_RES[dggs](resolution) ** 0.5
+                    * cell_area_m2**0.5
                     / _metres_per_unit(batch.crs)
                 )
             if drop_spikes:
@@ -1855,9 +1865,7 @@ def _index(
             batch = _clean_geometries(batch, indexer)
             if template is None:
                 template = batch.iloc[:0].copy()
-            for start, end in _staged_file_chunks(
-                batch, dggs, resolution, rows_per_file
-            ):
+            for start, end in _staged_file_chunks(batch, cell_area_m2, rows_per_file):
                 batch.iloc[start:end].to_parquet(
                     PurePath(tmpdir, f"part-{part:06}.parquet")
                 )

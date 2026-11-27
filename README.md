@@ -9,7 +9,7 @@ This is the vector equivalent of [raster2dggs](https://github.com/manaakiwhenua/
 Currently this tool supports the following DGGSs:
 
 - [H3](https://h3geo.org/)
-- [rHEALPix](https://datastore.landcareresearch.co.nz/dataset/rhealpix-discrete-global-grid-system)
+- [rHEALPix](https://datastore.landcareresearch.co.nz/dataset/rhealpix-discrete-global-grid-system) (the [OGC-registered grid](https://www.opengis.net/def/dggrs/OGC/1.0/rHEALPix) by default; see `--grid`)
 - [S2](https://s2geometry.io/)
 - [A5](https://a5geo.org/)
 
@@ -56,6 +56,7 @@ vector2dggs <dggs> [OPTIONS] VECTOR_INPUT OUTPUT_DIRECTORY
 - `-co`/`--compact`: merges complete sets of sibling cells belonging to one feature (grouped by whichever id_field is in play, explicit, auto-detected, or synthetic, and by the joint key when it is composite), to no coarser than the parent resolution. Compacted output expands back to exactly the full-resolution result.
 - `--geo`: plain Parquet by default; `point` or `polygon` writes GeoParquet (v1.1.0) cell geometries instead.
 - `-m`/`--mode`: which of a polygon's cells are indexed. See [Containment modes](#containment-modes) below.
+- `--grid` (rHEALPix only): which rHEALPix grid to index to, as a registered DGGRS URI or a parameter spec. The default is the [OGC-registered rHEALPix DGGRS](https://www.opengis.net/def/dggrs/OGC/1.0/rHEALPix): WGS84, N_side 3, polar squares 0 and 0, central meridian 50° E, as DGGAL and OGC API - DGGS servers use it. A spec `<north square><south square><N_side>[@<central meridian>]` builds a WGS84 grid with those parameters: `003` is the OGC layout with the meridian at 0° (the default before 0.28), `113` and `123@50` move the polar squares, and `003@50` is the OGC grid itself. N_side 2 or 3 (the finest resolution is 15 for N_side 3 and 24 for 2). Grids name different cells (between `003` and the default, equatorial cells coincide from resolution 2 up under different identifiers; polar cells differ), so output is only meaningful with its grid.
 - `--cell-id`: `string` (default) or `uint64`. DGGS with a native integer cell form (A5, H3, S2) can write cell IDs as unsigned 64-bit integers instead of text — useful where downstream tools take integer cell IDs directly (e.g. DuckDB's `h3` extension). Cell IDs are worked in the native form internally regardless of this flag; it only controls the final output rendering. String-only DGGS (rHEALPix, Geohash) reject `--cell-id uint64`.
 - `--drop-spikes METRES`: off by default. Removes polygon spikes — places where a ring runs out to a vertex and back along almost the same line — narrower than the given width, before indexing. A spike encloses practically nothing, but S2 reads each edge as a great-circle arc, which bows away from the straight line between its ends; a spike returning within that bow makes the ring cross itself on the sphere, though it is valid to a planar reading.
 
@@ -77,11 +78,10 @@ Usage: vector2dggs h3 [OPTIONS] VECTOR_INPUT OUTPUT_DIRECTORY
 Options:
   -v, --verbosity LVL             Either CRITICAL, ERROR, WARNING, INFO or DEBUG
                                   [default: INFO]
-  -r, --resolution [0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15]
-                                  H3 resolution to index  [required]
-  -pr, --parent_res [0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15]
+  -r, --resolution INTEGER RANGE  H3 resolution to index  [0<=x<=15; required]
+  -pr, --parent_res INTEGER RANGE
                                   H3 parent resolution for the output partition.
-                                  Defaults to resolution - 6
+                                  Defaults to resolution - 6  [0<=x<=15]
   -id, --id_field TEXT            Field to use as an ID; repeat for a composite
                                   ID (one output column per field, in the order
                                   given). Defaults to the input's own internal

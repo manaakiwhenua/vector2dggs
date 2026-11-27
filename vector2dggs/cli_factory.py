@@ -1,3 +1,4 @@
+import re
 import tempfile
 from pathlib import Path
 
@@ -6,6 +7,7 @@ import click_log
 
 import vector2dggs.common as common
 import vector2dggs.constants as const
+import vector2dggs.indexerfactory as idxfactory
 from vector2dggs import __version__
 
 
@@ -17,8 +19,43 @@ def make_dggs_command(
     max_res: int,
     int_cells: bool = False,
     modes: tuple[str, ...] = const.CONTAINMENT_MODES,
+    grid_default: str | None = None,
+    res_note: str = "",
 ) -> click.Command:
-    res_choices = list(map(str, range(min_res, max_res + 1)))
+    res_range = click.IntRange(min_res, max_res)
+
+    def _validate_grid(ctx: click.Context, param: click.Parameter, value: str) -> str:
+        if value.startswith(("http://", "https://")) or re.match(
+            const.RHP_GRID_SPEC, value
+        ):
+            return value
+        raise click.BadParameter(
+            f"'{value}' is neither a DGGRS URI nor a "
+            "<north><south><N_side>[@<lon_0>] spec (N_side 2 or 3) such as 113 "
+            "or 123@50"
+        )
+
+    # Only backends with several grids get the option
+    grid_option = (
+        click.option(
+            "--grid",
+            required=False,
+            default=grid_default,
+            type=str,
+            callback=_validate_grid,
+            metavar="URI|SPEC",
+            help=(
+                f"{display_name} grid to index to: a registered DGGRS URI (the "
+                "default is the OGC-registered grid), or <north square><south "
+                "square><N_side>[@<central meridian>], e.g. 003 for the "
+                "central meridian at 0, 113, or 123@50 (N_side 2 or 3). Grids "
+                "name different cells, so output is only meaningful with its "
+                "grid."
+            ),
+        )
+        if grid_default
+        else (lambda command: command)
+    )
 
     @click.command(name=command_name, context_settings={"show_default": True})
     @click_log.simple_verbosity_option(common.LOGGER)
@@ -28,16 +65,16 @@ def make_dggs_command(
         "-r",
         "--resolution",
         required=True,
-        type=click.Choice(res_choices),
-        help=f"{display_name} resolution to index",
+        type=res_range,
+        help=f"{display_name} resolution to index{res_note}",
         nargs=1,
     )
     @click.option(
         "-pr",
         "--parent_res",
         required=False,
-        type=click.Choice(res_choices),
-        help=f"{display_name} parent resolution for the output partition. Defaults to resolution - 6",
+        type=res_range,
+        help=f"{display_name} parent resolution for the output partition. Defaults to resolution - 6{res_note}",
     )
     @click.option(
         "-id",
@@ -150,6 +187,7 @@ def make_dggs_command(
         ),
         nargs=1,
     )
+    @grid_option
     @click.option(
         "--drop-spikes",
         "drop_spikes",
@@ -184,8 +222,8 @@ def make_dggs_command(
     def command(
         vector_input: str | Path,
         output_directory: str | Path,
-        resolution: str,
-        parent_res: str,
+        resolution: int,
+        parent_res: int | None,
         id_field: tuple[str, ...],
         keep_attributes: bool,
         keep_attribute: tuple[str, ...],
@@ -200,6 +238,7 @@ def make_dggs_command(
         tempdir: str | Path,
         compact: bool,
         overwrite: bool,
+        grid: str | None = None,
     ) -> None:
         tempfile.tempdir = str(tempdir) if tempdir is not None else tempfile.tempdir
         common.raise_rlimit_nofile()
@@ -209,6 +248,17 @@ def make_dggs_command(
         geo = const.GeoOutputMode(geo).value
         cell_id = const.CellIdMode(cell_id).value
         mode = const.ContainmentMode(mode).value
+
+        # -r's range is the backend's widest grid; the chosen grid may stop
+        # sooner. Both are checked here, before any output is created.
+        try:
+            indexer = idxfactory.indexer_instance(dggs_key, mode, grid)
+        except ValueError as e:
+            raise click.BadParameter(str(e), param_hint="--grid") from e
+        try:
+            common.check_resolution_range(resolution, indexer)
+        except ValueError as e:
+            raise click.BadParameter(str(e), param_hint="-r/--resolution") from e
 
         con, vector_input = common.db_conn_and_input_path(vector_input)
         layer = common.resolve_layer(vector_input, layer, con)
@@ -220,7 +270,7 @@ def make_dggs_command(
             dggs_key,
             vector_input,
             output_directory,
-            int(resolution),
+            resolution,
             parent_res,
             keep_attributes,
             processes,
@@ -236,6 +286,7 @@ def make_dggs_command(
             cell_id=cell_id,
             mode=mode,
             drop_spikes=drop_spikes,
+            grid=grid,
         )
 
     command.help = (
