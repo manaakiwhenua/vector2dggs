@@ -73,7 +73,7 @@ class TestRhpGridOption(TestRunthrough):
         self.assertEqual(set(pd.read_parquet(self.output_path / "lib").index), {NZ_STD})
 
     def test_unregistered_uri_is_rejected_naming_the_registered_ones(self):
-        with self.assertRaisesRegex(ValueError, OGC_URI):
+        with self.assertRaisesRegex(click.BadParameter, OGC_URI):
             self._cells(self.output_path / "bad", ("--grid", "https://example.org/x"))
 
     def test_unrecognised_form_is_rejected_at_the_cli(self):
@@ -99,7 +99,7 @@ class TestRhpGridOption(TestRunthrough):
         )
 
     def test_spec_with_other_n_side_is_rejected(self):
-        with self.assertRaisesRegex(ValueError, "N_side 4"):
+        with self.assertRaisesRegex(click.BadParameter, "N_side 4"):
             self._cells(self.output_path / "bad", ("--grid", "004"))
 
     def test_n_side_two(self):
@@ -112,9 +112,14 @@ class TestRhpGridOption(TestRunthrough):
         )
         self.assertEqual(len(deep), 21)
 
-    def test_resolution_beyond_the_grid_is_rejected(self):
+    def test_resolution_beyond_the_grid_is_rejected_before_any_output(self):
+        out = self.output_path / "deep"
+        with self.assertRaisesRegex(click.BadParameter, "exceeds 15"):
+            self._cells(out, ("-r", "16"))
+        self.assertFalse(out.exists())
+        # the library path keeps its own check
         with self.assertRaisesRegex(ValueError, "exceeds 15"):
-            self._cells(self.output_path / "deep", ("-r", "16"))
+            common.index("rhp", self.src, out, 16, None, False, 1, layer="pt")
 
     def test_grid_option_absent_on_single_grid_backends(self):
         with self.assertRaises(click.NoSuchOption):

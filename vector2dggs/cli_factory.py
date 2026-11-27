@@ -7,6 +7,7 @@ import click_log
 
 import vector2dggs.common as common
 import vector2dggs.constants as const
+import vector2dggs.indexerfactory as idxfactory
 from vector2dggs import __version__
 
 
@@ -19,8 +20,9 @@ def make_dggs_command(
     int_cells: bool = False,
     modes: tuple[str, ...] = const.CONTAINMENT_MODES,
     grid_default: str | None = None,
+    res_note: str = "",
 ) -> click.Command:
-    res_choices = list(map(str, range(min_res, max_res + 1)))
+    res_range = click.IntRange(min_res, max_res)
 
     def _validate_grid(ctx: click.Context, param: click.Parameter, value: str) -> str:
         if value.startswith(("http://", "https://")) or re.match(
@@ -62,16 +64,16 @@ def make_dggs_command(
         "-r",
         "--resolution",
         required=True,
-        type=click.Choice(res_choices),
-        help=f"{display_name} resolution to index",
+        type=res_range,
+        help=f"{display_name} resolution to index{res_note}",
         nargs=1,
     )
     @click.option(
         "-pr",
         "--parent_res",
         required=False,
-        type=click.Choice(res_choices),
-        help=f"{display_name} parent resolution for the output partition. Defaults to resolution - 6",
+        type=res_range,
+        help=f"{display_name} parent resolution for the output partition. Defaults to resolution - 6{res_note}",
     )
     @click.option(
         "-id",
@@ -219,8 +221,8 @@ def make_dggs_command(
     def command(
         vector_input: str | Path,
         output_directory: str | Path,
-        resolution: str,
-        parent_res: str,
+        resolution: int,
+        parent_res: int | None,
         id_field: tuple[str, ...],
         keep_attributes: bool,
         keep_attribute: tuple[str, ...],
@@ -246,6 +248,17 @@ def make_dggs_command(
         cell_id = const.CellIdMode(cell_id).value
         mode = const.ContainmentMode(mode).value
 
+        # -r's range is the backend's widest grid; the chosen grid may stop
+        # sooner. Both are checked here, before any output is created.
+        try:
+            indexer = idxfactory.indexer_instance(dggs_key, mode, grid)
+        except ValueError as e:
+            raise click.BadParameter(str(e), param_hint="--grid") from e
+        try:
+            common.check_resolution_range(resolution, indexer)
+        except ValueError as e:
+            raise click.BadParameter(str(e), param_hint="-r/--resolution") from e
+
         con, vector_input = common.db_conn_and_input_path(vector_input)
         layer = common.resolve_layer(vector_input, layer, con)
         output_directory = common.resolve_output_path(output_directory, overwrite)
@@ -256,7 +269,7 @@ def make_dggs_command(
             dggs_key,
             vector_input,
             output_directory,
-            int(resolution),
+            resolution,
             parent_res,
             keep_attributes,
             processes,

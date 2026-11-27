@@ -78,11 +78,10 @@ Usage: vector2dggs h3 [OPTIONS] VECTOR_INPUT OUTPUT_DIRECTORY
 Options:
   -v, --verbosity LVL             Either CRITICAL, ERROR, WARNING, INFO or DEBUG
                                   [default: INFO]
-  -r, --resolution [0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15]
-                                  H3 resolution to index  [required]
-  -pr, --parent_res [0|1|2|3|4|5|6|7|8|9|10|11|12|13|14|15]
+  -r, --resolution INTEGER RANGE  H3 resolution to index  [0<=x<=15; required]
+  -pr, --parent_res INTEGER RANGE
                                   H3 parent resolution for the output partition.
-                                  Defaults to resolution - 6
+                                  Defaults to resolution - 6  [0<=x<=15]
   -id, --id_field TEXT            Field to use as an ID; repeat for a composite
                                   ID (one output column per field, in the order
                                   given). Defaults to the input's own internal
