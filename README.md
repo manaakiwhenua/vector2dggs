@@ -184,6 +184,16 @@ A DGGS cell has no canonical rendering as either a point or an area, so each mod
 
 So `intersects` and `within` are exact with respect to each backend's own model of a cell's extent, and near a feature's boundary different backends will not necessarily agree about the same cell — which is a property of the grids, not a defect in any one of them. The feature's own edges are read under the same model: as straight lines in longitude/latitude by H3, geohash and rHEALPix, and as great-circle arcs by S2 and A5. For short edges the two readings barely differ, but they are not interchangeable at length: a 40° edge at 60°N passes 170 km from where the great circle between its endpoints runs.
 
+## Output metadata
+
+Every output file carries a `dggrs` key in its Parquet schema metadata (JSON) saying what its cell IDs mean: the DGGS, the cell and parent columns and their resolutions, the containment mode, whether the output is compacted, the cell ID form, the grid (for rHEALPix its DGGRS codespace URI where one is registered, the `--grid` value as given, and the full DGGRS definition in OGC API - DGGS's schema, which spells out the central meridian and polar squares of a custom grid), and the versions of vector2dggs and the DGGS library that produced it. The cell ID columns carry the grid, DGGS and resolution as Arrow field metadata too, so a column selected into another tool keeps its grid with it. An rHEALPix identifier is only meaningful with its grid, and the `codespace` (or `grid`) value is a valid `--grid` for reproducing the same one.
+
+```python
+>>> import json, pyarrow.parquet as pq
+>>> json.loads(pq.read_schema("out/rhp_05=S33375/part.0-….parquet").metadata[b"dggrs"])["codespace"]
+'https://www.opengis.net/def/dggrs/OGC/1.0/rHEALPix'
+```
+
 ## Visualising output
 
 Output is in the Apache Parquet format, a directory with one file per partition. With `--geo point` or `--geo polygon` output will be written as GeoParquet (v1.1.0) with the respective geometry types. GeoParquet can be visualised using desktop GIS tools.

@@ -38,6 +38,7 @@ class A5VectorIndexer(VectorIndexer[str | int]):
     GEODESIC_POLYFILL = True
     CELL_ARROW_TYPE: pa.DataType = pa.uint64()
     SUPPORTED_MODES = frozenset(_CONTAIN)
+    LIBRARIES = ("pya5",)
 
     @staticmethod
     def cells_to_string(cells: Iterable[str | int]) -> list[str]:
