@@ -45,7 +45,7 @@ def make_dggs_command(
                 f"{display_name} grid to index to: a registered DGGRS URI (the "
                 "default is the OGC-registered grid), or <north square><south "
                 "square><N_side>[@<central meridian>], e.g. 003 for the "
-                "central meridian at 0, 113, or 123@50 (N_side 3 only). Grids "
+                "central meridian at 0, 113, or 123@50 (N_side 2 or 3). Grids "
                 "name different cells, so output is only meaningful with its "
                 "grid."
             ),

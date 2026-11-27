@@ -103,6 +103,19 @@ class VectorIndexer(ABC, Generic[CellId]):
         # set per call by polyfill(); read by _cells_or_skip
         self._id_cols: tuple[str, ...] = ()
 
+    def cell_area_m2(self, resolution: int) -> float:
+        """
+        Area of one cell at resolution, for the pipeline's sizing heuristics
+        (bisection threshold, line budget, staged-file size). From the
+        per-backend tables; a backend whose grids differ overrides this.
+        """
+        return float(const.DGGS_CELL_AREA_M2_BY_RES[self.dggs](resolution))
+
+    @property
+    def max_res(self) -> int:
+        """Finest resolution this indexer's grid supports."""
+        return const.DGGS_MAX_RES[self.dggs]
+
     @staticmethod
     def cells_to_string(cells: Iterable[CellId]) -> list[str]:
         """
@@ -214,13 +227,11 @@ class VectorIndexer(ABC, Generic[CellId]):
         """
         return [self.cell_to_polygon(c) for c in cells]
 
-    @staticmethod
     @abstractmethod
-    def get_resolution(cell: CellId) -> int: ...
+    def get_resolution(self, cell: CellId) -> int: ...
 
-    @staticmethod
     @abstractmethod
-    def children_at_res(cell: CellId, target_res: int) -> Iterable[CellId]: ...
+    def children_at_res(self, cell: CellId, target_res: int) -> Iterable[CellId]: ...
 
     def _cell_at(self, lon: float, lat: float, resolution: int) -> CellId:
         """

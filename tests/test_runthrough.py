@@ -233,6 +233,8 @@ with contextlib.suppress(ImportError):
 with contextlib.suppress(ImportError):
     from .classes.rhp_grid import TestRhpGridOption as TestRhpGridOption
 with contextlib.suppress(ImportError):
+    from .classes.rhp_grid import TestRhpNSideTwo as TestRhpNSideTwo
+with contextlib.suppress(ImportError):
     from .classes.rhp_fill import TestRHPFillEquivalence as TestRHPFillEquivalence
 with contextlib.suppress(ImportError):
     from .classes.rhp_fill import TestRHPFillMinRes as TestRHPFillMinRes

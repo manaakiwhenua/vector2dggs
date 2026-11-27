@@ -103,7 +103,9 @@ class TestBisectionPreparation(TestCase):
         df = gpd.GeoDataFrame({"geometry": [self.SQUARE_4167]}, crs=4167)
         if crs is not None:
             df = df.to_crs(crs)
-        return common._derive_cut_threshold(df, "h3", resolution)
+        return common._derive_cut_threshold(
+            df, const.DGGS_CELL_AREA_M2_BY_RES["h3"](resolution)
+        )
 
     def test_default_threshold_scales_with_target_resolution(self):
         # granularity follows the target resolution (K cells per piece),

@@ -1,3 +1,4 @@
+import math
 import warnings
 from unittest import TestCase
 
@@ -98,8 +99,22 @@ class TestRhpGridOption(TestRunthrough):
         )
 
     def test_spec_with_other_n_side_is_rejected(self):
-        with self.assertRaisesRegex(ValueError, "N_side 2"):
-            self._cells(self.output_path / "bad", ("--grid", "002"))
+        with self.assertRaisesRegex(ValueError, "N_side 4"):
+            self._cells(self.output_path / "bad", ("--grid", "004"))
+
+    def test_n_side_two(self):
+        (cell,) = self._cells(self.output_path / "n2", ("--grid", "002"))
+        self.assertEqual(len(cell), 4)
+        self.assertTrue(set(cell[1:]) <= set("0123"), cell)
+        # finer than N_side 3's maximum of 15, which 002 allows
+        (deep,) = self._cells(
+            self.output_path / "n2deep", ("--grid", "002", "-r", "20")
+        )
+        self.assertEqual(len(deep), 21)
+
+    def test_resolution_beyond_the_grid_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "exceeds 15"):
+            self._cells(self.output_path / "deep", ("-r", "16"))
 
     def test_grid_option_absent_on_single_grid_backends(self):
         with self.assertRaises(click.NoSuchOption):
@@ -152,3 +167,37 @@ class TestRhpGridGeometry(TestCase):
         self.assertFalse(
             self.ogc.cell_to_polygon(a).equals_exact(self.std.cell_to_polygon(b), 1e-6)
         )
+
+
+class TestRhpNSideTwo(TestCase):
+    def setUp(self):
+        skip_unless_backend("rhp")
+        self.two = indexer_instance("rhp", grid="002")
+        self.three = indexer_instance("rhp")
+
+    def test_children_follow_n_side(self):
+        self.assertEqual(len(self.two.children_at_res("N0", 2)), 4)
+        self.assertEqual(len(self.three.children_at_res("N0", 2)), 9)
+
+    def test_compaction_merges_a_full_sibling_set_per_grid(self):
+        for indexer, n in ((self.two, 4), (self.three, 9)):
+            with self.subTest(n_side_squared=n):
+                cells = indexer.children_at_res("N00", 3)
+                self.assertEqual(len(cells), n)
+                df = pd.DataFrame({"id": [1] * n, "rhp_03": cells}).set_index("rhp_03")
+                out = indexer.compaction(df, 3, ["id"], "rhp_03", "id", 1)
+                self.assertEqual(set(out.index), {"N00"})
+
+    def test_cell_area_and_max_res_follow_the_grid(self):
+        # ellipsoidal (authalic) area: 6 base cells, each split N_side^2 ways
+        surface = 4 * math.pi * self.three.grid.ellipsoid.R_A**2
+        for res in (0, 5, 15):
+            self.assertAlmostEqual(
+                self.three.cell_area_m2(res),
+                surface / (6 * 9**res),
+                delta=self.three.cell_area_m2(res) * 1e-9,
+            )
+        self.assertAlmostEqual(
+            self.two.cell_area_m2(5), self.two.cell_area_m2(0) / 4**5, delta=1e-3
+        )
+        self.assertEqual((self.three.max_res, self.two.max_res), (15, 24))
