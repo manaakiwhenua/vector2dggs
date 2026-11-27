@@ -7,6 +7,7 @@ rhp = make_dggs_command(
     "rHEALPix",
     const.MIN_RHP,
     const.MAX_RHP,
+    int_cells=True,
     grid_default=const.RHP_DEFAULT_GRID,
     res_note=" (up to 15 for an N_side 3 grid, the default; 24 for N_side 2: see --grid)",
 )

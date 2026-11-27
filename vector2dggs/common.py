@@ -94,10 +94,7 @@ def check_mode(mode: str, indexer: VectorIndexer[Any]) -> None:
 
 
 def check_cell_id(cell_id: str, indexer: VectorIndexer[Any]) -> None:
-    if (
-        cell_id == const.CellIdMode.UINT64.value
-        and pa.string() == indexer.CELL_ARROW_TYPE
-    ):
+    if cell_id == const.CellIdMode.UINT64.value and not indexer.has_uint64():
         raise CellIdError(
             f"--cell-id uint64 is not supported for '{indexer.dggs}': its cell IDs "
             "are strings with no integer form. Only 'string' is available."
@@ -480,11 +477,16 @@ def write_partition(
     # directory names - so it always follows the final requested cell_id
     # mode, regardless of compact.
     emit_string = cell_id == const.CellIdMode.STRING.value
-    if emit_string and pa.string() != indexer.CELL_ARROW_TYPE:
+    string_native = pa.string() == indexer.CELL_ARROW_TYPE
+    if emit_string and not string_native:
         partition_df[partition_col] = indexer.cells_to_string(
             partition_df[partition_col]
         )
-    partition_arrow_type = pa.string() if emit_string else indexer.CELL_ARROW_TYPE
+    elif not emit_string and string_native:
+        partition_df[partition_col] = indexer.cells_to_uint64(
+            partition_df[partition_col]
+        )
+    partition_arrow_type = pa.string() if emit_string else pa.uint64()
     partition_df[partition_col] = partition_df[partition_col].astype(
         "string" if emit_string else "uint64"
     )
@@ -493,13 +495,13 @@ def write_partition(
     # (mirroring geo_serialisation_method's own compact-gating in _polyfill):
     # compaction needs the native form to correctly group sibling cells, so
     # no conversion happens here when compacting.
-    if not compact and emit_string and pa.string() != indexer.CELL_ARROW_TYPE:
+    if not compact and emit_string != string_native:
+        render = indexer.cells_to_string if emit_string else indexer.cells_to_uint64
         if dggs_col in partition_df.columns:
-            partition_df[dggs_col] = indexer.cells_to_string(partition_df[dggs_col])
+            partition_df[dggs_col] = render(partition_df[dggs_col])
         else:
             partition_df.index = pd.Index(
-                indexer.cells_to_string(partition_df.index),
-                name=partition_df.index.name,
+                render(partition_df.index), name=partition_df.index.name
             )
 
     # sorted by partition value: one file per parent cell, no writer churn.
@@ -852,11 +854,10 @@ def _merge_partition_files(
         # Compaction and geometry reconstruction both need the working
         # (native, for capable backends) cell form; string output - the
         # final, one-time conversion - only happens here, after both.
-        if (
-            cell_id == const.CellIdMode.STRING.value
-            and pa.string() != indexer.CELL_ARROW_TYPE
-        ):
-            df.index = pd.Index(indexer.cells_to_string(df.index), name=df.index.name)
+        emit_string = cell_id == const.CellIdMode.STRING.value
+        if emit_string != (pa.string() == indexer.CELL_ARROW_TYPE):
+            render = indexer.cells_to_string if emit_string else indexer.cells_to_uint64
+            df.index = pd.Index(render(df.index), name=df.index.name)
 
         table = pa.Table.from_pandas(df, preserve_index=True)
         if geom_fn is not None:
@@ -903,10 +904,7 @@ def _write_empty_output(
     open. `template` is an empty slice of a cleaned input batch, so the id
     and attribute columns keep the types they would have carried.
     """
-    emit_string = (
-        cell_id == const.CellIdMode.STRING.value
-        or pa.string() == indexer.CELL_ARROW_TYPE
-    )
+    emit_string = cell_id == const.CellIdMode.STRING.value or not indexer.has_uint64()
     dggs_col = f"{indexer.dggs}_{resolution:02}"
     parent_col = f"{indexer.dggs}_{parent_res:02}"
     geo_output = geo != const.GeoOutputMode.NONE.value
@@ -937,7 +935,8 @@ def _write_empty_output(
             [
                 (
                     field.with_type(pa.dictionary(pa.int32(), pa.string()))
-                    if field.name == parent_col
+                    # at resolution 0 the parent is the cell column itself
+                    if field.name == parent_col and parent_col != dggs_col
                     else field
                 )
                 for field in table.schema

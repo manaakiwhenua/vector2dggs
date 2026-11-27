@@ -9,6 +9,7 @@ import pyarrow.parquet as pq
 from vector2dggs import common
 from vector2dggs.a5 import a5
 from vector2dggs.h3 import h3
+from vector2dggs.rHP import rhp
 from vector2dggs.s2 import s2
 
 from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME
@@ -271,3 +272,91 @@ class TestS2Face5CellIdSurvivesRoundTrip(TestCase):
         table = pq.read_table(files[0])
         self.assertEqual(table.schema.field("s2_12").type, pa.uint64())
         self.assertEqual(table.column("s2_12")[0].as_py(), face5.id())
+
+
+class TestRhpCellIdUint64(TestRunthrough):
+    """
+    rHEALPix works in index strings throughout; the integer form is a
+    rendering at the output boundary, the mirror of the other backends'
+    string rendering (#247).
+    """
+
+    DGGS_COL = "rhp_09"
+
+    @classmethod
+    def setUpClass(cls):
+        skip_unless_backend("rhp")
+        super().setUpClass()
+
+    def _run(self, out, extra=()):
+        rhp(
+            [
+                TEST_FILE_PATH,
+                str(out),
+                "--layer",
+                TEST_LAYER_NAME,
+                "-r",
+                "9",
+                "-id",
+                "LCDB_UID",
+                "-t",
+                "1",
+                *extra,
+            ],
+            standalone_mode=False,
+        )
+        files = sorted(Path(out).rglob("*.parquet"))
+        self.assertTrue(files, "no parquet output written")
+        return pq.read_table(files[0]), files
+
+    def _cells(self, table):
+        df = table.to_pandas()
+        return df[self.DGGS_COL] if self.DGGS_COL in df.columns else df.index
+
+    def test_uint64_output_no_compaction(self):
+        table, files = self._run(self.output_path / "u", ("--cell-id", "uint64"))
+        self.assertEqual(table.schema.field(self.DGGS_COL).type, pa.uint64())
+        # the hive key is the parent cell's integer too
+        self.assertTrue(all(f.parent.name.split("=")[1].isdigit() for f in files))
+
+    def test_uint64_output_with_compaction(self):
+        table, _ = self._run(self.output_path / "co", ("--cell-id", "uint64", "-co"))
+        self.assertEqual(table.schema.field(self.DGGS_COL).type, pa.uint64())
+
+    def test_uint64_values_are_the_grids_identifiers(self):
+        from rhealpixdggs.rhp_wrappers import rhp_from_uint64, rhp_to_uint64
+
+        from vector2dggs.indexerfactory import indexer_instance
+
+        grid = indexer_instance("rhp").grid
+        strings, _ = self._run(self.output_path / "s")
+        ints, _ = self._run(self.output_path / "i", ("--cell-id", "uint64"))
+        expected = {rhp_to_uint64(c, dggs=grid) for c in self._cells(strings)}
+        got = {int(c) for c in self._cells(ints)}
+        self.assertEqual(got, expected)
+        self.assertEqual(
+            {rhp_from_uint64(v, dggs=grid) for v in got}, set(self._cells(strings))
+        )
+
+    def test_uint64_values_follow_the_grid(self):
+        ogc, _ = self._run(self.output_path / "ogc", ("--cell-id", "uint64"))
+        std, _ = self._run(
+            self.output_path / "std", ("--cell-id", "uint64", "--grid", "003")
+        )
+        self.assertNotEqual(set(self._cells(ogc)), set(self._cells(std)))
+
+    def test_empty_output_is_typed_uint64(self):
+        table, _ = self._run(self.output_path / "e", ("--cell-id", "uint64", "-r", "0"))
+        self.assertEqual(table.num_rows, 0)
+        self.assertEqual(
+            table.schema.field(self.DGGS_COL.replace("09", "00")).type, pa.uint64()
+        )
+
+    def test_string_output_unaffected(self):
+        from rhealpixdggs.rhp_wrappers import rhp_is_valid
+
+        table, _ = self._run(self.output_path / "str")
+        self.assertIn(
+            table.schema.field(self.DGGS_COL).type, (pa.string(), pa.large_utf8())
+        )
+        self.assertTrue(all(rhp_is_valid(c) for c in list(self._cells(table))[:20]))

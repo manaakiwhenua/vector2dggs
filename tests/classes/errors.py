@@ -10,9 +10,9 @@ from pyogrio.errors import DataLayerError
 from shapely.geometry import Polygon
 
 from vector2dggs import common
+from vector2dggs.geohash import geohash
 from vector2dggs.h3 import h3
 from vector2dggs.indexerfactory import indexer_instance
-from vector2dggs.rHP import rhp
 
 from ..data.datapaths import TEST_FILE_PATH, TEST_LAYER_NAME
 from .base import TestRunthrough, skip_unless_backend
@@ -173,12 +173,12 @@ class TestErrors(TestRunthrough):
             )
 
     def test_cell_id_uint64_rejected_for_string_only_backend(self):
-        """rHEALPix has no integer cell form (unlike H3/S2/A5): rejected by
-        the CLI's own dynamically-restricted --cell-id choices, before any
-        of our own validation runs."""
-        skip_unless_backend("rhp")
+        """Geohash has no integer cell form (unlike H3/S2/A5/rHEALPix):
+        rejected by the CLI's own dynamically-restricted --cell-id choices,
+        before any of our own validation runs."""
+        skip_unless_backend("geohash")
         with self.assertRaises(click.BadParameter):
-            rhp(
+            geohash(
                 [
                     TEST_FILE_PATH,
                     str(self.output_path),
@@ -195,8 +195,8 @@ class TestErrors(TestRunthrough):
     def test_check_cell_id_rejects_string_only_backend(self):
         """The library-API guard (common.check_cell_id), independent of the
         CLI's own Click-level restriction."""
-        skip_unless_backend("rhp")
-        indexer = indexer_instance("rhp")
+        skip_unless_backend("geohash")
+        indexer = indexer_instance("geohash")
         with self.assertRaises(common.CellIdError):
             common.check_cell_id("uint64", indexer)
 
