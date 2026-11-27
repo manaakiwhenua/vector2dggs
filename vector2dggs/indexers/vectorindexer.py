@@ -139,6 +139,23 @@ class VectorIndexer(ABC, Generic[CellId]):
         """Finest resolution this indexer's grid supports."""
         return const.DGGS_MAX_RES[self.dggs]
 
+    def has_uint64(self) -> bool:
+        """
+        Whether --cell-id uint64 is available: the backend works natively in
+        uint64 (CELL_ARROW_TYPE), or can render its string cells as one.
+        """
+        return bool(pa.uint64() == self.CELL_ARROW_TYPE)
+
+    def cells_to_uint64(self, cells: Iterable[CellId]) -> np.ndarray:
+        """
+        Renders cells as uint64 at the output boundary: the mirror of
+        cells_to_string for a backend that works in strings but has an
+        integer identifier. A uint64-native backend's cells pass through.
+        """
+        if not self.has_uint64():
+            raise NotImplementedError(f"'{self.dggs}' has no integer cell form")
+        return np.asarray(list(cells), dtype=np.uint64)
+
     @staticmethod
     def cells_to_string(cells: Iterable[CellId]) -> list[str]:
         """

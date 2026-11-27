@@ -36,6 +36,8 @@ with contextlib.suppress(ImportError):
 with contextlib.suppress(ImportError):
     from .classes.cell_id_mode import TestH3CellIdUint64 as TestH3CellIdUint64
 with contextlib.suppress(ImportError):
+    from .classes.cell_id_mode import TestRhpCellIdUint64 as TestRhpCellIdUint64
+with contextlib.suppress(ImportError):
     from .classes.cell_id_mode import TestS2CellIdUint64 as TestS2CellIdUint64
 with contextlib.suppress(ImportError):
     from .classes.cell_id_mode import (

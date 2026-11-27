@@ -5,6 +5,7 @@ from itertools import product
 from typing import Any, cast
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import shapely
 from rhealpixdggs.conversion import compact_cells as rhp_compact_cells
@@ -117,6 +118,14 @@ class RHPVectorIndexer(VectorIndexer[str]):
         # Resolved per process: a grid instance holds projection closures
         # that do not pickle, and the indexer is sent to pool workers.
         return _resolve_grid(self.grid_name)
+
+    def has_uint64(self) -> bool:
+        return True
+
+    def cells_to_uint64(self, cells: Iterable[str]) -> np.ndarray:
+        # level << 59 | row << 30 | column: the OGC integer identifier on the
+        # OGC grid, rhealpixdggs' packing for that grid on any other
+        return np.asarray(self.grid.uint64_from_indices(list(cells)), dtype=np.uint64)
 
     def grid_metadata(self) -> dict[str, Any]:
         # the DGGRS definition in OGC API - DGGS's schema: what the codespace
