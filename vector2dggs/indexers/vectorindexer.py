@@ -1,6 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Sequence
+from importlib.metadata import PackageNotFoundError, version
 from typing import Any, Generic, TypeVar
 
 import geopandas as gpd
@@ -23,6 +24,13 @@ LOGGER = logging.getLogger("vector2dggs.common")
 # string output as a convenience) can bind VectorIndexer[str | int] - a
 # union - which a constrained TypeVar disallows as a binding.
 CellId = TypeVar("CellId")
+
+
+def _installed_version(distribution: str) -> str | None:
+    try:
+        return version(distribution)
+    except PackageNotFoundError:
+        return None
 
 
 def index_keys(index: pd.Index) -> Iterator[tuple[Any, ...]]:
@@ -87,6 +95,10 @@ class VectorIndexer(ABC, Generic[CellId]):
     # when the backend has exactly one grid.
     GRID_DEFAULT: str | None = None
 
+    # Distribution names of the libraries this backend indexes with, for the
+    # output's dataset metadata.
+    LIBRARIES: tuple[str, ...] = ()
+
     def __init__(
         self,
         dggs: str,
@@ -102,6 +114,17 @@ class VectorIndexer(ABC, Generic[CellId]):
         self.mode = const.ContainmentMode(mode)
         # set per call by polyfill(); read by _cells_or_skip
         self._id_cols: tuple[str, ...] = ()
+
+    def grid_metadata(self) -> dict[str, Any]:
+        """
+        Identity of the grid being indexed to, for the output's dataset
+        metadata: its DGGRS codespace URI where one is registered, and the
+        grid as asked for. A backend with several grids overrides this.
+        """
+        return {"codespace": None, "grid": self.grid_name}
+
+    def library_versions(self) -> dict[str, str | None]:
+        return {name: _installed_version(name) for name in self.LIBRARIES}
 
     def cell_area_m2(self, resolution: int) -> float:
         """

@@ -169,6 +169,8 @@ with contextlib.suppress(ImportError):
         TestSubToleranceGeometry as TestSubToleranceGeometry,
     )
 with contextlib.suppress(ImportError):
+    from .classes.dataset_metadata import TestDatasetMetadata as TestDatasetMetadata
+with contextlib.suppress(ImportError):
     from .classes.empty_output import TestEmptyOutput as TestEmptyOutput
 with contextlib.suppress(ImportError):
     from .classes.empty_output import (

@@ -2,7 +2,7 @@ import re
 from collections.abc import Iterable, Sequence
 from functools import cache
 from itertools import product
-from typing import cast
+from typing import Any, cast
 
 import geopandas as gpd
 import pandas as pd
@@ -101,6 +101,7 @@ class RHPVectorIndexer(VectorIndexer[str]):
 
     GEODESIC_POLYFILL = False
     GRID_DEFAULT = const.RHP_DEFAULT_GRID
+    LIBRARIES = ("rhealpixdggs",)
 
     def __init__(
         self,
@@ -116,6 +117,15 @@ class RHPVectorIndexer(VectorIndexer[str]):
         # Resolved per process: a grid instance holds projection closures
         # that do not pickle, and the indexer is sent to pool workers.
         return _resolve_grid(self.grid_name)
+
+    def grid_metadata(self) -> dict[str, Any]:
+        # the DGGRS definition in OGC API - DGGS's schema: what the codespace
+        # URI resolves to, or a custom grid's full description
+        return {
+            "codespace": self.grid.codespace,
+            "grid": self.grid_name or const.RHP_DEFAULT_GRID,
+            "definition": self.grid.to_dggrs_definition(),
+        }
 
     def cell_area_m2(self, resolution: int) -> float:
         return float(self.grid.cell_area(resolution, plane=False))

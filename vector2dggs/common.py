@@ -36,6 +36,7 @@ from tqdm import tqdm
 
 import vector2dggs.constants as const
 import vector2dggs.indexerfactory as idxfactory
+from vector2dggs import __version__
 from vector2dggs.indexers.vectorindexer import (
     ContainmentModeError as ContainmentModeError,
 )
@@ -428,6 +429,7 @@ def write_partition(
     indexer: VectorIndexer[Any],
     cell_id: str,
     compact: bool,
+    metadata: dict[str, Any] | None = None,
 ) -> int:
     """
     Hive-partitioned parquet write of one dataframe; GeoParquet when
@@ -510,6 +512,8 @@ def write_partition(
     table = pa.Table.from_pandas(partition_df, preserve_index=True)
     if geo_serialisation_method is not None:
         table = _with_geoparquet_metadata(table)
+    if metadata is not None:
+        table = _with_dataset_metadata(table, metadata)
 
     # Explicitly type the partition column - never let PyArrow infer it from
     # the directory name text, which would misread e.g. a numeric-looking
@@ -531,6 +535,64 @@ def write_partition(
     )
 
     return int(len(partition_df.index) > 0)
+
+
+def _dataset_metadata(
+    indexer: VectorIndexer[Any],
+    resolution: int,
+    parent_res: int,
+    mode: str,
+    compact: bool,
+    cell_id: str,
+) -> dict[str, Any]:
+    """
+    What the output's cell IDs mean, written as the Parquet schema metadata
+    key "dggrs" in every file: the grid (its DGGRS codespace URI where one
+    is registered), the resolutions, how cells were chosen, and the
+    versions that produced them. An identifier is only meaningful with its
+    grid, and nothing else in the dataset says which grid that is.
+    """
+    return {
+        "dggs": indexer.dggs,
+        "cell_column": f"{indexer.dggs}_{resolution:02}",
+        "parent_column": f"{indexer.dggs}_{parent_res:02}",
+        "resolution": resolution,
+        "parent_resolution": parent_res,
+        "mode": mode,
+        "compact": compact,
+        "cell_id": cell_id,
+        **indexer.grid_metadata(),
+        "libraries": indexer.library_versions(),
+        "vector2dggs": __version__,
+    }
+
+
+def _with_dataset_metadata(table: pa.Table, metadata: dict[str, Any]) -> pa.Table:
+    """The "dggrs" schema key, and the grid on each cell column's field."""
+    field_meta = {
+        "dggrs": metadata["codespace"] or metadata["grid"] or metadata["dggs"],
+        "dggs": metadata["dggs"],
+    }
+    fields = []
+    for field in table.schema:
+        if field.name in (metadata["cell_column"], metadata["parent_column"]):
+            res = metadata[
+                (
+                    "resolution"
+                    if field.name == metadata["cell_column"]
+                    else "parent_resolution"
+                )
+            ]
+            field = field.with_metadata({**field_meta, "resolution": str(res)})
+        fields.append(field)
+    schema = pa.schema(
+        fields,
+        metadata={
+            **(table.schema.metadata or {}),
+            b"dggrs": json.dumps(metadata).encode("utf-8"),
+        },
+    )
+    return table.cast(schema)
 
 
 def _with_geoparquet_metadata(table: pa.Table) -> pa.Table:
@@ -677,6 +739,7 @@ def _merge_partition_files(
     parent_res: int | None = None,
     geo: str | None = None,
     cell_id: str = const.CellIdMode.STRING.value,
+    metadata: dict[str, Any] | None = None,
 ) -> tuple[int, set[tuple[Any, ...]]]:
     """
     Merges all Parquet files within a single hive partition directory into one
@@ -798,6 +861,10 @@ def _merge_partition_files(
         table = pa.Table.from_pandas(df, preserve_index=True)
         if geom_fn is not None:
             table = _with_geoparquet_metadata(table)
+        # the pandas round trip drops the schema and field metadata the
+        # staged files carried; concat and cast above keep it
+        if metadata is not None:
+            table = _with_dataset_metadata(table, metadata)
 
     # Cell ID order: the delta-encoded ID column and the compression of every
     # other column both depend on neighbours being adjacent, and neither the
@@ -824,6 +891,7 @@ def _write_empty_output(
     geo: str,
     compression: str,
     cell_id: str,
+    metadata: dict[str, Any],
 ) -> None:
     """
     Write a valid but empty dataset: one zero-row file carrying the schema
@@ -879,6 +947,7 @@ def _write_empty_output(
     )
     if geo_output:
         table = _with_geoparquet_metadata(table)
+    table = _with_dataset_metadata(table, metadata)
     pq.write_table(
         table,
         output_directory / f"part.0-{uuid4().hex}.parquet",
@@ -897,6 +966,7 @@ def _merge_output(
     compression: str,
     processes: int,
     cell_id: str,
+    metadata: dict[str, Any],
 ) -> set[tuple[Any, ...]]:
     """
     Consolidate each hive partition directory to a single file, returning the
@@ -930,6 +1000,7 @@ def _merge_output(
                 parent_res=parent_res if compact else None,
                 geo=geo if compact else None,
                 cell_id=cell_id,
+                metadata=metadata,
             )
             for d in dirs
         ]
@@ -959,6 +1030,7 @@ def _polyfill(
     geo: str,
     compact: bool,
     cell_id: str,
+    metadata: dict[str, Any],
 ) -> None:
     """
     Reads a geoparquet piece file, performs polyfilling (for Polygon),
@@ -998,6 +1070,7 @@ def _polyfill(
         indexer,
         cell_id,
         compact,
+        metadata,
     )
 
 
@@ -1642,6 +1715,7 @@ def _run_dggs_indexing(
     geo: str,
     compact: bool,
     cell_id: str,
+    metadata: dict[str, Any],
 ) -> None:
     LOGGER.debug("DGGS indexing by spatial partitions with resolution: %d", resolution)
     args = [
@@ -1656,6 +1730,7 @@ def _run_dggs_indexing(
             geo,
             compact,
             cell_id,
+            metadata,
         )
         for filepath in filepaths
     ]
@@ -1781,6 +1856,9 @@ def _index(
         else indexer
     )
     parent_res = get_parent_res(dggs, parent_res, resolution)
+    metadata = _dataset_metadata(
+        indexer, resolution, parent_res, mode, compact, cell_id
+    )
 
     total = _feature_count(input_file, layer, con)
     if total == 0:
@@ -1888,6 +1966,7 @@ def _index(
             geo,
             compact,
             cell_id,
+            metadata,
         )
         if not any(d.is_dir() for d in Path(output_directory).iterdir()):
             LOGGER.warning(
@@ -1906,6 +1985,7 @@ def _index(
                     geo,
                     compression,
                     cell_id,
+                    metadata,
                 )
             return
 
@@ -1925,6 +2005,7 @@ def _index(
             compression,
             processes,
             cell_id,
+            metadata,
         )
         dropped = features_in - indexed_ids
         if dropped:

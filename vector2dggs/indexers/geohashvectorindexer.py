@@ -19,6 +19,7 @@ class GeohashVectorIndexer(VectorIndexer[str]):
     """
 
     GEODESIC_POLYFILL = False
+    LIBRARIES = ("python-geohash", "rusty-polygon-geohasher")
 
     GEOHASH_BASE32_SET = set("0123456789bcdefghjkmnpqrstuvwxyz")
 
