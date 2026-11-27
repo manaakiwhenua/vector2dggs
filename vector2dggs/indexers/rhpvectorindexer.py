@@ -71,12 +71,11 @@ def _resolve_grid(value: str | None) -> RHEALPixDGGS:
     if spec is None:
         raise ValueError(
             f"Unknown rHEALPix grid '{value}': neither a registered DGGRS URI "
-            "nor <north><south><N_side>[@<lon_0>] such as 003 or 123@50"
+            "nor <north><south><N_side>[@<lon_0>] (N_side 2 or 3) such as 003 "
+            "or 123@50"
         )
     north, south, n_side = (int(spec[k]) for k in ("north", "south", "n_side"))
     lon_0 = float(spec["lon_0"] or 0)
-    if n_side not in (2, 3):
-        raise ValueError(f"rHEALPix N_side {n_side} is not supported; 2 or 3 are")
     return _canonical(
         RHEALPixDGGS(
             ellipsoid=Ellipsoid(a=WGS84_ELLIPSOID.a, f=WGS84_ELLIPSOID.f, lon_0=lon_0),

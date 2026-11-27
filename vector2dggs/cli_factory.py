@@ -31,7 +31,8 @@ def make_dggs_command(
             return value
         raise click.BadParameter(
             f"'{value}' is neither a DGGRS URI nor a "
-            "<north><south><N_side>[@<lon_0>] spec such as 113 or 123@50"
+            "<north><south><N_side>[@<lon_0>] spec (N_side 2 or 3) such as 113 "
+            "or 123@50"
         )
 
     # Only backends with several grids get the option

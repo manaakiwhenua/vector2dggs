@@ -99,8 +99,10 @@ class TestRhpGridOption(TestRunthrough):
         )
 
     def test_spec_with_other_n_side_is_rejected(self):
-        with self.assertRaisesRegex(click.BadParameter, "N_side 4"):
+        with self.assertRaisesRegex(click.BadParameter, "N_side 2 or 3"):
             self._cells(self.output_path / "bad", ("--grid", "004"))
+        with self.assertRaisesRegex(ValueError, "N_side 2 or 3"):
+            indexer_instance("rhp", grid="004")
 
     def test_n_side_two(self):
         (cell,) = self._cells(self.output_path / "n2", ("--grid", "002"))
