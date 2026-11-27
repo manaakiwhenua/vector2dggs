@@ -1,3 +1,4 @@
+import re
 import tempfile
 from pathlib import Path
 
@@ -17,8 +18,42 @@ def make_dggs_command(
     max_res: int,
     int_cells: bool = False,
     modes: tuple[str, ...] = const.CONTAINMENT_MODES,
+    grids: tuple[str, ...] = (),
 ) -> click.Command:
     res_choices = list(map(str, range(min_res, max_res + 1)))
+
+    def _validate_grid(ctx: click.Context, param: click.Parameter, value: str) -> str:
+        if (
+            value in grids
+            or value.startswith(("http://", "https://"))
+            or re.match(const.RHP_GRID_SPEC, value)
+        ):
+            return value
+        raise click.BadParameter(
+            f"'{value}' is not one of {', '.join(grids)}, a DGGRS URI, or a "
+            "<north><south><N_side>[@<lon_0>] spec such as 113 or 123@50"
+        )
+
+    # Only backends with several grids get the option
+    grid_option = (
+        click.option(
+            "--grid",
+            required=False,
+            default=grids[0],
+            type=str,
+            callback=_validate_grid,
+            metavar="NAME|URI|SPEC",
+            help=(
+                f"{display_name} grid to index to: one of {', '.join(grids)} "
+                "(the first is the OGC-registered grid), a registered DGGRS "
+                "URI, or <north square><south square><N_side>[@<central "
+                "meridian>], e.g. 113 or 123@50 (N_side 3 only). Grids name "
+                "different cells, so output is only meaningful with its grid."
+            ),
+        )
+        if grids
+        else (lambda command: command)
+    )
 
     @click.command(name=command_name, context_settings={"show_default": True})
     @click_log.simple_verbosity_option(common.LOGGER)
@@ -150,6 +185,7 @@ def make_dggs_command(
         ),
         nargs=1,
     )
+    @grid_option
     @click.option(
         "--drop-spikes",
         "drop_spikes",
@@ -200,6 +236,7 @@ def make_dggs_command(
         tempdir: str | Path,
         compact: bool,
         overwrite: bool,
+        grid: str | None = None,
     ) -> None:
         tempfile.tempdir = str(tempdir) if tempdir is not None else tempfile.tempdir
         common.raise_rlimit_nofile()
@@ -236,6 +273,7 @@ def make_dggs_command(
             cell_id=cell_id,
             mode=mode,
             drop_spikes=drop_spikes,
+            grid=grid,
         )
 
     command.help = (

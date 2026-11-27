@@ -4,6 +4,12 @@ from math import radians
 
 MIN_H3, MAX_H3 = 0, 15
 MIN_RHP, MAX_RHP = 0, 15
+# rhealpixdggs presets rhp can index to; the first is the default. --grid
+# also takes a registered DGGRS URI, or a parameter spec matching
+# RHP_GRID_SPEC: north square, south square, N_side, optional central
+# meridian, e.g. 003, 113, 123@50 (WGS84_003_OGC is 003@50).
+RHP_GRIDS = ("WGS84_003_OGC", "WGS84_003")
+RHP_GRID_SPEC = r"^(?P<north>[0-3])(?P<south>[0-3])(?P<n_side>[0-9])(?:@(?P<lon_0>-?[0-9]+(?:\.[0-9]+)?))?$"
 MIN_S2, MAX_S2 = 0, 30
 MIN_GEOHASH, MAX_GEOHASH = 1, 12
 MIN_A5, MAX_A5 = 0, 30
@@ -328,4 +334,5 @@ DEFAULTS = {
     "cell_id": CellIdMode.STRING.value,
     "mode": ContainmentMode.CENTRE.value,
     "drop_spikes": None,
+    "grid": None,
 }

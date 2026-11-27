@@ -83,12 +83,20 @@ class VectorIndexer(ABC, Generic[CellId]):
     # linestring and point indexing are identical in every mode.
     SUPPORTED_MODES: frozenset[const.ContainmentMode] = frozenset(const.ContainmentMode)
 
+    # Named grid variants this backend can index to (--grid); empty when the
+    # backend has exactly one grid.
+    GRIDS: tuple[str, ...] = ()
+
     def __init__(
         self,
         dggs: str,
         mode: str = const.ContainmentMode.CENTRE.value,
+        grid: str | None = None,
     ):
         self.dggs = dggs
+        if grid is not None and not self.GRIDS:
+            raise ValueError(f"'{dggs}' has one grid; --grid does not apply")
+        self.grid_name = grid
         # Not validated here: an indexer is also constructed just to read
         # SUPPORTED_MODES off it. common.check_mode does the rejecting.
         self.mode = const.ContainmentMode(mode)
@@ -184,13 +192,13 @@ class VectorIndexer(ABC, Generic[CellId]):
         parent_res: int,
     ) -> pd.DataFrame: ...
 
-    @staticmethod
+    # Instance methods, as a backend with several grids needs the instance;
+    # a single-grid backend may implement them as staticmethods.
     @abstractmethod
-    def cell_to_point(cell: CellId) -> Point: ...
+    def cell_to_point(self, cell: CellId) -> Point: ...
 
-    @staticmethod
     @abstractmethod
-    def cell_to_polygon(cell: CellId) -> Polygon: ...
+    def cell_to_polygon(self, cell: CellId) -> Polygon: ...
 
     def cells_to_points(self, cells: Iterable[CellId]) -> Iterable[Point]:
         """

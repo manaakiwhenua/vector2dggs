@@ -1688,6 +1688,7 @@ def index(
     cell_id: str = const.CellIdMode.STRING.value,
     mode: str = const.ContainmentMode.CENTRE.value,
     drop_spikes: float | None = None,
+    grid: str | None = None,
 ) -> Path | str:
     """
     Performs multi-threaded DGGS indexing on geometries (including multipart and collections).
@@ -1723,6 +1724,7 @@ def index(
             cell_id,
             mode,
             drop_spikes,
+            grid,
         )
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
@@ -1750,10 +1752,11 @@ def _index(
     cell_id: str = const.CellIdMode.STRING.value,
     mode: str = const.ContainmentMode.CENTRE.value,
     drop_spikes: float | None = None,
+    grid: str | None = None,
 ) -> None:
     id_fields = id_fields or resolve_default_id_field(input_file, layer, con)
     output_ids = id_fields or ("fid",)  # the synthetic index's column name
-    indexer = idxfactory.indexer_instance(dggs, mode)
+    indexer = idxfactory.indexer_instance(dggs, mode, grid)
     check_cell_id(cell_id, indexer)
     check_mode(mode, indexer)
     # WITHIN is never asked of a backend, whose answer would be per-piece:
@@ -1764,7 +1767,7 @@ def _index(
     # survives cutting because neither term is taken from a piece.
     subtracting = indexer.mode == const.ContainmentMode.WITHIN
     fill_indexer = (
-        idxfactory.indexer_instance(dggs, const.ContainmentMode.INTERSECTS.value)
+        idxfactory.indexer_instance(dggs, const.ContainmentMode.INTERSECTS.value, grid)
         if subtracting
         else indexer
     )

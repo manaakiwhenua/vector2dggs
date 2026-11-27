@@ -81,14 +81,14 @@ class TestEmptyTraces(TestCase):
         df = gpd.GeoDataFrame(
             {"fid": [0, 1], "geometry": [self.LINE, self.LINE]}, crs=4326
         )
-        real = type(indexer)._linetrace
+        real = indexer._linetrace
         calls = iter([True, False])
 
-        def fake(geom, resolution):
+        def fake(self, geom, resolution):
             # the upstream wrapper returns None for untraceable lines
             return None if next(calls) else real(geom, resolution)
 
-        with mock.patch.object(type(indexer), "_linetrace", staticmethod(fake)):
+        with mock.patch.object(type(indexer), "_linetrace", fake):
             result = indexer._polyfill_linestrings(df, 6)
         self._assert_no_nan_rows(indexer, result, 1)
 

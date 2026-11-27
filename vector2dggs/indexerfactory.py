@@ -14,7 +14,9 @@ INDEXER_LOOKUP: dict[str, tuple[str, str]] = {
 
 
 def indexer_instance(
-    dggs: str, mode: str = const.ContainmentMode.CENTRE.value
+    dggs: str,
+    mode: str = const.ContainmentMode.CENTRE.value,
+    grid: str | None = None,
 ) -> vectorindexer.VectorIndexer[Any]:
     try:
         module_name, class_name = INDEXER_LOOKUP[dggs]
@@ -32,4 +34,4 @@ def indexer_instance(
             f"(or 'vector2dggs[all]')."
         ) from e
     indexer: type[vectorindexer.VectorIndexer[Any]] = getattr(module, class_name)
-    return indexer(dggs, mode)
+    return indexer(dggs, mode, grid)

@@ -11,7 +11,6 @@ from ..data.datapaths import TEST_DISPERSED_FILE_PATH, TEST_DISPERSED_LAYER_NAME
 from .base import skip_unless_backend
 
 try:
-    from rhealpixdggs.dggs import WGS84_003
     from rhealpixdggs.rhp_wrappers import polyfill_array
 
     from vector2dggs.indexers import rhpvectorindexer
@@ -124,7 +123,7 @@ class TestRHPFillEquivalence(TestCase):
                         geom,
                         resolution,
                         plane=False,
-                        dggs=WGS84_003,
+                        dggs=indexer.grid,
                         containment=containment,
                         min_res=min_res,
                     )

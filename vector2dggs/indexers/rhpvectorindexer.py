@@ -1,4 +1,6 @@
+import re
 from collections.abc import Iterable, Sequence
+from functools import cache
 from itertools import product
 from typing import cast
 
@@ -6,7 +8,8 @@ import geopandas as gpd
 import pandas as pd
 import shapely
 from rhealpixdggs.conversion import compact_cells as rhp_compact_cells
-from rhealpixdggs.dggs import WGS84_003
+from rhealpixdggs.dggs import WGS84_003, WGS84_003_OGC, RHEALPixDGGS
+from rhealpixdggs.ellipsoids import WGS84_ELLIPSOID, Ellipsoid
 from rhealpixdggs.rhp_wrappers import (
     linetrace,
     polyfill_array,
@@ -39,6 +42,53 @@ _CELL_WIDTH_M = tuple(
 # rhealpixdggs calls here run under ProcessPoolExecutor workers or the main
 # process only, never multiple threads in one process, so no lock is needed.
 
+_GRIDS: dict[str, RHEALPixDGGS] = {
+    "WGS84_003_OGC": WGS84_003_OGC,
+    "WGS84_003": WGS84_003,
+}
+
+
+def _params(grid: RHEALPixDGGS) -> tuple[int, int, int, float]:
+    return (
+        grid.north_square,
+        grid.south_square,
+        grid.N_side,
+        float(grid.ellipsoid.lon_0),
+    )
+
+
+@cache
+def _resolve_grid(value: str | None) -> RHEALPixDGGS:
+    """
+    A preset by name, a registered DGGRS by URI, or a parameter spec
+    (const.RHP_GRID_SPEC). A spec with a preset's parameters is that preset,
+    so its codespace is kept. ValueError otherwise.
+    """
+    value = value or const.RHP_GRIDS[0]
+    if value.startswith(("http://", "https://")):
+        return RHEALPixDGGS.from_uri(value)
+    if value in _GRIDS:
+        return _GRIDS[value]
+    spec = re.match(const.RHP_GRID_SPEC, value)
+    if spec is None:
+        raise ValueError(
+            f"Unknown rHEALPix grid '{value}'. Options: {', '.join(const.RHP_GRIDS)}, "
+            "a registered DGGRS URI, or <north><south><N_side>[@<lon_0>] such as 113"
+        )
+    north, south, n_side = (int(spec[k]) for k in ("north", "south", "n_side"))
+    lon_0 = float(spec["lon_0"] or 0)
+    if n_side != 3:
+        raise ValueError(f"rHEALPix N_side {n_side} is not supported; only 3 is")
+    for preset in _GRIDS.values():
+        if _params(preset) == (north, south, n_side, lon_0):
+            return preset
+    return RHEALPixDGGS(
+        ellipsoid=Ellipsoid(a=WGS84_ELLIPSOID.a, f=WGS84_ELLIPSOID.f, lon_0=lon_0),
+        N_side=n_side,
+        north_square=north,
+        south_square=south,
+    )
+
 
 class RHPVectorIndexer(VectorIndexer[str]):
     """
@@ -46,6 +96,22 @@ class RHPVectorIndexer(VectorIndexer[str]):
     """
 
     GEODESIC_POLYFILL = False
+    GRIDS = const.RHP_GRIDS
+
+    def __init__(
+        self,
+        dggs: str,
+        mode: str = const.ContainmentMode.CENTRE.value,
+        grid: str | None = None,
+    ):
+        super().__init__(dggs, mode, grid)
+        _resolve_grid(grid)  # reject an unknown grid now, not in a worker
+
+    @property
+    def grid(self) -> RHEALPixDGGS:
+        # Resolved per process: a grid instance holds projection closures
+        # that do not pickle, and the indexer is sent to pool workers.
+        return _resolve_grid(self.grid_name)
 
     @staticmethod
     def _fill_min_res(geom: BaseGeometry, resolution: int) -> int:
@@ -71,7 +137,7 @@ class RHPVectorIndexer(VectorIndexer[str]):
             geom,
             resolution,
             plane=False,
-            dggs=WGS84_003,
+            dggs=self.grid,
             containment=_CONTAIN[self.mode],
             min_res=RHPVectorIndexer._fill_min_res(geom, resolution),
         )
@@ -87,9 +153,8 @@ class RHPVectorIndexer(VectorIndexer[str]):
             )
         return list(cells.tolist())
 
-    @staticmethod
-    def _linetrace(geom: LineString, resolution: int) -> list[str]:
-        cells = linetrace(geom, resolution, plane=False, dggs=WGS84_003)
+    def _linetrace(self, geom: LineString, resolution: int) -> list[str]:
+        cells = linetrace(geom, resolution, plane=False, dggs=self.grid)
         # linetrace returns a traversal sequence, which may revisit cells
         return list(dict.fromkeys(cells)) if cells else []
 
@@ -105,7 +170,7 @@ class RHPVectorIndexer(VectorIndexer[str]):
 
     def _polyfill_points(self, df: gpd.GeoDataFrame, resolution: int) -> pd.DataFrame:
         geom = df[df.geometry.name]
-        cells = WGS84_003.cells_from_points(
+        cells = self.grid.cells_from_points(
             geom.x.to_numpy(), geom.y.to_numpy(), resolution, plane=False
         )
         result = df.drop(columns=[df.geometry.name])
@@ -114,12 +179,12 @@ class RHPVectorIndexer(VectorIndexer[str]):
         return pd.DataFrame(result[result.index != ""].rename_axis(None))
 
     def cells_to_points(self, cells: Iterable[str]) -> Iterable[Point]:
-        points = shapely.points(WGS84_003.centroids(list(cells), plane=False))
+        points = shapely.points(self.grid.centroids(list(cells), plane=False))
         return cast(Iterable[Point], points)
 
     def cells_to_polygons(self, cells: Iterable[str]) -> Iterable[Polygon]:
         polygons = shapely.polygons(
-            WGS84_003.boundary_array(list(cells), n=2, plane=False)
+            self.grid.boundary_array(list(cells), n=2, plane=False)
         )
         return cast(Iterable[Polygon], polygons)
 
@@ -196,15 +261,13 @@ class RHPVectorIndexer(VectorIndexer[str]):
             for suffix in product(digits, repeat=target_res - current_res)
         ]
 
-    @staticmethod
-    def cell_to_point(cell: str) -> Point:
-        return Point(rhp_to_geo(cell, plane=False, dggs=WGS84_003))
+    def cell_to_point(self, cell: str) -> Point:
+        return Point(rhp_to_geo(cell, plane=False, dggs=self.grid))
 
-    @staticmethod
-    def cell_to_polygon(cell: str) -> Polygon:
+    def cell_to_polygon(self, cell: str) -> Polygon:
         return Polygon(
             tuple(
                 coord
-                for coord in rhp_to_geo_boundary(cell, plane=False, dggs=WGS84_003)
+                for coord in rhp_to_geo_boundary(cell, plane=False, dggs=self.grid)
             )
         )

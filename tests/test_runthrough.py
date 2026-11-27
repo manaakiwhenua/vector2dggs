@@ -229,6 +229,10 @@ with contextlib.suppress(ImportError):
 with contextlib.suppress(ImportError):
     from .classes.readme_help import TestReadmeHelp as TestReadmeHelp
 with contextlib.suppress(ImportError):
+    from .classes.rhp_grid import TestRhpGridGeometry as TestRhpGridGeometry
+with contextlib.suppress(ImportError):
+    from .classes.rhp_grid import TestRhpGridOption as TestRhpGridOption
+with contextlib.suppress(ImportError):
     from .classes.rhp_fill import TestRHPFillEquivalence as TestRHPFillEquivalence
 with contextlib.suppress(ImportError):
     from .classes.rhp_fill import TestRHPFillMinRes as TestRHPFillMinRes

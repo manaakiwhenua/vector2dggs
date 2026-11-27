@@ -70,7 +70,8 @@ class TestBatchPointIndexing(TestCase):
         )
         out = idx._polyfill_points(df.copy(), 7)
         expected = {
-            (geo_to_rhp(p.y, p.x, 7, plane=False), i) for i, p in enumerate(self.POINTS)
+            (geo_to_rhp(p.y, p.x, 7, plane=False, dggs=idx.grid), i)
+            for i, p in enumerate(self.POINTS)
         }
         self.assertEqual(set(zip(out.index, out["fid"], strict=True)), expected)
         self.assertIsNone(out.index.name)
