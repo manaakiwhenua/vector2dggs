@@ -131,6 +131,10 @@ with contextlib.suppress(ImportError):
         TestCompositeIdCompaction as TestCompositeIdCompaction,
     )
 with contextlib.suppress(ImportError):
+    from .classes.compaction_pipeline import (
+        TestWithinCompactionEmptyPartition as TestWithinCompactionEmptyPartition,
+    )
+with contextlib.suppress(ImportError):
     from .classes.containment_mode import (
         TestA5ContainmentMode as TestA5ContainmentMode,
     )

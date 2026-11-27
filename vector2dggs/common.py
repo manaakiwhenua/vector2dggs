@@ -857,7 +857,14 @@ def _merge_partition_files(
         emit_string = cell_id == const.CellIdMode.STRING.value
         if emit_string != (pa.string() == indexer.CELL_ARROW_TYPE):
             render = indexer.cells_to_string if emit_string else indexer.cells_to_uint64
-            df.index = pd.Index(render(df.index), name=df.index.name)
+            # typed explicitly: within can leave a directory with no rows, and
+            # an empty rendered index would otherwise be object (Arrow null),
+            # which the cell column's delta encoding then rejects
+            df.index = pd.Index(
+                render(df.index),
+                name=df.index.name,
+                dtype="string" if emit_string else "uint64",
+            )
 
         table = pa.Table.from_pandas(df, preserve_index=True)
         if geom_fn is not None:
